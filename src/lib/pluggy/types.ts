@@ -1,9 +1,10 @@
 /**
  * Modelo de dados da Pluggy.
  *
- * Os campos marcados como opcionais sao os que a API pode omitir dependendo do
- * conector e do tipo de conta. Preferimos campos opcionais a valores obrigatorios
- * porque um conector que devolve menos dados nao deve quebrar a aplicacao inteira.
+ * Os campos aqui foram conferidos contra respostas reais da API (conector Inter,
+ * conta corrente e cartao de credito). Campos que a API pode omitir dependendo do
+ * conector sao opcionais: um conector que devolve menos dados nao deve quebrar a
+ * aplicacao inteira.
  */
 
 export type ItemStatus =
@@ -22,6 +23,9 @@ export interface Connector {
   primaryColor?: string;
   institutionUrl?: string;
   country?: string;
+  type?: string;
+  products?: string[];
+  health?: { status?: string; stage?: string | null };
 }
 
 export interface Item {
@@ -44,9 +48,24 @@ export interface Account {
   name: string;
   marketingName?: string | null;
   number?: string;
-  /** Saldo em conta. Para cartao de credito, e a fatura em aberto. */
+  /**
+   * Conta corrente: saldo disponivel.
+   * Cartao de credito: valor da fatura em aberto, como numero positivo.
+   * Por isso o patrimonio liquido subtrai as contas CREDIT — ver netWorth().
+   */
   balance: number;
   currencyCode: string;
+  /** PII. Nunca exibir inteiro nem gravar em log. */
+  taxNumber?: string | null;
+  /** PII. */
+  owner?: string | null;
+  bankData?: {
+    transferNumber?: string | null;
+    closingBalance?: number | null;
+    automaticallyInvestedBalance?: number | null;
+    overdraftContractedLimit?: number | null;
+    overdraftUsedLimit?: number | null;
+  } | null;
   creditData?: {
     level?: string | null;
     brand?: string | null;
@@ -65,7 +84,10 @@ export interface Transaction {
   accountId: string;
   description: string;
   descriptionRaw?: string | null;
-  /** Valor bruto como a Pluggy devolve. Use normalizeAmount() antes de somar. */
+  /**
+   * Valor como a Pluggy devolve: negativo para saida, positivo para entrada.
+   * Use os helpers de finance/money.ts em vez de somar direto.
+   */
   amount: number;
   currencyCode: string;
   date: string;
@@ -82,8 +104,9 @@ export interface Paginated<T> {
   totalPages?: number;
 }
 
-/** Uma conta junto com o item (banco) a que pertence, para exibicao. */
-export interface AccountWithItem extends Account {
+/** Conta enriquecida com o banco de origem, para exibicao. */
+export interface AccountWithConnector extends Account {
   connectorName: string;
   connectorImageUrl?: string;
+  connectorPrimaryColor?: string;
 }

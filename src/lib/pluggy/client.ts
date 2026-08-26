@@ -1,9 +1,4 @@
-import type {
-  Account,
-  Item,
-  Paginated,
-  Transaction,
-} from "./types";
+import type { Account, Item, Paginated, Transaction } from "./types";
 
 const DEFAULT_API_URL = "https://api.pluggy.ai";
 
@@ -178,27 +173,65 @@ export async function getAccounts(itemId: string): Promise<Account[]> {
   return body.results ?? [];
 }
 
+/**
+ * A rota /transactions foi descontinuada (410 ENDPOINT_DEPRECATED). A v2 usa
+ * paginacao por cursor, entao seguimos o cursor ate ele vir vazio.
+ *
+ * O nome do campo de cursor varia entre implementacoes, e a resposta da v2 nao
+ * esta documentada aqui — por isso aceitamos as variacoes mais comuns em vez de
+ * fixar uma e quebrar em producao.
+ */
+function extractResults<T>(body: unknown): T[] {
+  if (!body || typeof body !== "object") return [];
+  const record = body as Record<string, unknown>;
+  for (const key of ["results", "data", "transactions"]) {
+    if (Array.isArray(record[key])) return record[key] as T[];
+  }
+  return [];
+}
+
+function extractCursor(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const record = body as Record<string, unknown>;
+
+  for (const key of ["nextCursor", "next_cursor", "cursor", "next"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+
+  // Alguns formatos aninham a paginacao em um objeto.
+  for (const key of ["page", "pagination", "meta"]) {
+    const nested = record[key];
+    if (nested && typeof nested === "object") {
+      const inner = extractCursor(nested);
+      if (inner) return inner;
+    }
+  }
+
+  return null;
+}
+
 export async function getTransactions(
   accountId: string,
   options: { from?: string; to?: string; pageSize?: number } = {},
 ): Promise<Transaction[]> {
-  const pageSize = options.pageSize ?? 500;
+  const pageSize = options.pageSize ?? 200;
   const collected: Transaction[] = [];
-  let page = 1;
+  let cursor: string | undefined;
 
-  // A Pluggy pagina transacoes. Buscamos todas as paginas porque o dashboard
-  // agrega o periodo inteiro; um mes de extrato cabe folgado em poucas paginas.
-  for (;;) {
-    const body = await request<Paginated<Transaction>>("/transactions", {
-      query: { accountId, from: options.from, to: options.to, pageSize, page },
+  // Limite de seguranca: um mes de extrato pessoal nao chega perto disso, e o
+  // teto impede um loop infinito caso a API devolva sempre o mesmo cursor.
+  for (let requests = 0; requests < 50; requests += 1) {
+    const body = await request<unknown>("/v2/transactions", {
+      query: { accountId, from: options.from, to: options.to, pageSize, cursor },
     });
 
-    const results = body.results ?? [];
+    const results = extractResults<Transaction>(body);
     collected.push(...results);
 
-    const totalPages = body.totalPages ?? 1;
-    if (page >= totalPages || results.length === 0) break;
-    page += 1;
+    const next = extractCursor(body);
+    if (!next || next === cursor || results.length === 0) break;
+    cursor = next;
   }
 
   return collected;
