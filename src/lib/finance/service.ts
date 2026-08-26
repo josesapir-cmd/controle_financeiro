@@ -9,9 +9,31 @@ import {
   currentMonthRange,
   totalExpenses,
   totalIncome,
+  totalTransfers,
   totalsByCategory,
   type CategoryTotal,
 } from "./summary";
+
+/**
+ * A v2 devolve, em cada transacao, um bloco paymentData que carrega o CPF do
+ * pagador e dados do recebedor. Nada disso e usado pelo painel, e trafegar PII
+ * alem do necessario so cria superficie de vazamento — em log, em cache, ou na
+ * serializacao para o navegador. Copiamos apenas os campos que a interface usa.
+ */
+function sanitize(transaction: Transaction): Transaction {
+  return {
+    id: transaction.id,
+    accountId: transaction.accountId,
+    description: transaction.description,
+    amount: transaction.amount,
+    currencyCode: transaction.currencyCode,
+    date: transaction.date,
+    category: transaction.category ?? null,
+    categoryId: transaction.categoryId ?? null,
+    type: transaction.type,
+    status: transaction.status,
+  };
+}
 
 export interface DashboardData {
   accounts: AccountWithConnector[];
@@ -22,6 +44,8 @@ export interface DashboardData {
   creditBalance: number;
   income: number;
   expenses: number;
+  /** Movimentacoes que nao sao consumo: aplicacoes, transferencias proprias. */
+  transfers: number;
   period: { from: string; to: string };
   /** Conexoes que falharam, para avisar sem derrubar o resto do painel. */
   failures: { itemId: string; message: string }[];
@@ -62,7 +86,7 @@ async function loadReal(period: { from: string; to: string }) {
         const perAccount = await Promise.all(
           itemAccounts.map((account) => pluggy.getTransactions(account.id, period)),
         );
-        transactions.push(...perAccount.flat());
+        transactions.push(...perAccount.flat().map(sanitize));
       } catch (error) {
         failures.push({ itemId, message: describe(error) });
       }
@@ -103,6 +127,7 @@ export async function loadDashboard(reference: Date = new Date()): Promise<Dashb
     creditBalance: sumBy(accounts, "CREDIT"),
     income: totalIncome(transactions),
     expenses: totalExpenses(transactions),
+    transfers: totalTransfers(transactions),
     period,
     failures,
     isMock,

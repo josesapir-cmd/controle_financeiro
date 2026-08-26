@@ -213,9 +213,8 @@ function extractCursor(body: unknown): string | null {
 
 export async function getTransactions(
   accountId: string,
-  options: { from?: string; to?: string; pageSize?: number } = {},
+  options: { from?: string; to?: string } = {},
 ): Promise<Transaction[]> {
-  const pageSize = options.pageSize ?? 200;
   const collected: Transaction[] = [];
   let cursor: string | undefined;
 
@@ -223,7 +222,10 @@ export async function getTransactions(
   // teto impede um loop infinito caso a API devolva sempre o mesmo cursor.
   for (let requests = 0; requests < 50; requests += 1) {
     const body = await request<unknown>("/v2/transactions", {
-      query: { accountId, from: options.from, to: options.to, pageSize, cursor },
+      // A v2 valida os parametros de forma estrita: enviar um campo que ela nao
+      // conhece resulta em 400 ("property X should not exist"). Por isso so
+      // mandamos o que foi confirmado contra a API.
+      query: { accountId, from: options.from, to: options.to, cursor },
     });
 
     const results = extractResults<Transaction>(body);

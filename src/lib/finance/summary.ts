@@ -1,4 +1,5 @@
 import type { Transaction } from "@/lib/pluggy/types";
+import { classify, translateCategory } from "./categories";
 import { expenseAmount, incomeAmount } from "./money";
 
 export interface CategoryTotal {
@@ -17,20 +18,23 @@ export interface MonthlyFlow {
   net: number;
 }
 
-const SEM_CATEGORIA = "Sem categoria";
-
 /**
  * Gastos agrupados por categoria, do maior para o menor.
- * Entradas sao ignoradas: misturar salario com gastos torna o grafico inutil.
+ *
+ * Entradas sao ignoradas (misturar salario com gastos torna o grafico inutil) e
+ * movimentacoes tambem: uma aplicacao em CDB ou um Pix entre contas proprias nao
+ * e consumo, e pelo tamanho tipico esmagaria as demais categorias no grafico.
  */
 export function totalsByCategory(transactions: Transaction[]): CategoryTotal[] {
   const buckets = new Map<string, { total: number; count: number }>();
 
   for (const transaction of transactions) {
+    if (classify(transaction) !== "expense") continue;
+
     const amount = expenseAmount(transaction);
     if (amount === 0) continue;
 
-    const category = transaction.category?.trim() || SEM_CATEGORIA;
+    const category = translateCategory(transaction.category);
     const bucket = buckets.get(category) ?? { total: 0, count: 0 };
     bucket.total += amount;
     bucket.count += 1;
@@ -57,6 +61,8 @@ export function monthlyFlow(transactions: Transaction[]): MonthlyFlow[] {
     const month = transaction.date.slice(0, 7);
     if (!/^\d{4}-\d{2}$/.test(month)) continue;
 
+    if (classify(transaction) === "transfer") continue;
+
     const bucket = buckets.get(month) ?? { income: 0, expenses: 0 };
     bucket.income += incomeAmount(transaction);
     bucket.expenses += expenseAmount(transaction);
@@ -73,12 +79,35 @@ export function monthlyFlow(transactions: Transaction[]): MonthlyFlow[] {
     .sort((a, b) => a.month.localeCompare(b.month));
 }
 
+/** Gastos de consumo do periodo, ja sem movimentacoes. */
 export function totalExpenses(transactions: Transaction[]): number {
-  return transactions.reduce((total, transaction) => total + expenseAmount(transaction), 0);
+  return transactions.reduce(
+    (total, transaction) =>
+      classify(transaction) === "expense" ? total + expenseAmount(transaction) : total,
+    0,
+  );
 }
 
+/** Entradas do periodo, ja sem movimentacoes. */
 export function totalIncome(transactions: Transaction[]): number {
-  return transactions.reduce((total, transaction) => total + incomeAmount(transaction), 0);
+  return transactions.reduce(
+    (total, transaction) =>
+      classify(transaction) === "income" ? total + incomeAmount(transaction) : total,
+    0,
+  );
+}
+
+/**
+ * Total movimentado que nao e consumo (aplicacoes, transferencias proprias,
+ * pagamento de fatura), reportado a parte para que o usuario saiba que o dinheiro
+ * saiu da conta sem que isso tenha sido um gasto.
+ */
+export function totalTransfers(transactions: Transaction[]): number {
+  return transactions.reduce(
+    (total, transaction) =>
+      classify(transaction) === "transfer" ? total + Math.abs(transaction.amount) : total,
+    0,
+  );
 }
 
 /** Primeiro dia do mes corrente e hoje, no formato AAAA-MM-DD que a API espera. */

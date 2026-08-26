@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { Account, Transaction } from "@/lib/pluggy/types";
 import { formatBRL, maskAccountNumber, netWorth } from "../money";
-import { currentMonthRange, monthlyFlow, totalsByCategory } from "../summary";
+import {
+  currentMonthRange,
+  monthlyFlow,
+  totalExpenses,
+  totalTransfers,
+  totalsByCategory,
+} from "../summary";
+import { translateCategory } from "../categories";
 
 function tx(amount: number, extra: Partial<Transaction> = {}): Transaction {
   return {
@@ -115,5 +122,46 @@ describe("currentMonthRange", () => {
       from: "2026-08-01",
       to: "2026-08-26",
     });
+  });
+});
+
+describe("movimentacoes que nao sao consumo", () => {
+  const aplicacao = tx(-45000, { category: "Investments" });
+  const pixProprio = tx(-2000, { category: "Same person transfer" });
+  const mercado = tx(-300, { category: "Groceries" });
+  const salario = tx(8000, { category: "Salary" });
+
+  it("mantem aplicacao em CDB fora dos gastos por categoria", () => {
+    const result = totalsByCategory([aplicacao, pixProprio, mercado]);
+    expect(result.map((r) => r.category)).toEqual(["Mercado"]);
+    expect(result[0].total).toBe(300);
+  });
+
+  it("nao deixa a aplicacao inflar o total de saidas", () => {
+    expect(totalExpenses([aplicacao, mercado])).toBe(300);
+  });
+
+  it("reporta as movimentacoes a parte, em valor absoluto", () => {
+    expect(totalTransfers([aplicacao, pixProprio, mercado])).toBe(47000);
+  });
+
+  it("exclui movimentacoes tambem do fluxo mensal", () => {
+    const [mes] = monthlyFlow([aplicacao, mercado, salario]);
+    expect(mes).toMatchObject({ income: 8000, expenses: 300 });
+  });
+
+  it("traduz as categorias da Pluggy para portugues", () => {
+    expect(translateCategory("Groceries")).toBe("Mercado");
+    expect(translateCategory("Same person transfer")).toBe(
+      "Transferencia entre contas proprias",
+    );
+  });
+
+  it("preserva o nome original de categoria desconhecida", () => {
+    expect(translateCategory("Quantum Widgets")).toBe("Quantum Widgets");
+  });
+
+  it("trata categoria desconhecida como gasto, para nao sumir do painel", () => {
+    expect(totalExpenses([tx(-50, { category: "Quantum Widgets" })])).toBe(50);
   });
 });

@@ -69,24 +69,28 @@ interface Seed {
 }
 
 const seeds: Seed[] = [
-  { day: 5, description: "Salario", amount: 8400, category: "Salario", accountId: CHECKING_ID },
-  { day: 5, description: "Aluguel", amount: -2600, category: "Moradia", accountId: CHECKING_ID },
-  { day: 6, description: "Condominio", amount: -680, category: "Moradia", accountId: CHECKING_ID },
-  { day: 7, description: "Supermercado", amount: -412.9, category: "Mercado", accountId: CARD_ID },
-  { day: 9, description: "Farmacia", amount: -87.4, category: "Saude", accountId: CARD_ID },
-  { day: 10, description: "Restaurante", amount: -132.5, category: "Alimentacao", accountId: CARD_ID },
-  { day: 11, description: "Transporte por app", amount: -46.2, category: "Transporte", accountId: CARD_ID },
-  { day: 12, description: "Streaming", amount: -55.9, category: "Lazer", accountId: CARD_ID },
-  { day: 14, description: "Supermercado", amount: -298.15, category: "Mercado", accountId: CARD_ID },
-  { day: 15, description: "Energia eletrica", amount: -214.77, category: "Moradia", accountId: CHECKING_ID },
-  { day: 17, description: "Livraria", amount: -119.9, category: "Lazer", accountId: CARD_ID },
-  { day: 18, description: "Transporte por app", amount: -38.7, category: "Transporte", accountId: CARD_ID },
-  { day: 19, description: "Academia", amount: -149, category: "Saude", accountId: CHECKING_ID },
-  { day: 20, description: "Restaurante", amount: -96.4, category: "Alimentacao", accountId: CARD_ID },
-  { day: 21, description: "Freelance", amount: 1500, category: "Renda extra", accountId: CHECKING_ID },
-  { day: 22, description: "Internet", amount: -129.9, category: "Moradia", accountId: CHECKING_ID },
-  { day: 24, description: "Supermercado", amount: -356.8, category: "Mercado", accountId: CARD_ID },
-  { day: 25, description: "Cinema", amount: -72, category: "Lazer", accountId: CARD_ID },
+  { day: 5, description: "Salario", amount: 8400, category: "Salary", accountId: CHECKING_ID },
+  { day: 5, description: "Aluguel", amount: -2600, category: "Housing", accountId: CHECKING_ID },
+  { day: 6, description: "Condominio", amount: -680, category: "Housing", accountId: CHECKING_ID },
+  { day: 7, description: "Supermercado", amount: -412.9, category: "Groceries", accountId: CARD_ID },
+  { day: 9, description: "Farmacia", amount: -87.4, category: "Health", accountId: CARD_ID },
+  { day: 10, description: "Restaurante", amount: -132.5, category: "Food and drinks", accountId: CARD_ID },
+  { day: 11, description: "Transporte por app", amount: -46.2, category: "Transport", accountId: CARD_ID },
+  { day: 12, description: "Streaming", amount: -55.9, category: "Leisure", accountId: CARD_ID },
+  { day: 14, description: "Supermercado", amount: -298.15, category: "Groceries", accountId: CARD_ID },
+  { day: 15, description: "Energia eletrica", amount: -214.77, category: "Housing", accountId: CHECKING_ID },
+  { day: 17, description: "Livraria", amount: -119.9, category: "Leisure", accountId: CARD_ID },
+  { day: 18, description: "Transporte por app", amount: -38.7, category: "Transport", accountId: CARD_ID },
+  { day: 19, description: "Academia", amount: -149, category: "Health", accountId: CHECKING_ID },
+  { day: 20, description: "Restaurante", amount: -96.4, category: "Food and drinks", accountId: CARD_ID },
+  { day: 21, description: "Freelance", amount: 1500, category: "Income", accountId: CHECKING_ID },
+  { day: 22, description: "Internet", amount: -129.9, category: "Housing", accountId: CHECKING_ID },
+  { day: 24, description: "Supermercado", amount: -356.8, category: "Groceries", accountId: CARD_ID },
+  { day: 25, description: "Cinema", amount: -72, category: "Leisure", accountId: CARD_ID },
+  // Movimentacoes: saem da conta mas nao sao consumo. Presentes no mock porque
+  // e exatamente o caso que distorce o painel se for tratado como gasto.
+  { day: 26, description: "Aplicacao CDB", amount: -45000, category: "Investments", accountId: CHECKING_ID },
+  { day: 23, description: "Pix enviado", amount: -2000, category: "Same person transfer", accountId: CHECKING_ID },
 ];
 
 /** Gera o extrato ficticio dentro do mes de referencia informado. */
