@@ -9,25 +9,28 @@ sendo definida — ver "Como os dados chegam" abaixo.
 
 ## Como os dados chegam
 
-Dados pessoais no Meu Pluggy **nao** sao acessiveis pela API REST publica com
-credenciais de aplicacao. Isso foi verificado na pratica:
+Os dados vem do **Meu Pluggy** — a oferta gratuita de Open Finance da Pluggy para
+uso pessoal. As contas sao conectadas no dashboard (https://meu.pluggy.ai) e lidas
+pela API REST (`https://api.pluggy.ai`) com as credenciais do projeto.
+
+O **MCP da Pluggy** (`docs.pluggy.ai/mcp`) NAO transporta dados financeiros: ele da
+a um agente de codigo acesso a documentacao e a referencia da API em tempo de
+execucao, junto com as Pluggy Skills. E ferramenta de desenvolvimento, nao fonte
+de dados. Confundir os dois custou uma volta neste projeto.
+
+### O que foi verificado contra a API
 
 | Chamada | Resultado | Leitura |
 | --- | --- | --- |
-| `POST /auth` | 200 + JWT | Credenciais sao validas na API publica |
+| `POST /auth` | 200 + JWT | Credenciais do Meu Pluggy valem na API publica |
 | `GET /connectors` | 200 | A apiKey e aceita em endpoints de dados |
-| `GET /items` | 401 | Conexoes feitas no Meu Pluggy nao sao listaveis |
-| `GET /accounts` | 400 | Esperado — exige `itemId` |
-| `POST /connect_token` | 200 + accessToken | Endpoint responde, mas **nao** implica
-  autorizacao para dados pessoais |
+| `GET /accounts` (sem `itemId`) | 400 | Esperado — o parametro e obrigatorio |
+| `GET /items` | 401 | **Inconclusivo**: provavelmente nao existe como rota de
+  listagem (a API expoe `GET /items/{id}`), e o gateway responde 401 para rota
+  nao reconhecida. Nao tome isso como ausencia de permissao. |
 
-A Pluggy orientou, por e-mail, que o caminho para dados pessoais e conectar as
-contas no Meu Pluggy e consumi-las pelo servidor MCP deles — nao pelo widget
-Pluggy Connect com credenciais proprias.
-
-Consequencia de projeto: o acesso a dados fica atras de uma interface
-(`src/lib/pluggy/`), com implementacao intercambiavel. Os tipos em `types.ts`
-descrevem o modelo de dados da Pluggy e valem para qualquer transporte.
+Como a API nao lista items, o `itemId` de cada conexao vem do dashboard do Meu
+Pluggy e precisa ser guardado pela aplicacao.
 
 ## Configuracao
 
