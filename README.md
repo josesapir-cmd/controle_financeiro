@@ -35,10 +35,14 @@ Pluggy e precisa ser guardado pela aplicacao.
 ## Configuracao
 
 ```bash
-cp .env.example .env.local   # preencha PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET
+cp .env.example .env.local   # preencha as credenciais e os itemIds
 npm install
-npm run dev
+npm run dev -- -p 3210       # escolha a porta se a 3000 ja estiver ocupada
 ```
+
+O `itemId` de cada conexao aparece na URL do dashboard do Meu Pluggy:
+`meu.pluggy.ai/connections/<itemId>`. Va em `PLUGGY_ITEM_IDS`, separados por
+virgula, porque a API nao expoe rota de listagem.
 
 O `.env.local` esta no `.gitignore`. Nenhuma credencial deve ser commitada.
 
@@ -46,7 +50,8 @@ O `.env.local` esta no `.gitignore`. Nenhuma credencial deve ser commitada.
 
 | Comando | O que faz |
 | --- | --- |
-| `npm run dev` | Servidor de desenvolvimento |
+| `npm run dev` | Servidor de desenvolvimento (porta 3000) |
+| `npm run dev -- -p 3210` | Idem, em outra porta, se a 3000 ja estiver em uso |
 | `npm run build` | Build de producao |
 | `npm run typecheck` | Checagem de tipos |
 | `npm test` | Testes |
