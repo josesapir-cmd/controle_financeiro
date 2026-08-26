@@ -211,6 +211,31 @@ function extractCursor(body: unknown): string | null {
   return null;
 }
 
+/** Data de uma transacao no formato AAAA-MM-DD, ignorando a hora. */
+function transactionDay(transaction: Transaction): string {
+  return transaction.date.slice(0, 10);
+}
+
+export function withinPeriod(
+  transaction: Transaction,
+  period: { from?: string; to?: string },
+): boolean {
+  const day = transactionDay(transaction);
+  if (period.from && day < period.from) return false;
+  if (period.to && day > period.to) return false;
+  return true;
+}
+
+/**
+ * A v2 rejeitou `pageSize`, `from` e `to` — valida parametros de forma estrita e
+ * seus nomes de filtro nao estao documentados aqui. Em vez de adivinhar mais um
+ * nome e arriscar outro 400, enviamos apenas accountId e cursor, e recortamos o
+ * periodo em codigo.
+ *
+ * O custo disso e trazer transacoes fora da janela. Mitigamos parando de paginar
+ * assim que uma pagina traz algo anterior ao inicio do periodo: a API devolve da
+ * mais recente para a mais antiga, entao dali em diante so vem coisa velha.
+ */
 export async function getTransactions(
   accountId: string,
   options: { from?: string; to?: string } = {},
@@ -218,25 +243,25 @@ export async function getTransactions(
   const collected: Transaction[] = [];
   let cursor: string | undefined;
 
-  // Limite de seguranca: um mes de extrato pessoal nao chega perto disso, e o
-  // teto impede um loop infinito caso a API devolva sempre o mesmo cursor.
   for (let requests = 0; requests < 50; requests += 1) {
     const body = await request<unknown>("/v2/transactions", {
-      // A v2 valida os parametros de forma estrita: enviar um campo que ela nao
-      // conhece resulta em 400 ("property X should not exist"). Por isso so
-      // mandamos o que foi confirmado contra a API.
-      query: { accountId, from: options.from, to: options.to, cursor },
+      query: { accountId, cursor },
     });
 
     const results = extractResults<Transaction>(body);
     collected.push(...results);
 
+    if (results.length === 0) break;
+
+    // Ja alcancamos o inicio da janela: o resto da paginacao seria descartado.
+    if (options.from && results.some((t) => transactionDay(t) < options.from!)) break;
+
     const next = extractCursor(body);
-    if (!next || next === cursor || results.length === 0) break;
+    if (!next || next === cursor) break;
     cursor = next;
   }
 
-  return collected;
+  return collected.filter((transaction) => withinPeriod(transaction, options));
 }
 
 export async function deleteItem(itemId: string): Promise<void> {
