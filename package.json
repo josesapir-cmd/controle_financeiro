@@ -12,7 +12,8 @@
     "migrate": "node scripts/migrate.mjs",
     "importar": "node scripts/importar-local.mjs",
     "sync": "node scripts/sincronizar.mjs",
-    "sync:local": "bash scripts/sync-local.sh"
+    "sync:local": "bash scripts/sync-local.sh",
+    "conexao": "node scripts/conexao.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.3.0",
