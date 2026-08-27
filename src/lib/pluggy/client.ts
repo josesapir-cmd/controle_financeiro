@@ -214,13 +214,24 @@ export async function getAccounts(itemId: string): Promise<Account[]> {
 }
 
 /**
- * A rota /transactions foi descontinuada (410 ENDPOINT_DEPRECATED). A v2 usa
- * paginacao por cursor, entao seguimos o cursor ate ele vir vazio.
+ * Paginacao da v2.
  *
- * O nome do campo de cursor varia entre implementacoes, e a resposta da v2 nao
- * esta documentada aqui — por isso aceitamos as variacoes mais comuns em vez de
- * fixar uma e quebrar em producao.
+ * A resposta traz `next`: ou `null`, ou uma query string pronta como
+ * "?accountId=...&after=<token>". Basta concatena-la ao endpoint — nao ha
+ * parametro de cursor para montar.
+ *
+ * Foi exatamente aqui que erramos antes: o codigo tratava `next` como valor de
+ * um parametro `cursor`, e a v2, que valida parametros de forma estrita,
+ * respondia 400 "property cursor should not exist". As conexoes que nao tinham
+ * proxima pagina passavam ilesas, o que mascarou o problema — e as que tinham
+ * ficavam truncadas em 500 lancamentos.
  */
+export function nextQuery(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const proximo = (body as { next?: unknown }).next;
+  return typeof proximo === "string" && proximo.length > 0 ? proximo : null;
+}
+
 function extractResults<T>(body: unknown): T[] {
   if (!body || typeof body !== "object") return [];
   const record = body as Record<string, unknown>;
@@ -230,31 +241,7 @@ function extractResults<T>(body: unknown): T[] {
   return [];
 }
 
-function extractCursor(body: unknown): string | null {
-  if (!body || typeof body !== "object") return null;
-  const record = body as Record<string, unknown>;
-
-  for (const key of ["nextCursor", "next_cursor", "cursor", "next"]) {
-    const value = record[key];
-    if (typeof value === "string" && value.length > 0) return value;
-  }
-
-  // Alguns formatos aninham a paginacao em um objeto.
-  for (const key of ["page", "pagination", "meta"]) {
-    const nested = record[key];
-    if (nested && typeof nested === "object") {
-      const inner = extractCursor(nested);
-      if (inner) return inner;
-    }
-  }
-
-  return null;
-}
-
-/**
- * Dia da transacao no fuso local. Nao use slice(0,10) na data ISO: ela vem em
- * UTC, e transacoes noturnas cairiam no dia seguinte.
- */
+/** Data de uma transacao no fuso local, para comparar com a janela pedida. */
 function transactionDay(transaction: Transaction): string {
   return localDay(transaction.date);
 }
@@ -270,38 +257,32 @@ export function withinPeriod(
 }
 
 /**
- * A v2 rejeitou `pageSize`, `from` e `to` — valida parametros de forma estrita e
- * seus nomes de filtro nao estao documentados aqui. Em vez de adivinhar mais um
- * nome e arriscar outro 400, enviamos apenas accountId e cursor, e recortamos o
- * periodo em codigo.
+ * Transacoes de uma conta na janela pedida.
  *
- * O custo disso e trazer transacoes fora da janela. Mitigamos parando de paginar
- * assim que uma pagina traz algo anterior ao inicio do periodo: a API devolve da
- * mais recente para a mais antiga, entao dali em diante so vem coisa velha.
+ * A v2 nao aceita filtro de data — `from`, `to` e `pageSize` sao recusados —
+ * entao pedimos as paginas e recortamos o periodo em codigo. Para nao varrer o
+ * historico inteiro, paramos assim que uma pagina traz algo anterior ao inicio
+ * da janela: a API devolve da transacao mais recente para a mais antiga.
  */
 export async function getTransactions(
   accountId: string,
   options: { from?: string; to?: string } = {},
 ): Promise<Transaction[]> {
   const collected: Transaction[] = [];
-  let cursor: string | undefined;
+  let caminho = `/v2/transactions?accountId=${encodeURIComponent(accountId)}`;
 
-  for (let requests = 0; requests < 50; requests += 1) {
-    const body = await request<unknown>("/v2/transactions", {
-      query: { accountId, cursor },
-    });
-
+  // Teto de seguranca contra um `next` que nunca termine.
+  for (let paginas = 0; paginas < 200; paginas += 1) {
+    const body = await request<unknown>(caminho);
     const results = extractResults<Transaction>(body);
     collected.push(...results);
 
     if (results.length === 0) break;
-
-    // Ja alcancamos o inicio da janela: o resto da paginacao seria descartado.
     if (options.from && results.some((t) => transactionDay(t) < options.from!)) break;
 
-    const next = extractCursor(body);
-    if (!next || next === cursor) break;
-    cursor = next;
+    const proximo = nextQuery(body);
+    if (!proximo) break;
+    caminho = `/v2/transactions${proximo}`;
   }
 
   return collected.filter((transaction) => withinPeriod(transaction, options));
