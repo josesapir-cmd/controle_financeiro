@@ -14,7 +14,7 @@ import {
 } from "./counterparties";
 import { extractDetails } from "./details";
 import { listItemIds, listItems, type StoredItem } from "@/lib/store";
-import { netWorth, sumBy } from "./money";
+import { netWorth, normalizeAmount, sumBy } from "./money";
 import {
   currentMonthRange,
   totalExpenses,
@@ -61,6 +61,33 @@ function sanitize(transaction: TransacaoBruta): Transaction {
   };
 }
 
+export interface AccountOption {
+  id: string;
+  label: string;
+  connectorName: string;
+}
+
+/**
+ * Aplica a selecao de contas. Lista vazia significa "todas" — e nao "nenhuma" —
+ * porque e o estado inicial da tela, quando o usuario ainda nao escolheu nada.
+ */
+function aplicarSelecao<T extends { accountId?: string }>(
+  registros: T[],
+  accountIds: string[],
+): T[] {
+  if (accountIds.length === 0) return registros;
+  const selecionadas = new Set(accountIds);
+  return registros.filter((r) => (r.accountId ? selecionadas.has(r.accountId) : false));
+}
+
+function opcoesDeConta(accounts: AccountWithConnector[]): AccountOption[] {
+  return accounts.map((account) => ({
+    id: account.id,
+    label: account.marketingName || account.name,
+    connectorName: account.connectorName,
+  }));
+}
+
 export interface DashboardData {
   accounts: AccountWithConnector[];
   transactions: Transaction[];
@@ -76,6 +103,8 @@ export interface DashboardData {
   /** Conexoes que falharam, para avisar sem derrubar o resto do painel. */
   failures: { itemId: string; message: string }[];
   isMock: boolean;
+  accountOptions: AccountOption[];
+  selectedAccountIds: string[];
 }
 
 function useMock(): boolean {
@@ -113,8 +142,17 @@ async function loadReal(period: { from: string; to: string }) {
           });
         }
 
+        // A normalizacao de sinal precisa acontecer antes da sanitizacao: a
+        // identificacao da contraparte usa a direcao do valor para saber qual
+        // lado do pagamento e o usuario.
         const perAccount = await Promise.all(
-          itemAccounts.map((account) => pluggy.getTransactions(account.id, period)),
+          itemAccounts.map(async (account) => {
+            const doAccount = await pluggy.getTransactions(account.id, period);
+            return doAccount.map((transaction) => ({
+              ...transaction,
+              amount: normalizeAmount(transaction.amount, account.type),
+            }));
+          }),
         );
         transactions.push(...perAccount.flat().map(sanitize));
       } catch (error) {
@@ -133,22 +171,39 @@ function loadMock(reference: Date) {
     connectorPrimaryColor: mockItems[0].connector.primaryColor,
   }));
 
-  const transactions = accounts.flatMap((account) => mockTransactions(account.id, reference));
+  const transactions = accounts.flatMap((account) =>
+    mockTransactions(account.id, reference).map((transaction) => ({
+      ...transaction,
+      amount: normalizeAmount(transaction.amount, account.type),
+    })),
+  );
 
   return { accounts, transactions, failures: [] };
 }
 
-export async function loadDashboard(reference: Date = new Date()): Promise<DashboardData> {
+export async function loadDashboard(
+  reference: Date = new Date(),
+  options: { accountIds?: string[] } = {},
+): Promise<DashboardData> {
   const period = currentMonthRange(reference);
   const isMock = useMock();
 
-  const { accounts, transactions, failures } = isMock
+  const { accounts: todasAsContas, transactions: todas, failures } = isMock
     ? loadMock(reference)
     : await loadReal(period);
+
+  const accountIds = options.accountIds ?? [];
+  const accounts =
+    accountIds.length === 0
+      ? todasAsContas
+      : todasAsContas.filter((a) => accountIds.includes(a.id));
+  const transactions = aplicarSelecao(todas, accountIds);
 
   transactions.sort((a, b) => b.date.localeCompare(a.date));
 
   return {
+    accountOptions: opcoesDeConta(todasAsContas),
+    selectedAccountIds: accountIds,
     accounts,
     transactions,
     categories: totalsByCategory(transactions),
@@ -232,6 +287,8 @@ export interface CounterpartiesData {
   internalCount: number;
   /** Nome da conta de origem por id, para identificar o banco de cada lancamento. */
   accountNames: Record<string, string>;
+  accountOptions: AccountOption[];
+  selectedAccountIds: string[];
   failures: { itemId: string; message: string }[];
   isMock: boolean;
 }
@@ -242,13 +299,16 @@ export interface CounterpartiesData {
  */
 export async function loadCounterparties(
   period: Period,
-  options: { includeInternal?: boolean } = {},
+  options: { includeInternal?: boolean; accountIds?: string[] } = {},
 ): Promise<CounterpartiesData> {
   const isMock = useMock();
 
-  const { accounts, transactions, failures } = isMock
+  const { accounts, transactions: todas, failures } = isMock
     ? loadMock(new Date(`${period.to}T12:00:00Z`))
     : await loadReal(period);
+
+  const accountIds = options.accountIds ?? [];
+  const transactions = aplicarSelecao(todas, accountIds);
 
   const accountNames: Record<string, string> = {};
   for (const account of accounts) {
@@ -276,6 +336,8 @@ export async function loadCounterparties(
     totalReceived: counterparties.reduce((total, c) => total + c.received, 0),
     internalCount: internos,
     accountNames,
+    accountOptions: opcoesDeConta(accounts),
+    selectedAccountIds: accountIds,
     failures,
     isMock,
   };
@@ -292,6 +354,8 @@ export interface DayData {
   isMock: boolean;
   /** Contas do periodo, para nomear a origem de cada lancamento. */
   accountNames: Record<string, string>;
+  accountOptions: AccountOption[];
+  selectedAccountIds: string[];
 }
 
 /**
@@ -300,15 +364,19 @@ export interface DayData {
  * Existe porque a Pluggy entrega horario junto da data, e ver a sequencia do dia
  * costuma ser o que permite reconhecer uma compra que a descricao nao explica.
  */
-export async function loadDay(day: string): Promise<DayData> {
+export async function loadDay(
+  day: string,
+  options: { accountIds?: string[] } = {},
+): Promise<DayData> {
   const isMock = useMock();
   const period = { from: day, to: day };
 
-  const { accounts, transactions, failures } = isMock
+  const { accounts, transactions: todas, failures } = isMock
     ? loadMock(new Date(`${day}T12:00:00Z`))
     : await loadReal(period);
 
-  const doDia = transactions.filter((t) => localDay(t.date) === day);
+  const accountIds = options.accountIds ?? [];
+  const doDia = aplicarSelecao(todas, accountIds).filter((t) => localDay(t.date) === day);
   doDia.sort((a, b) => a.date.localeCompare(b.date));
 
   const accountNames: Record<string, string> = {};
@@ -326,5 +394,7 @@ export async function loadDay(day: string): Promise<DayData> {
     failures,
     isMock,
     accountNames,
+    accountOptions: opcoesDeConta(accounts),
+    selectedAccountIds: accountIds,
   };
 }

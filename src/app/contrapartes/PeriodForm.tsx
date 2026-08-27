@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { accountQuery, buildQuery } from "@/lib/finance/account-selection";
 import { currentMonthRange, currentYearRange, lastDaysRange } from "@/lib/finance/dates";
 
 /**
@@ -6,7 +7,16 @@ import { currentMonthRange, currentYearRange, lastDaysRange } from "@/lib/financ
  * JavaScript e deixar o periodo na URL — assim a visao e compartilhavel e o
  * botao voltar do navegador se comporta como o usuario espera.
  */
-export function PeriodForm({ from, to }: { from: string; to: string }) {
+export function PeriodForm({
+  from,
+  to,
+  accountIds = [],
+}: {
+  from: string;
+  to: string;
+  accountIds?: string[];
+}) {
+  const contasQuery = accountQuery(accountIds);
   const atalhos = [
     { rotulo: "Mes atual", range: currentMonthRange() },
     { rotulo: "30 dias", range: lastDaysRange(30) },
@@ -22,7 +32,7 @@ export function PeriodForm({ from, to }: { from: string; to: string }) {
           return (
             <Link
               key={rotulo}
-              href={`/contrapartes?from=${range.from}&to=${range.to}`}
+              href={`/contrapartes?${buildQuery(`from=${range.from}&to=${range.to}`, contasQuery)}`}
               className={ativo ? "preset ativo" : "preset"}
             >
               {rotulo}
@@ -32,6 +42,9 @@ export function PeriodForm({ from, to }: { from: string; to: string }) {
       </div>
 
       <form className="range-form" method="get">
+        {accountIds.map((id) => (
+          <input key={id} type="hidden" name="contas" value={id} />
+        ))}
         <label>
           De <input type="date" name="from" defaultValue={from} />
         </label>

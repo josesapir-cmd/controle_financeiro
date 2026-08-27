@@ -3,6 +3,8 @@ import { CategoryBars } from "@/components/CategoryBars";
 import { StatTile } from "@/components/StatTile";
 import { TransactionsTable } from "@/components/TransactionsTable";
 import Link from "next/link";
+import { AccountFilter } from "@/components/AccountFilter";
+import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import { formatBRL } from "@/lib/finance/money";
 import { loadDashboard, type DashboardData } from "@/lib/finance/service";
 
@@ -41,11 +43,16 @@ function Setup({ mensagem }: { mensagem: string }) {
   );
 }
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ contas?: string | string[] }>;
+}) {
+  const accountIds = parseAccountIds((await searchParams).contas);
   let dados: DashboardData;
 
   try {
-    dados = await loadDashboard();
+    dados = await loadDashboard(new Date(), { accountIds });
   } catch (error) {
     return <Setup mensagem={error instanceof Error ? error.message : "Erro ao carregar dados."} />;
   }
@@ -55,16 +62,25 @@ export default async function Home() {
   }
 
   const saldo = dados.income - dados.expenses;
+  const contasQuery = accountQuery(dados.selectedAccountIds);
 
   return (
     <main className="page">
       <div className="masthead">
         <h1>Controle Financeiro</h1>
         <span className="period">
-          {formatarPeriodo(dados.period)} · <Link href="/dia">Dia</Link> ·{" "}
-          <Link href="/contrapartes">Contrapartes</Link> ·{" "}
+          {formatarPeriodo(dados.period)} · <Link href={`/dia?${contasQuery}`}>Dia</Link> ·{" "}
+          <Link href={`/contrapartes?${contasQuery}`}>Contrapartes</Link> ·{" "}
           <Link href="/conexoes">Conexoes</Link>
         </span>
+      </div>
+
+      <div className="filtros">
+        <AccountFilter
+          options={dados.accountOptions}
+          selected={dados.selectedAccountIds}
+          action="/"
+        />
       </div>
 
       {dados.isMock ? (

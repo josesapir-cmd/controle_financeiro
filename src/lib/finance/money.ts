@@ -6,6 +6,24 @@ import type { Account, Transaction } from "@/lib/pluggy/types";
  * por tipo de conta seja corrigida em um lugar so, e nao espalhada em somas.
  */
 
+/**
+ * A Pluggy usa convencoes de sinal opostas conforme o tipo de conta:
+ *
+ * - BANK: saida negativa, entrada positiva.
+ * - CREDIT: a compra vem POSITIVA, porque aumenta a fatura; estorno e pagamento
+ *   da fatura vem negativos.
+ *
+ * Verificado com dados reais: uma compra de mercado no cartao chegou como
+ * +17,90 no mesmo extrato em que uma compra no debito chegou como -12,00.
+ *
+ * Normalizamos tudo para a convencao do app — negativo e dinheiro saindo — na
+ * fronteira do servico, para que nenhum calculo adiante precise saber de que
+ * tipo de conta veio a transacao.
+ */
+export function normalizeAmount(amount: number, accountType: Account["type"]): number {
+  return accountType === "CREDIT" ? -amount : amount;
+}
+
 export function isExpense(transaction: Transaction): boolean {
   return transaction.amount < 0;
 }

@@ -1,6 +1,8 @@
 import { Fragment } from "react";
 import Link from "next/link";
+import { AccountFilter } from "@/components/AccountFilter";
 import { listTaxonomy } from "@/lib/counterparty-store";
+import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import { translateCategory } from "@/lib/finance/categories";
 import {
   groupByCategory,
@@ -202,18 +204,26 @@ export default async function Contrapartes({
     internas?: string;
     edit?: string;
     open?: string;
+    contas?: string | string[];
   }>;
 }) {
   const params = await searchParams;
   const periodo = lerPeriodo(params);
   const incluirInternas = params.internas === "1";
 
+  const accountIds = parseAccountIds(params.contas);
+  const contasQuery = accountQuery(accountIds);
+
   const [dados, taxonomia] = await Promise.all([
-    loadCounterparties(periodo, { includeInternal: incluirInternas }),
+    loadCounterparties(periodo, { includeInternal: incluirInternas, accountIds }),
     listTaxonomy(),
   ]);
 
-  const queryPeriodo = `from=${periodo.from}&to=${periodo.to}${incluirInternas ? "&internas=1" : ""}`;
+  const queryPeriodo = buildQuery(
+    `from=${periodo.from}&to=${periodo.to}`,
+    incluirInternas ? "internas=1" : undefined,
+    contasQuery,
+  );
   const editando = params.edit;
   const aberta = params.open;
   const voltarPara = `/contrapartes?${queryPeriodo}`;
@@ -236,23 +246,38 @@ export default async function Contrapartes({
       <div className="masthead">
         <h1>Contrapartes</h1>
         <span className="period">
-          <Link href="/">Painel</Link> · <Link href="/dia">Dia</Link> ·{" "}
+          <Link href={`/?${contasQuery}`}>Painel</Link> ·{" "}
+          <Link href={`/dia?${contasQuery}`}>Dia</Link> ·{" "}
           <Link href="/conexoes">Conexoes</Link>
         </span>
       </div>
 
-      <PeriodForm from={periodo.from} to={periodo.to} />
+      <PeriodForm from={periodo.from} to={periodo.to} accountIds={accountIds} />
 
       <div className="filtros">
+        <AccountFilter
+          options={dados.accountOptions}
+          selected={accountIds}
+          action="/contrapartes"
+          hidden={{
+            from: periodo.from,
+            to: periodo.to,
+            internas: incluirInternas ? "1" : undefined,
+          }}
+        />
         <Link
           className={incluirInternas ? "preset" : "preset ativo"}
-          href={`/contrapartes?${queryPeriodo}`}
+          href={`/contrapartes?${buildQuery(`from=${periodo.from}&to=${periodo.to}`, contasQuery)}`}
         >
           So contrapartes externas
         </Link>
         <Link
           className={incluirInternas ? "preset ativo" : "preset"}
-          href={`/contrapartes?${queryPeriodo}&internas=1`}
+          href={`/contrapartes?${buildQuery(
+            `from=${periodo.from}&to=${periodo.to}`,
+            "internas=1",
+            contasQuery,
+          )}`}
         >
           Incluir movimentacoes internas
         </Link>

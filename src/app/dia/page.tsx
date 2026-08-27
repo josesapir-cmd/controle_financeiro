@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { AccountFilter } from "@/components/AccountFilter";
 import { DayStrip } from "@/components/DayStrip";
+import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import { isUserInitiatedExpense } from "@/lib/finance/automatic";
 import { translateCategory } from "@/lib/finance/categories";
 import { maskDocument } from "@/lib/finance/counterparties";
@@ -32,13 +34,15 @@ function periodoDoDia(hora: string): string {
 export default async function Dia({
   searchParams,
 }: {
-  searchParams: Promise<{ d?: string; f?: string }>;
+  searchParams: Promise<{ d?: string; f?: string; contas?: string | string[] }>;
 }) {
   const params = await searchParams;
   const dia = params.d && DATA_ISO.test(params.d) ? params.d : localDay(new Date());
   const verTudo = params.f === "tudo";
+  const accountIds = parseAccountIds(params.contas);
+  const contasQuery = accountQuery(accountIds);
 
-  const dados = await loadDay(dia);
+  const dados = await loadDay(dia, { accountIds });
 
   // Por padrao a aba responde "o que eu fiz neste dia": so despesas iniciadas
   // por voce, sem IOF, rendimento de saldo remunerado nem movimentacoes.
@@ -55,23 +59,31 @@ export default async function Dia({
       <div className="masthead">
         <h1>Linha do tempo</h1>
         <span className="period">
-          <Link href="/">Painel</Link> · <Link href="/contrapartes">Contrapartes</Link> ·{" "}
+          <Link href={`/?${contasQuery}`}>Painel</Link> ·{" "}
+          <Link href={`/contrapartes?${contasQuery}`}>Contrapartes</Link> ·{" "}
           <Link href="/conexoes">Conexoes</Link>
         </span>
       </div>
 
       <div className="period-controls">
         <div className="presets">
-          <Link className="preset" href={`/dia?d=${shiftDay(dia, -1)}`}>
+          <Link className="preset" href={`/dia?${buildQuery(`d=${shiftDay(dia, -1)}`, contasQuery)}`}>
             ← Dia anterior
           </Link>
-          <Link className="preset" href={`/dia?d=${localDay(new Date())}`}>
+          <Link className="preset" href={`/dia?${buildQuery(`d=${localDay(new Date())}`, contasQuery)}`}>
             Hoje
           </Link>
-          <Link className="preset" href={`/dia?d=${shiftDay(dia, 1)}`}>
+          <Link className="preset" href={`/dia?${buildQuery(`d=${shiftDay(dia, 1)}`, contasQuery)}`}>
             Proximo dia →
           </Link>
         </div>
+
+        <AccountFilter
+          options={dados.accountOptions}
+          selected={accountIds}
+          action="/dia"
+          hidden={{ d: dia, f: verTudo ? "tudo" : undefined }}
+        />
 
         <form className="range-form" method="get">
           <label>
@@ -86,10 +98,16 @@ export default async function Dia({
       </p>
 
       <div className="filtros">
-        <Link className={verTudo ? "preset" : "preset ativo"} href={`/dia?d=${dia}`}>
+        <Link
+          className={verTudo ? "preset" : "preset ativo"}
+          href={`/dia?${buildQuery(`d=${dia}`, contasQuery)}`}
+        >
           Despesas que eu iniciei
         </Link>
-        <Link className={verTudo ? "preset ativo" : "preset"} href={`/dia?d=${dia}&f=tudo`}>
+        <Link
+          className={verTudo ? "preset ativo" : "preset"}
+          href={`/dia?${buildQuery(`d=${dia}`, "f=tudo", contasQuery)}`}
+        >
           Todos os lancamentos
         </Link>
       </div>

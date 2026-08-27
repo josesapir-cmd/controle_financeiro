@@ -127,6 +127,15 @@ function utcFromLocal(year: number, month: string, day: number, hora: string): s
   return new Date(instante).toISOString();
 }
 
+/**
+ * Sinal cru, como a Pluggy devolve: compra em cartao vem positiva porque aumenta
+ * a fatura. O mock reproduz isso de proposito, para exercitar a normalizacao em
+ * vez de mascara-la.
+ */
+function sinalCru(amount: number, accountId: string): number {
+  return accountId === CARD_ID ? -amount : amount;
+}
+
 /** Gera o extrato ficticio dentro do mes de referencia informado. */
 export function mockTransactions(accountId: string, reference = new Date()): Transaction[] {
   const year = reference.getUTCFullYear();
@@ -138,7 +147,7 @@ export function mockTransactions(accountId: string, reference = new Date()): Tra
       id: `mock-${accountId}-${index}`,
       accountId,
       description: seed.description,
-      amount: seed.amount,
+      amount: sinalCru(seed.amount, accountId),
       currencyCode: "BRL",
       // O mock guarda hora local; somamos 3h para gravar em UTC, como a Pluggy faz.
       date: utcFromLocal(year, month, seed.day, seed.hora ?? "12:00"),

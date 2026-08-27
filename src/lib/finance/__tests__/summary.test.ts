@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Account, Transaction } from "@/lib/pluggy/types";
-import { formatBRL, maskAccountNumber, netWorth } from "../money";
+import { formatBRL, maskAccountNumber, netWorth, normalizeAmount } from "../money";
 import {
   currentMonthRange,
   monthlyFlow,
@@ -169,5 +169,28 @@ describe("movimentacoes que nao sao consumo", () => {
 
   it("trata categoria desconhecida como gasto, para nao sumir do painel", () => {
     expect(totalExpenses([tx(-50, { category: "Quantum Widgets" })])).toBe(50);
+  });
+});
+
+describe("normalizeAmount", () => {
+  // Verificado com dados reais: uma compra de mercado no cartao chegou como
+  // +17,90 enquanto uma compra no debito chegou como -12,00 no mesmo extrato.
+  it("inverte o sinal em cartao de credito, onde compra vem positiva", () => {
+    expect(normalizeAmount(17.9, "CREDIT")).toBe(-17.9);
+  });
+
+  it("preserva o sinal em conta corrente", () => {
+    expect(normalizeAmount(-12, "BANK")).toBe(-12);
+    expect(normalizeAmount(8400, "BANK")).toBe(8400);
+  });
+
+  it("trata estorno de cartao como entrada", () => {
+    expect(normalizeAmount(-50, "CREDIT")).toBe(50);
+  });
+
+  it("depois de normalizar, a compra no cartao conta como gasto", () => {
+    const compra = tx(normalizeAmount(17.9, "CREDIT"), { category: "Groceries" });
+    expect(totalExpenses([compra])).toBeCloseTo(17.9, 2);
+    expect(totalsByCategory([compra])[0]).toMatchObject({ category: "Mercado", total: 17.9 });
   });
 });
