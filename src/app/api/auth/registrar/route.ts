@@ -117,7 +117,20 @@ export async function POST(request: Request) {
   return NextResponse.json({ error: "etapa desconhecida" }, { status: 400 });
 }
 
-/** Diz se o app ainda precisa da primeira passkey, para a tela saber o que mostrar. */
+/**
+ * Diz se o app ainda precisa da primeira passkey, para a tela saber o que
+ * mostrar.
+ *
+ * Falha de banco vira mensagem, nao 500: a tela de entrada e a unica porta do
+ * app, e quebra-la sem explicacao deixa o usuario sem saida.
+ */
 export async function GET() {
-  return NextResponse.json({ bootstrap: !(await hasCredentials()) });
+  try {
+    return NextResponse.json({ bootstrap: !(await hasCredentials()) });
+  } catch (erro) {
+    return NextResponse.json(
+      { error: erro instanceof Error ? erro.message : "banco indisponivel" },
+      { status: 503 },
+    );
+  }
 }

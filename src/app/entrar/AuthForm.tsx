@@ -20,9 +20,17 @@ export function AuthForm() {
 
   useEffect(() => {
     fetch("/api/auth/registrar")
-      .then((r) => r.json())
-      .then((d) => setBootstrap(Boolean(d.bootstrap)))
-      .catch(() => setBootstrap(false));
+      .then(async (r) => {
+        const dados = await r.json();
+        if (!r.ok) throw new Error(dados.error ?? "nao foi possivel consultar o servidor");
+        setBootstrap(Boolean(dados.bootstrap));
+      })
+      .catch((e) => {
+        // Sem saber se ha passkey, oferecemos entrar: e o caminho de quem ja
+        // registrou, que e o caso comum depois do primeiro acesso.
+        setBootstrap(false);
+        setErro(e instanceof Error ? e.message : "servidor indisponivel");
+      });
   }, []);
 
   async function registrar(recoveryCode?: string) {

@@ -31,5 +31,9 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Exclui TODO o /_next, nao apenas static e image. Em desenvolvimento o
+  // Turbopack usa outros caminhos sob /_next para o hot reload, e redireciona-los
+  // para /entrar quebra a recarga automatica — o sintoma e um "Failed to fetch"
+  // no console, sem relacao aparente com autenticacao.
+  matcher: ["/((?!_next|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)"],
 };
