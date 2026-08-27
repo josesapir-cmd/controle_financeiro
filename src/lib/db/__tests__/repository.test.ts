@@ -1,0 +1,288 @@
+import { PGlite } from "@electric-sql/pglite";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { resetKeyCache } from "@/lib/crypto";
+import type { Db } from "../adapter";
+import { migrate } from "../migrate.mjs";
+import {
+  accountFingerprint,
+  listAccounts,
+  listLabels,
+  listTransactions,
+  markSync,
+  setLabel,
+  syncStatus,
+  upsertAccount,
+  upsertConnection,
+  upsertTransactions,
+} from "../repository";
+
+const ITEM = "11111111-1111-4111-8111-111111111111";
+
+let pg: PGlite;
+let db: Db;
+
+beforeEach(async () => {
+  process.env.APP_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString("base64");
+  resetKeyCache();
+
+  pg = new PGlite();
+  db = {
+    async query<T>(text: string, params: unknown[] = []) {
+      return (await pg.query<T>(text, params)).rows;
+    },
+  };
+
+  await migrate({
+    async unsafe(query: string) {
+      const resultado = await pg.exec(query);
+      return resultado[resultado.length - 1]?.rows ?? [];
+    },
+  });
+
+  await upsertConnection(db, { itemId: ITEM, connectorName: "Inter", connectorId: 823 });
+});
+
+afterEach(async () => {
+  await pg.close();
+});
+
+async function contaExemplo(numero = "01212573-3") {
+  return upsertAccount(db, {
+    itemId: ITEM,
+    pluggyAccountId: "22222222-2222-4222-8222-222222222222",
+    connectorName: "Inter",
+    type: "BANK",
+    name: "BANCO INTER",
+    number: numero,
+    balance: 3153.01,
+  });
+}
+
+describe("contas", () => {
+  it("grava e devolve com os campos decifrados", async () => {
+    await contaExemplo();
+    const [conta] = await listAccounts(db);
+
+    expect(conta.name).toBe("BANCO INTER");
+    expect(conta.number).toBe("01212573-3");
+    expect(conta.balance).toBeCloseTo(3153.01, 2);
+  });
+
+  // O nome e o numero da conta nao podem estar legiveis no banco: e o ponto
+  // inteiro da criptografia na aplicacao.
+  it("nao guarda nome nem numero em claro", async () => {
+    await contaExemplo();
+    const { rows } = await pg.query<{ name_enc: string; number_enc: string }>(
+      "SELECT name_enc, number_enc FROM accounts",
+    );
+
+    expect(rows[0].name_enc).not.toContain("INTER");
+    expect(rows[0].number_enc).not.toContain("01212573");
+    expect(rows[0].name_enc.startsWith("v1.")).toBe(true);
+  });
+
+  it("atualiza a mesma conta em vez de duplicar", async () => {
+    const primeiro = await contaExemplo();
+    const segundo = await contaExemplo();
+
+    expect(segundo).toBe(primeiro);
+    expect(await listAccounts(db)).toHaveLength(1);
+  });
+
+  // A promessa central da persistencia: reconectar um banco gera itemId novo,
+  // e a conta precisa continuar sendo a mesma.
+  it("mantem a identidade quando a conexao e recriada", async () => {
+    const antes = await contaExemplo();
+
+    const novoItem = "99999999-9999-4999-8999-999999999999";
+    await upsertConnection(db, { itemId: novoItem, connectorName: "Inter" });
+    const depois = await upsertAccount(db, {
+      itemId: novoItem,
+      pluggyAccountId: "33333333-3333-4333-8333-333333333333",
+      connectorName: "Inter",
+      type: "BANK",
+      name: "BANCO INTER",
+      number: "01212573-3",
+      balance: 3200,
+    });
+
+    expect(depois).toBe(antes);
+    expect(await listAccounts(db)).toHaveLength(1);
+  });
+
+  it("distingue contas diferentes da mesma instituicao", async () => {
+    await contaExemplo("01212573-3");
+    await contaExemplo("00099999-1");
+    expect(await listAccounts(db)).toHaveLength(2);
+  });
+
+  it("produz fingerprints diferentes para instituicoes diferentes", () => {
+    expect(accountFingerprint("Inter", "123")).not.toBe(accountFingerprint("Nubank", "123"));
+  });
+});
+
+describe("transacoes", () => {
+  it("grava e devolve decifrado", async () => {
+    const accountId = await contaExemplo();
+    await upsertTransactions(db, [
+      {
+        id: "tx-1",
+        accountId,
+        postedAt: "2026-08-26T18:19:21.000Z",
+        localDay: "2026-08-26",
+        amount: -45000,
+        category: "Investments",
+        description: "Aplicacao - Cdb Pos Di Liq",
+        counterpartyKey: "12345678901",
+        counterpartyName: "Maria Locadora",
+        counterpartyDocument: "12345678901",
+        details: [{ label: "Meio", value: "Pix" }],
+      },
+    ]);
+
+    const [t] = await listTransactions(db);
+    expect(t.description).toBe("Aplicacao - Cdb Pos Di Liq");
+    expect(t.counterpartyName).toBe("Maria Locadora");
+    expect(t.details).toEqual([{ label: "Meio", value: "Pix" }]);
+    expect(t.amount).toBe(-45000);
+    expect(t.localDay).toBe("2026-08-26");
+  });
+
+  it("nao guarda descricao nem contraparte em claro", async () => {
+    const accountId = await contaExemplo();
+    await upsertTransactions(db, [
+      {
+        id: "tx-2",
+        accountId,
+        postedAt: "2026-08-26T18:19:21.000Z",
+        localDay: "2026-08-26",
+        amount: -100,
+        description: "Supermercado Pao de Acucar",
+        counterpartyName: "Padaria Central",
+      },
+    ]);
+
+    const { rows } = await pg.query<{ description_enc: string; counterparty_name_enc: string }>(
+      "SELECT description_enc, counterparty_name_enc FROM transactions",
+    );
+    expect(rows[0].description_enc).not.toContain("Supermercado");
+    expect(rows[0].counterparty_name_enc).not.toContain("Padaria");
+  });
+
+  // Re-sincronizar o mesmo periodo precisa atualizar, nao duplicar.
+  it("e idempotente pelo id da Pluggy", async () => {
+    const accountId = await contaExemplo();
+    const base = {
+      id: "tx-3",
+      accountId,
+      postedAt: "2026-08-26T12:00:00.000Z",
+      localDay: "2026-08-26",
+      amount: -10,
+    };
+
+    await upsertTransactions(db, [base]);
+    await upsertTransactions(db, [{ ...base, amount: -20 }]);
+
+    const todas = await listTransactions(db);
+    expect(todas).toHaveLength(1);
+    expect(todas[0].amount).toBe(-20);
+  });
+
+  it("preserva first_seen_at ao reprocessar", async () => {
+    const accountId = await contaExemplo();
+    const base = {
+      id: "tx-4",
+      accountId,
+      postedAt: "2026-08-26T12:00:00.000Z",
+      localDay: "2026-08-26",
+      amount: -10,
+    };
+
+    await upsertTransactions(db, [base]);
+    const antes = (await pg.query<{ first_seen_at: string }>("SELECT first_seen_at FROM transactions"))
+      .rows[0].first_seen_at;
+
+    await upsertTransactions(db, [{ ...base, amount: -30 }]);
+    const depois = (await pg.query<{ first_seen_at: string }>("SELECT first_seen_at FROM transactions"))
+      .rows[0].first_seen_at;
+
+    expect(String(depois)).toBe(String(antes));
+  });
+
+  it("filtra por periodo", async () => {
+    const accountId = await contaExemplo();
+    await upsertTransactions(db, [
+      { id: "a", accountId, postedAt: "2026-07-20T12:00:00Z", localDay: "2026-07-20", amount: -1 },
+      { id: "b", accountId, postedAt: "2026-08-10T12:00:00Z", localDay: "2026-08-10", amount: -2 },
+      { id: "c", accountId, postedAt: "2026-09-02T12:00:00Z", localDay: "2026-09-02", amount: -3 },
+    ]);
+
+    const agosto = await listTransactions(db, { from: "2026-08-01", to: "2026-08-31" });
+    expect(agosto.map((t) => t.id)).toEqual(["b"]);
+  });
+
+  it("filtra por conta", async () => {
+    const conta1 = await contaExemplo("111-1");
+    const conta2 = await contaExemplo("222-2");
+    await upsertTransactions(db, [
+      { id: "a", accountId: conta1, postedAt: "2026-08-10T12:00:00Z", localDay: "2026-08-10", amount: -1 },
+      { id: "b", accountId: conta2, postedAt: "2026-08-10T12:00:00Z", localDay: "2026-08-10", amount: -2 },
+    ]);
+
+    const so1 = await listTransactions(db, { accountIds: [conta1] });
+    expect(so1.map((t) => t.id)).toEqual(["a"]);
+  });
+
+  // Chave de agrupamento precisa ser deterministica, senao a aba de
+  // contrapartes nao consegue somar por pessoa.
+  it("gera o mesmo fingerprint de contraparte para o mesmo documento", async () => {
+    const accountId = await contaExemplo();
+    await upsertTransactions(db, [
+      { id: "a", accountId, postedAt: "2026-08-01T12:00:00Z", localDay: "2026-08-01", amount: -1, counterpartyKey: "12345678901" },
+      { id: "b", accountId, postedAt: "2026-08-02T12:00:00Z", localDay: "2026-08-02", amount: -2, counterpartyKey: "12345678901" },
+    ]);
+
+    const [x, y] = await listTransactions(db);
+    expect(x.counterpartyFingerprint).toBe(y.counterpartyFingerprint);
+    expect(x.counterpartyFingerprint).not.toContain("12345678901");
+  });
+});
+
+describe("rotulos de contraparte", () => {
+  it("grava e devolve com o apelido decifrado", async () => {
+    await setLabel(db, "12345678901", {
+      category: "Viagem",
+      subcategory: "Viagem FDS Familia",
+      alias: "Hotel Fazenda Cascatinha",
+    });
+
+    const [rotulo] = await listLabels(db);
+    expect(rotulo.category).toBe("Viagem");
+    expect(rotulo.alias).toBe("Hotel Fazenda Cascatinha");
+  });
+
+  it("nao guarda o apelido em claro", async () => {
+    await setLabel(db, "12345678901", { alias: "Hotel Fazenda Cascatinha" });
+    const { rows } = await pg.query<{ alias_enc: string }>("SELECT alias_enc FROM counterparty_labels");
+    expect(rows[0].alias_enc).not.toContain("Cascatinha");
+  });
+
+  it("apaga o registro quando todos os campos ficam vazios", async () => {
+    await setLabel(db, "12345678901", { category: "Viagem" });
+    await setLabel(db, "12345678901", { category: "", subcategory: "", alias: "" });
+    expect(await listLabels(db)).toHaveLength(0);
+  });
+});
+
+describe("estado de sincronizacao", () => {
+  it("registra sucesso e erro por conexao", async () => {
+    await markSync(db, ITEM, null);
+    const [ok] = await syncStatus(db);
+    expect(ok.lastSyncedAt).toBeInstanceOf(Date);
+    expect(ok.lastSyncError).toBeNull();
+
+    await markSync(db, ITEM, "Pluggy respondeu 504");
+    const [erro] = await syncStatus(db);
+    expect(erro.lastSyncError).toBe("Pluggy respondeu 504");
+  });
+});
