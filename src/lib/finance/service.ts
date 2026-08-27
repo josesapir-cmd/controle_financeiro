@@ -167,17 +167,23 @@ export async function loadConnections(): Promise<ConnectionRow[]> {
       const item = await pluggy.getItem(stored.id).catch(() => undefined);
       if (item) return { stored, item };
 
-      // Sem o item, a conexao ainda pode estar boa: o que importa e se as contas
-      // carregam. Verificamos antes de declarar a conexao indisponivel.
+      // Sem o item, ainda vale checar as contas: ha conexoes que respondem 404
+      // em /items/{id} e mesmo assim entregam contas.
+      //
+      // Cuidado ao ler o resultado: /accounts?itemId= devolve 200 com lista
+      // vazia tambem para itemId inexistente (verificado com um UUID inventado),
+      // entao lista vazia NAO significa "conexao sem contas". Nesse caso a
+      // unica evidencia confiavel e o 404, e a mensagem precisa dizer isso em
+      // vez de sugerir um problema de consentimento que pode nao existir.
       try {
         const accounts = await pluggy.getAccounts(stored.id);
+        if (accounts.length > 0) return { stored, contas: accounts.length };
+
         return {
           stored,
-          contas: accounts.length,
           erro:
-            accounts.length > 0
-              ? undefined
-              : "Nenhuma conta encontrada. Verifique no Meu Pluggy se o consentimento cobre contas e transacoes.",
+            "Este itemId nao pertence as suas credenciais. Confirme no Meu Pluggy que a conexao " +
+            "terminou de sincronizar e que voce copiou o link da propria conexao.",
         };
       } catch (error) {
         return { stored, erro: describe(error) };
