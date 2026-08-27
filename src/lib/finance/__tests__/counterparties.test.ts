@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aggregateCounterparties,
+  groupByCategory,
   extractCounterparty,
   maskDocument,
   nameFromDescription,
@@ -137,5 +138,81 @@ describe("aggregateCounterparties", () => {
       { amount: 450, date: "2026-08-13T15:00:00Z", counterparty: { key: NAO_IDENTIFICADA, self: false } },
     ]);
     expect(resultado[0].name).toBe("Contraparte nao identificada");
+  });
+});
+
+describe("classificacao em dois niveis", () => {
+  const transacoes = [
+    {
+      id: "1",
+      amount: -1200,
+      date: "2026-08-10T15:00:00Z",
+      description: "Hotel Fazenda Cascatinha",
+      category: "Travel",
+      counterparty: { key: "hotel", name: "Hotel Fazenda Cascatinha", self: false },
+    },
+    {
+      id: "2",
+      amount: -430,
+      date: "2026-08-11T15:00:00Z",
+      description: "Posto de gasolina",
+      category: "Transport",
+      counterparty: { key: "posto", name: "Posto Estrada", self: false },
+    },
+    {
+      id: "3",
+      amount: -2600,
+      date: "2026-08-05T15:00:00Z",
+      description: "Aluguel",
+      category: "Housing",
+      counterparty: { key: "maria", name: "Maria", self: false },
+    },
+  ];
+
+  const cadastro = {
+    hotel: { category: "Viagem", subcategory: "Viagem FDS Familia" },
+    posto: { category: "Viagem", subcategory: "Viagem FDS Familia" },
+    maria: { category: "Moradia", subcategory: "Aluguel" },
+  };
+
+  it("agrupa subcategorias sob a categoria mae", () => {
+    const grupos = groupByCategory(aggregateCounterparties(transacoes, cadastro));
+    const viagem = grupos.find((g) => g.category === "Viagem");
+
+    expect(viagem?.sent).toBe(1630);
+    expect(viagem?.subcategories).toHaveLength(1);
+    expect(viagem?.subcategories[0]).toMatchObject({
+      subcategory: "Viagem FDS Familia",
+      sent: 1630,
+      counterparties: 2,
+    });
+  });
+
+  it("ordena categorias pelo volume", () => {
+    const grupos = groupByCategory(aggregateCounterparties(transacoes, cadastro));
+    expect(grupos.map((g) => g.category)).toEqual(["Moradia", "Viagem"]);
+  });
+
+  it("agrupa sob rotulo proprio o que nao foi classificado", () => {
+    const grupos = groupByCategory(aggregateCounterparties(transacoes));
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].category).toBe("Sem categoria");
+  });
+
+  it("sugere a categoria mais frequente da Pluggy, traduzida", () => {
+    const [hotel] = aggregateCounterparties([transacoes[0]]);
+    expect(hotel.suggestedCategory).toBe("Viagem");
+  });
+
+  it("sugestao nao preenche a categoria: so o cadastro classifica", () => {
+    const [hotel] = aggregateCounterparties([transacoes[0]]);
+    expect(hotel.category).toBeUndefined();
+    expect(hotel.suggestedCategory).toBeDefined();
+  });
+
+  it("guarda os lancamentos que compoem cada contraparte", () => {
+    const [hotel] = aggregateCounterparties([transacoes[0]]);
+    expect(hotel.transactions).toHaveLength(1);
+    expect(hotel.transactions[0].description).toBe("Hotel Fazenda Cascatinha");
   });
 });

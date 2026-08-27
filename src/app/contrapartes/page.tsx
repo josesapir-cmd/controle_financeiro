@@ -1,7 +1,13 @@
 import Link from "next/link";
-import { listCategories } from "@/lib/counterparty-store";
-import { maskDocument, NAO_IDENTIFICADA } from "@/lib/finance/counterparties";
-import { currentMonthRange } from "@/lib/finance/dates";
+import { listTaxonomy } from "@/lib/counterparty-store";
+import { translateCategory } from "@/lib/finance/categories";
+import {
+  groupByCategory,
+  maskDocument,
+  NAO_IDENTIFICADA,
+  type CounterpartyTotal,
+} from "@/lib/finance/counterparties";
+import { currentMonthRange, localTime } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
 import { loadCounterparties } from "@/lib/finance/service";
 import { PeriodForm } from "./PeriodForm";
@@ -21,20 +27,127 @@ function lerPeriodo(params: { from?: string; to?: string }) {
 
 const dataCurta = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
 
+function Classificacao({ c }: { c: CounterpartyTotal }) {
+  if (!c.category && !c.subcategory) return <>—</>;
+  return (
+    <>
+      {c.category ?? "—"}
+      {c.subcategory ? (
+        <div className="account-meta">↳ {c.subcategory}</div>
+      ) : null}
+    </>
+  );
+}
+
+function IdentidadeContraparte({ c }: { c: CounterpartyTotal }) {
+  return (
+    <details>
+      <summary>
+        {c.name}
+        {c.self ? <span className="tag">propria</span> : null}
+        <div className="account-meta">
+          {c.count} {c.count === 1 ? "movimentacao" : "movimentacoes"} · ultima em{" "}
+          {dataCurta.format(new Date(c.lastDate))}
+          {c.document ? ` · ${maskDocument(c.document, c.documentType)}` : ""}
+        </div>
+      </summary>
+
+      <ul className="lancamentos">
+        {c.transactions.map((lancamento) => (
+          <li key={lancamento.id}>
+            <span className="account-meta">
+              {dataCurta.format(new Date(lancamento.date))} {localTime(lancamento.date)}
+            </span>
+            <span className="description">{lancamento.description}</span>
+            <span className="account-meta">
+              {lancamento.category ? translateCategory(lancamento.category) : ""}
+            </span>
+            <span className={lancamento.amount < 0 ? "negative" : "positive"}>
+              {formatBRL(lancamento.amount)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+function Valores({ c }: { c: CounterpartyTotal }) {
+  return (
+    <>
+      <td className="amount">{c.sent > 0 ? formatBRL(-c.sent) : "—"}</td>
+      <td className="amount">{c.received > 0 ? formatBRL(c.received) : "—"}</td>
+      <td className={`amount ${c.net < 0 ? "negative" : "positive"}`}>{formatBRL(c.net)}</td>
+    </>
+  );
+}
+
+/**
+ * Formulario de classificacao. A categoria vem preenchida com a sugestao quando
+ * a contraparte ainda nao foi classificada — um clique em Salvar confirma, mas
+ * nada e dado como classificado sem esse clique.
+ */
+function FormularioClassificacao({ c, voltarPara }: { c: CounterpartyTotal; voltarPara?: string }) {
+  return (
+    <form action={salvarContraparte} className="inline-form">
+      <input type="hidden" name="key" value={c.key} />
+      <input
+        type="text"
+        name="category"
+        list="categorias"
+        placeholder="Categoria"
+        defaultValue={c.category ?? c.suggestedCategory ?? ""}
+        aria-label={`Categoria de ${c.name}`}
+      />
+      <input
+        type="text"
+        name="subcategory"
+        list="subcategorias"
+        placeholder="Subcategoria"
+        defaultValue={c.subcategory ?? ""}
+        aria-label={`Subcategoria de ${c.name}`}
+      />
+      <input
+        type="text"
+        name="alias"
+        placeholder="Apelido"
+        defaultValue={c.name !== c.key ? c.name : ""}
+        aria-label={`Apelido de ${c.name}`}
+      />
+      <button type="submit">Salvar</button>
+      {voltarPara ? (
+        <Link className="cancelar" href={voltarPara}>
+          Cancelar
+        </Link>
+      ) : null}
+    </form>
+  );
+}
+
 export default async function Contrapartes({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; internas?: string; edit?: string }>;
 }) {
-  const periodo = lerPeriodo(await searchParams);
+  const params = await searchParams;
+  const periodo = lerPeriodo(params);
+  const incluirInternas = params.internas === "1";
 
-  const [dados, categorias] = await Promise.all([
-    loadCounterparties(periodo),
-    listCategories(),
+  const [dados, taxonomia] = await Promise.all([
+    loadCounterparties(periodo, { includeInternal: incluirInternas }),
+    listTaxonomy(),
   ]);
 
+  const queryPeriodo = `from=${periodo.from}&to=${periodo.to}${incluirInternas ? "&internas=1" : ""}`;
+  const editando = params.edit;
+  const voltarPara = `/contrapartes?${queryPeriodo}`;
   const identificadas = dados.counterparties.filter((c) => c.key !== NAO_IDENTIFICADA);
   const naoIdentificada = dados.counterparties.find((c) => c.key === NAO_IDENTIFICADA);
+  const porCategoria = groupByCategory(identificadas);
+
+  // Classificada e o que o usuario confirmou. Sugestao nao classifica nada.
+  const classificadas = identificadas.filter((c) => c.category);
+  const pendentes = identificadas.filter((c) => !c.category);
 
   return (
     <main className="page">
@@ -48,6 +161,21 @@ export default async function Contrapartes({
 
       <PeriodForm from={periodo.from} to={periodo.to} />
 
+      <div className="filtros">
+        <Link
+          className={incluirInternas ? "preset" : "preset ativo"}
+          href={`/contrapartes?${queryPeriodo}`}
+        >
+          So contrapartes externas
+        </Link>
+        <Link
+          className={incluirInternas ? "preset ativo" : "preset"}
+          href={`/contrapartes?${queryPeriodo}&internas=1`}
+        >
+          Incluir movimentacoes internas
+        </Link>
+      </div>
+
       {dados.isMock ? (
         <p className="banner">
           <strong>Dados ficticios.</strong> <code>PLUGGY_MOCK</code> esta ativo.
@@ -56,9 +184,7 @@ export default async function Contrapartes({
 
       {dados.failures.length > 0 ? (
         <p className="banner">
-          <strong>Dados incompletos.</strong> {dados.failures.length}{" "}
-          {dados.failures.length === 1 ? "conexao falhou" : "conexoes falharam"}:{" "}
-          {dados.failures[0].message}
+          <strong>Dados incompletos.</strong> {dados.failures[0].message}
         </p>
       ) : null}
 
@@ -74,9 +200,21 @@ export default async function Contrapartes({
         <div className="card">
           <div className="tile-label">Contrapartes</div>
           <div className="tile-value">{identificadas.length}</div>
-          <div className="tile-note">identificadas no periodo</div>
+          <div className="tile-note">
+            {classificadas.length} classificada{classificadas.length === 1 ? "" : "s"}
+          </div>
         </div>
       </div>
+
+      {!incluirInternas && dados.internalCount > 0 ? (
+        <p className="period" style={{ display: "block", marginTop: 16 }}>
+          {dados.internalCount}{" "}
+          {dados.internalCount === 1
+            ? "lancamento interno omitido"
+            : "lancamentos internos omitidos"}
+          : transferencias entre suas contas e aplicacoes.
+        </p>
+      ) : null}
 
       {naoIdentificada ? (
         <p className="banner">
@@ -89,12 +227,55 @@ export default async function Contrapartes({
         </p>
       ) : null}
 
-      <section>
-        <h2>Movimentacao por contraparte</h2>
-
-        {identificadas.length === 0 ? (
+      {classificadas.length > 0 ? (
+        <section>
+          <h2>Totais por categoria</h2>
           <div className="card">
-            <p className="empty">Nenhuma contraparte identificada neste periodo.</p>
+            <ul className="rollup">
+              {porCategoria.map((categoria) => (
+                <li key={categoria.category}>
+                  <div className="rollup-linha">
+                    <span className="description">{categoria.category}</span>
+                    <span className="bar-value">
+                      {categoria.sent > 0 ? formatBRL(-categoria.sent) : formatBRL(categoria.received)}
+                    </span>
+                  </div>
+                  <ul>
+                    {categoria.subcategories.map((sub) => (
+                      <li key={sub.subcategory}>
+                        <div className="rollup-linha sub">
+                          <span>
+                            {sub.subcategory}
+                            <span className="account-meta">
+                              {" "}
+                              · {sub.counterparties}{" "}
+                              {sub.counterparties === 1 ? "contraparte" : "contrapartes"}
+                            </span>
+                          </span>
+                          <span className="bar-value">
+                            {sub.sent > 0 ? formatBRL(-sub.sent) : formatBRL(sub.received)}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      ) : null}
+
+      <section>
+        <h2>
+          Aguardando classificacao{pendentes.length > 0 ? ` (${pendentes.length})` : ""}
+        </h2>
+
+        {pendentes.length === 0 ? (
+          <div className="card">
+            <p className="empty">
+              Tudo classificado neste periodo. Contrapartes novas aparecem aqui.
+            </p>
           </div>
         ) : (
           <div className="card table-scroll">
@@ -102,65 +283,95 @@ export default async function Contrapartes({
               <thead>
                 <tr>
                   <th scope="col">Contraparte</th>
-                  <th scope="col">Categoria</th>
                   <th scope="col" className="num">Enviado</th>
                   <th scope="col" className="num">Recebido</th>
                   <th scope="col" className="num">Liquido</th>
-                  <th scope="col">Cadastro</th>
+                  <th scope="col">Classificar</th>
                 </tr>
               </thead>
               <tbody>
-                {identificadas.map((c) => (
+                {pendentes.map((c) => (
                   <tr key={c.key}>
                     <td className="description">
-                      {c.name}
-                      {c.self ? <span className="tag">propria</span> : null}
-                      <div className="account-meta">
-                        {c.count} {c.count === 1 ? "movimentacao" : "movimentacoes"} · ultima em{" "}
-                        {dataCurta.format(new Date(c.lastDate))}
-                        {c.document ? ` · ${maskDocument(c.document, c.documentType)}` : ""}
-                      </div>
+                      <IdentidadeContraparte c={c} />
                     </td>
-                    <td>{c.category ?? "—"}</td>
-                    <td className="amount">{c.sent > 0 ? formatBRL(-c.sent) : "—"}</td>
-                    <td className="amount">{c.received > 0 ? formatBRL(c.received) : "—"}</td>
-                    <td className={`amount ${c.net < 0 ? "negative" : "positive"}`}>
-                      {formatBRL(c.net)}
-                    </td>
+                    <Valores c={c} />
                     <td>
-                      <form action={salvarContraparte} className="inline-form">
-                        <input type="hidden" name="key" value={c.key} />
-                        <input
-                          type="text"
-                          name="category"
-                          list="categorias"
-                          placeholder="Categoria"
-                          defaultValue={c.category ?? ""}
-                          aria-label={`Categoria de ${c.name}`}
-                        />
-                        <input
-                          type="text"
-                          name="alias"
-                          placeholder="Apelido"
-                          defaultValue={c.name !== c.key ? c.name : ""}
-                          aria-label={`Apelido de ${c.name}`}
-                        />
-                        <button type="submit">Salvar</button>
-                      </form>
+                      <FormularioClassificacao c={c} />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-
-            <datalist id="categorias">
-              {categorias.map((categoria) => (
-                <option key={categoria} value={categoria} />
-              ))}
-            </datalist>
           </div>
         )}
       </section>
+
+      {classificadas.length > 0 ? (
+        <section>
+          <h2>Classificadas ({classificadas.length})</h2>
+          <div className="card table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Contraparte</th>
+                  <th scope="col">Categoria</th>
+                  <th scope="col">Subcategoria</th>
+                  <th scope="col" className="num">Enviado</th>
+                  <th scope="col" className="num">Recebido</th>
+                  <th scope="col" className="num">Liquido</th>
+                  <th scope="col" aria-label="Acoes" />
+                </tr>
+              </thead>
+              <tbody>
+                {classificadas.map((c) =>
+                  editando === c.key ? (
+                    <tr key={c.key}>
+                      <td className="description">
+                        <IdentidadeContraparte c={c} />
+                      </td>
+                      <td colSpan={2}>
+                        <FormularioClassificacao c={c} voltarPara={voltarPara} />
+                      </td>
+                      <Valores c={c} />
+                      <td />
+                    </tr>
+                  ) : (
+                    <tr key={c.key} className="linha-classificada">
+                      <td className="description">
+                        <IdentidadeContraparte c={c} />
+                      </td>
+                      <td>{c.category}</td>
+                      <td>{c.subcategory ?? "—"}</td>
+                      <Valores c={c} />
+                      <td>
+                        <Link
+                          className="editar"
+                          href={`/contrapartes?${queryPeriodo}&edit=${encodeURIComponent(c.key)}`}
+                        >
+                          Editar
+                        </Link>
+                      </td>
+                    </tr>
+                  ),
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
+      <datalist id="categorias">
+        {taxonomia.categories.map((categoria) => (
+          <option key={categoria} value={categoria} />
+        ))}
+      </datalist>
+      <datalist id="subcategorias">
+        {taxonomia.subcategories.map((sub) => (
+          <option key={sub} value={sub} />
+        ))}
+      </datalist>
+
     </main>
   );
 }

@@ -4,6 +4,7 @@ import * as pluggy from "@/lib/pluggy/client";
 import { mockAccounts, mockItems, mockTransactions } from "@/lib/pluggy/mock";
 import type { AccountWithConnector, Item, Transaction } from "@/lib/pluggy/types";
 import { readRegistry } from "@/lib/counterparty-store";
+import { classify } from "./categories";
 import { localDay } from "./dates";
 import {
   aggregateCounterparties,
@@ -215,6 +216,8 @@ export interface CounterpartiesData {
   period: Period;
   totalSent: number;
   totalReceived: number;
+  /** Lancamentos internos omitidos: transferencias proprias e aplicacoes. */
+  internalCount: number;
   failures: { itemId: string; message: string }[];
   isMock: boolean;
 }
@@ -223,21 +226,36 @@ export interface CounterpartiesData {
  * Contrapartes do periodo escolhido. Recebe a janela pronta porque a aba tem
  * seletor proprio — diferente do painel, que olha sempre o mes corrente.
  */
-export async function loadCounterparties(period: Period): Promise<CounterpartiesData> {
+export async function loadCounterparties(
+  period: Period,
+  options: { includeInternal?: boolean } = {},
+): Promise<CounterpartiesData> {
   const isMock = useMock();
 
   const { transactions, failures } = isMock
     ? loadMock(new Date(`${period.to}T12:00:00Z`))
     : await loadReal(period);
 
+  // Transferencia entre contas proprias e aplicacao nao sao contraparte: o
+  // dinheiro mudou de bolso dentro do proprio patrimonio. Ficam de fora por
+  // padrao para nao competir com quem de fato recebe e envia dinheiro.
+  const relevantes = options.includeInternal
+    ? transactions
+    : transactions.filter(
+        (t) => !t.counterparty?.self && classify(t) !== "transfer",
+      );
+
+  const internos = transactions.length - relevantes.length;
+
   const registry = await readRegistry();
-  const counterparties = aggregateCounterparties(transactions, registry);
+  const counterparties = aggregateCounterparties(relevantes, registry);
 
   return {
     counterparties,
     period,
     totalSent: counterparties.reduce((total, c) => total + c.sent, 0),
     totalReceived: counterparties.reduce((total, c) => total + c.received, 0),
+    internalCount: internos,
     failures,
     isMock,
   };

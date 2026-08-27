@@ -1,3 +1,5 @@
+import { translateCategory } from "./categories";
+
 /**
  * Extracao e agregacao de contrapartes.
  *
@@ -112,9 +114,22 @@ export function extractCounterparty(
   };
 }
 
-/** Categoria atribuida pelo usuario a uma contraparte. */
+/**
+ * Classificacao atribuida pelo usuario a uma contraparte, em dois niveis.
+ *
+ * A hierarquia existe porque uma categoria sozinha e grossa demais: "Viagem"
+ * junta a viagem de trabalho com o fim de semana em familia. A subcategoria
+ * separa ocasioes dentro do mesmo tipo de gasto — Viagem > Viagem FDS Familia >
+ * Hotel Fazenda Cascatinha.
+ */
+export interface CounterpartyEntryRegistry {
+  category?: string;
+  subcategory?: string;
+  alias?: string;
+}
+
 export interface CounterpartyRegistry {
-  [key: string]: { category?: string; alias?: string };
+  [key: string]: CounterpartyEntryRegistry;
 }
 
 export interface CounterpartyTotal {
@@ -124,6 +139,13 @@ export interface CounterpartyTotal {
   document?: string;
   documentType?: string;
   category?: string;
+  subcategory?: string;
+  /**
+   * Palpite a partir da categoria que a Pluggy atribuiu aos lancamentos. Serve
+   * para preencher o formulario, nunca para dar a contraparte como classificada:
+   * so vale o que o usuario confirmou.
+   */
+  suggestedCategory?: string;
   /** Total que saiu para esta contraparte, positivo. */
   sent: number;
   /** Total que veio dela, positivo. */
@@ -134,9 +156,26 @@ export interface CounterpartyTotal {
   /** Data da transacao mais recente, para ordenar por atividade. */
   lastDate: string;
   self: boolean;
+  /**
+   * Lancamentos que compoem os totais, do mais recente para o mais antigo.
+   * Um nome de contraparte sozinho raramente diz o que foi — sobretudo quando e
+   * o proprio banco — entao a linha precisa poder ser aberta.
+   */
+  transactions: CounterpartyEntry[];
+}
+
+export interface CounterpartyEntry {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  category?: string | null;
 }
 
 interface TransacaoComContraparte {
+  id?: string;
+  description?: string;
+  category?: string | null;
   amount: number;
   date: string;
   counterparty?: Counterparty | null;
@@ -170,7 +209,16 @@ export function aggregateCounterparties(
       count: 0,
       lastDate: transaction.date,
       self: contraparte.self,
+      transactions: [],
     };
+
+    bucket.transactions.push({
+      id: transaction.id ?? `${contraparte.key}-${bucket.transactions.length}`,
+      date: transaction.date,
+      description: transaction.description ?? "",
+      amount: transaction.amount,
+      category: transaction.category ?? null,
+    });
 
     if (transaction.amount < 0) bucket.sent += -transaction.amount;
     else bucket.received += transaction.amount;
@@ -189,6 +237,15 @@ export function aggregateCounterparties(
 
   return [...buckets.values()]
     .map((bucket) => {
+      bucket.transactions.sort((a, b) => b.date.localeCompare(a.date));
+
+      // Categoria mais frequente entre os lancamentos, como sugestao.
+      const contagem = new Map<string, number>();
+      for (const lancamento of bucket.transactions) {
+        const categoria = lancamento.category?.trim();
+        if (categoria) contagem.set(categoria, (contagem.get(categoria) ?? 0) + 1);
+      }
+      const sugestao = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
       const cadastro = registry[bucket.key];
       return {
         ...bucket,
@@ -197,7 +254,79 @@ export function aggregateCounterparties(
           bucket.name ||
           (bucket.key === NAO_IDENTIFICADA ? "Contraparte nao identificada" : bucket.key),
         category: cadastro?.category,
+        subcategory: cadastro?.subcategory,
+        suggestedCategory: sugestao ? translateCategory(sugestao) : undefined,
       };
     })
     .sort((a, b) => b.sent + b.received - (a.sent + a.received));
+}
+
+export interface CategoryRollup {
+  category: string;
+  sent: number;
+  received: number;
+  count: number;
+  subcategories: {
+    subcategory: string;
+    sent: number;
+    received: number;
+    count: number;
+    counterparties: number;
+  }[];
+}
+
+const SEM_CATEGORIA = "Sem categoria";
+const SEM_SUBCATEGORIA = "Sem subcategoria";
+
+/**
+ * Totais por categoria e subcategoria. E o que a hierarquia paga: ver quanto foi
+ * para "Viagem" no total e, dentro dela, quanto foi para cada ocasiao.
+ */
+export function groupByCategory(counterparties: CounterpartyTotal[]): CategoryRollup[] {
+  const categorias = new Map<string, CategoryRollup>();
+
+  for (const c of counterparties) {
+    const nomeCategoria = c.category?.trim() || SEM_CATEGORIA;
+    const nomeSub = c.subcategory?.trim() || SEM_SUBCATEGORIA;
+
+    const categoria = categorias.get(nomeCategoria) ?? {
+      category: nomeCategoria,
+      sent: 0,
+      received: 0,
+      count: 0,
+      subcategories: [],
+    };
+
+    categoria.sent += c.sent;
+    categoria.received += c.received;
+    categoria.count += c.count;
+
+    const sub = categoria.subcategories.find((s) => s.subcategory === nomeSub);
+    if (sub) {
+      sub.sent += c.sent;
+      sub.received += c.received;
+      sub.count += c.count;
+      sub.counterparties += 1;
+    } else {
+      categoria.subcategories.push({
+        subcategory: nomeSub,
+        sent: c.sent,
+        received: c.received,
+        count: c.count,
+        counterparties: 1,
+      });
+    }
+
+    categorias.set(nomeCategoria, categoria);
+  }
+
+  const ordenar = <T extends { sent: number; received: number }>(a: T, b: T) =>
+    b.sent + b.received - (a.sent + a.received);
+
+  return [...categorias.values()]
+    .map((categoria) => ({
+      ...categoria,
+      subcategories: [...categoria.subcategories].sort(ordenar),
+    }))
+    .sort(ordenar);
 }

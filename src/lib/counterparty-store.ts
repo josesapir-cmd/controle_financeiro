@@ -34,7 +34,7 @@ async function write(registry: CounterpartyRegistry): Promise<void> {
 
 export async function setCounterparty(
   key: string,
-  values: { category?: string; alias?: string },
+  values: { category?: string; subcategory?: string; alias?: string },
 ): Promise<void> {
   const chave = key.trim();
   if (!chave) throw new Error("Contraparte sem identificacao.");
@@ -43,27 +43,40 @@ export async function setCounterparty(
   const atual = registry[chave] ?? {};
 
   const category = values.category?.trim();
+  const subcategory = values.subcategory?.trim();
   const alias = values.alias?.trim();
 
   const proximo = {
     ...atual,
     ...(values.category !== undefined ? { category: category || undefined } : {}),
+    ...(values.subcategory !== undefined ? { subcategory: subcategory || undefined } : {}),
     ...(values.alias !== undefined ? { alias: alias || undefined } : {}),
   };
 
-  // Entrada sem categoria nem apelido nao precisa ocupar espaco no arquivo.
-  if (!proximo.category && !proximo.alias) delete registry[chave];
+  // Entrada vazia nao precisa ocupar espaco no arquivo.
+  if (!proximo.category && !proximo.subcategory && !proximo.alias) delete registry[chave];
   else registry[chave] = proximo;
 
   await write(registry);
 }
 
-/** Categorias ja usadas, para oferecer como sugestao em vez de digitar de novo. */
-export async function listCategories(): Promise<string[]> {
+/**
+ * Categorias e subcategorias ja usadas, para sugerir em vez de exigir digitacao
+ * — e, com isso, evitar que a mesma categoria vire tres variacoes de grafia.
+ */
+export async function listTaxonomy(): Promise<{ categories: string[]; subcategories: string[] }> {
   const registry = await readRegistry();
-  const nomes = new Set<string>();
+  const categorias = new Set<string>();
+  const subcategorias = new Set<string>();
+
   for (const entrada of Object.values(registry)) {
-    if (entrada.category) nomes.add(entrada.category);
+    if (entrada.category) categorias.add(entrada.category);
+    if (entrada.subcategory) subcategorias.add(entrada.subcategory);
   }
-  return [...nomes].sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  const ordenar = (a: string, b: string) => a.localeCompare(b, "pt-BR");
+  return {
+    categories: [...categorias].sort(ordenar),
+    subcategories: [...subcategorias].sort(ordenar),
+  };
 }

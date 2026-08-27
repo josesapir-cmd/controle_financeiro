@@ -9,6 +9,7 @@ export async function salvarContraparte(formData: FormData): Promise<void> {
 
   await setCounterparty(key, {
     category: String(formData.get("category") ?? ""),
+    subcategory: String(formData.get("subcategory") ?? ""),
     alias: String(formData.get("alias") ?? ""),
   });
 

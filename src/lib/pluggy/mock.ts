@@ -104,6 +104,10 @@ const seeds: Seed[] = [
   { day: 16, description: "Pix enviado - Joao Diarista", amount: -320, category: "Services", hora: "13:20", accountId: CHECKING_ID, parte: { nome: "Joao Diarista", doc: "98765432100" } },
   { day: 21, description: "Pix recebido - Cliente Alfa Ltda", amount: 1500, category: "Income", hora: "15:08", accountId: CHECKING_ID, parte: { nome: "Cliente Alfa Ltda", doc: "12345678000199" } },
   { day: 13, description: "Transferencia recebida", amount: 450, category: "Income", hora: "16:41", accountId: CHECKING_ID, semContraparte: true },
+  { day: 11, description: "Pix enviado - Maria Locadora", amount: -180, category: "Housing", hora: "09:12", accountId: CHECKING_ID, parte: { nome: "Maria Locadora", doc: "12345678901" } },
+  { day: 19, description: "Pix recebido - Cliente Alfa Ltda", amount: 900, category: "Income", hora: "14:26", accountId: CHECKING_ID, parte: { nome: "Cliente Alfa Ltda", doc: "12345678000199" } },
+  { day: 12, description: "IOF sobre compra internacional", amount: -4.37, category: "Taxes", hora: "18:04", accountId: CARD_ID },
+  { day: 12, description: "Rendimento Saldo Remunerado", amount: 12.88, category: "Income", hora: "23:50", accountId: CHECKING_ID },
 ];
 
 /**
