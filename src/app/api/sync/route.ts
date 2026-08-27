@@ -4,6 +4,7 @@ import { fromPostgres } from "@/lib/db/adapter";
 import * as pluggy from "@/lib/pluggy/client";
 import { currentMonthRange, lastDaysRange } from "@/lib/finance/dates";
 import { syncAll } from "@/lib/sync/sync";
+import { currentSession } from "@/lib/auth/session";
 import { safeEqual } from "@/lib/crypto";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,16 @@ const DIAS_MAXIMO = 3650;
  * com o segredo. Comparacao em tempo constante: com `===`, o tempo de resposta
  * vazaria quantos caracteres iniciais estao certos.
  */
-function autorizado(request: Request): boolean {
+/**
+ * Autoriza por segredo (cron e chamadas de terminal) ou por sessao valida (o
+ * botao na tela de conexoes). Sem o segundo caminho, sincronizar exigiria
+ * abrir o terminal — o que anula o proposito de ter uma tela de conexoes.
+ */
+async function autorizadoPorSessao(): Promise<boolean> {
+  return Boolean(await currentSession());
+}
+
+function autorizadoPorSegredo(request: Request): boolean {
   const cabecalho = request.headers.get("authorization") ?? "";
   const token = cabecalho.startsWith("Bearer ") ? cabecalho.slice(7) : "";
   if (!token) return false;
@@ -59,7 +69,7 @@ async function itensCadastrados(db: ReturnType<typeof fromPostgres>): Promise<st
 }
 
 export async function POST(request: Request) {
-  if (!autorizado(request)) {
+  if (!autorizadoPorSegredo(request) && !(await autorizadoPorSessao())) {
     // Sem detalhar o motivo: distinguir "segredo ausente" de "segredo errado"
     // ajudaria mais quem esta tentando adivinhar do que quem esta depurando.
     return NextResponse.json({ error: "nao autorizado" }, { status: 401 });

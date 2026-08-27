@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/guard";
 import { loadConnections, type ConnectionRow } from "@/lib/finance/service";
 import { ConnectionForm } from "./ConnectionForm";
+import { SyncButton } from "./SyncButton";
 import { removerConexao } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,15 @@ export default async function Conexoes() {
         <ConnectionForm />
       </section>
 
+      <section className="card">
+        <h2>Sincronizacao</h2>
+        <p className="empty" style={{ marginTop: 0 }}>
+          Cadastrar uma conexao apenas a registra. Os dados aparecem quando a sincronizacao roda —
+          manualmente aqui, ou automaticamente a cada 6 horas depois do deploy.
+        </p>
+        <SyncButton />
+      </section>
+
       <section>
         <h2>Conexoes ({linhas.length})</h2>
 
@@ -70,7 +80,7 @@ export default async function Conexoes() {
                 {linha.accounts} {linha.accounts === 1 ? "conta" : "contas"}
                 {linha.lastSyncedAt
                   ? ` · sincronizado em ${quando.format(linha.lastSyncedAt)}`
-                  : " · nunca sincronizado"}
+                  : " · aguardando a primeira sincronizacao"}
               </div>
 
               {/* Erro de sincronizacao precisa aparecer: sem isso, dado velho

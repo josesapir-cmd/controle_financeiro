@@ -1043,3 +1043,27 @@ ul.rollup ul {
   color: var(--text-primary);
   border-color: var(--baseline);
 }
+
+/* --- Sincronizacao pela tela --- */
+.sincronizar .filtros {
+  margin-top: 10px;
+}
+
+ul.resultado-sync {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+ul.resultado-sync li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--gridline);
+}
+
+ul.resultado-sync li:last-child {
+  border-bottom: none;
+}
