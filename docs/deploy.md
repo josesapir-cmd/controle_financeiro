@@ -57,15 +57,27 @@ Guarde o codigo de recuperacao que aparece — ele e exibido uma unica vez.
 Registre tambem o celular, abrindo a mesma URL nele. Depender de um unico
 dispositivo e a forma mais comum de se trancar para fora.
 
-## 4. Conferir a sincronizacao automatica
+## 4. Sincronizacao automatica
 
-O cron roda a cada 6 horas. Para testar na hora, do seu terminal:
+O plano gratuito da Vercel permite **uma execucao de cron por dia**. O
+`vercel.json` ja esta configurado para 09:00 UTC — 06:00 em Brasilia, quando os
+lancamentos da vespera ja liquidaram e o painel esta pronto ao acordar.
 
-```bash
-APP_ORIGIN=https://SEU-DOMINIO npm run sync 45
-```
+Para sincronizar com mais frequencia sem pagar, o repositorio traz
+`.github/workflows/sincronizar.yml`, que chama a mesma rota a cada 6 horas pelo
+GitHub Actions. Para ativar, adicione dois segredos em **Settings → Secrets and
+variables → Actions** do repositorio:
 
-Em Vercel → Deployments → Functions da para ver as execucoes agendadas.
+| Segredo | Valor |
+| --- | --- |
+| `APP_ORIGIN` | a URL do app publicado, com `https://` |
+| `SYNC_SECRET` | o mesmo valor configurado na Vercel |
+
+As duas fontes podem coexistir: a rota e idempotente, entao sincronizar duas
+vezes nao duplica nada.
+
+Para disparar na hora, use o botao **Sincronizar** na tela de conexoes, ou a aba
+**Actions** do GitHub (o fluxo aceita execucao manual).
 
 ## Depois do deploy
 

@@ -1,0 +1,42 @@
+# Sincronizacao periodica sem depender do plano pago da Vercel.
+#
+# O cron da Vercel no plano gratuito roda uma vez por dia. Este fluxo chama a
+# mesma rota a cada 6 horas — e a rota e idempotente, entao as duas fontes
+# convivendo nao causam duplicacao.
+#
+# Exige dois segredos no repositorio (Settings -> Secrets and variables ->
+# Actions):
+#   APP_ORIGIN  a URL do app publicado, com https
+#   SYNC_SECRET o mesmo valor configurado na Vercel
+
+name: Sincronizar
+
+on:
+  schedule:
+    # A cada 6 horas. O GitHub nao garante o horario exato em fluxos agendados;
+    # atraso de alguns minutos e normal e nao afeta nada aqui.
+    - cron: "0 */6 * * *"
+  # Permite disparar manualmente pela aba Actions.
+  workflow_dispatch:
+
+jobs:
+  sincronizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar a rota de sincronizacao
+        run: |
+          resposta=$(curl -sS -w "\n%{http_code}" -X POST \
+            -H "Authorization: Bearer ${{ secrets.SYNC_SECRET }}" \
+            "${{ secrets.APP_ORIGIN }}/api/sync?dias=45")
+
+          corpo=$(echo "$resposta" | sed '$d')
+          codigo=$(echo "$resposta" | tail -1)
+
+          echo "$corpo"
+
+          # Falhar alto: uma sincronizacao que para de rodar em silencio faz o
+          # painel exibir dados velhos como se fossem atuais.
+          if [ "$codigo" != "200" ]; then
+            echo "::error::sincronizacao respondeu HTTP $codigo"
+            exit 1
+          fi
