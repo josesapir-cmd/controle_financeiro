@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireSession } from "@/lib/auth/guard";
 import { fromPostgres } from "@/lib/db/adapter";
 import { getSql } from "@/lib/db/client";
 import { parseItemId } from "@/lib/item-id";
@@ -18,6 +19,8 @@ export async function adicionarConexao(
   _anterior: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  await requireSession();
+
   const entrada = String(formData.get("itemId") ?? "");
   if (!entrada.trim()) return { erro: "Cole a URL da conexao ou o itemId." };
 
@@ -50,6 +53,8 @@ export async function adicionarConexao(
  * justamente para isso.
  */
 export async function removerConexao(formData: FormData): Promise<void> {
+  await requireSession();
+
   const itemId = String(formData.get("itemId") ?? "");
   if (!itemId) return;
 

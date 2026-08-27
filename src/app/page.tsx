@@ -3,6 +3,8 @@ import { CategoryBars } from "@/components/CategoryBars";
 import { StatTile } from "@/components/StatTile";
 import { TransactionsTable } from "@/components/TransactionsTable";
 import Link from "next/link";
+import { requireSession } from "@/lib/auth/guard";
+import { SairButton } from "@/components/SairButton";
 import { AccountFilter } from "@/components/AccountFilter";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import { formatBRL } from "@/lib/finance/money";
@@ -40,7 +42,8 @@ function Setup({ mensagem }: { mensagem: string }) {
           <br />
           <br />
           Com as credenciais no lugar, cadastre as conexoes em{" "}
-          <Link href="/conexoes">Conexoes</Link> colando a URL do Meu Pluggy.
+          <Link href="/conexoes">Conexoes</Link>
+          <SairButton /> colando a URL do Meu Pluggy.
           <br />
           <br />
           Para ver a interface sem tocar na API, use <code>PLUGGY_MOCK=true</code>.
@@ -55,6 +58,8 @@ export default async function Home({
 }: {
   searchParams: Promise<{ contas?: string | string[] }>;
 }) {
+  await requireSession();
+
   const accountIds = parseAccountIds((await searchParams).contas);
   let dados: DashboardData;
 
@@ -80,6 +85,7 @@ export default async function Home({
           {formatarPeriodo(dados.period)} · <Link href={`/dia?${contasQuery}`}>Dia</Link> ·{" "}
           <Link href={`/contrapartes?${contasQuery}`}>Contrapartes</Link> ·{" "}
           <Link href="/conexoes">Conexoes</Link>
+          <SairButton />
         </span>
       </div>
 

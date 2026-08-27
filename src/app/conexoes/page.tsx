@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireSession } from "@/lib/auth/guard";
 import { loadConnections, type ConnectionRow } from "@/lib/finance/service";
 import { ConnectionForm } from "./ConnectionForm";
 import { removerConexao } from "./actions";
@@ -13,6 +14,8 @@ const quando = new Intl.DateTimeFormat("pt-BR", {
 });
 
 export default async function Conexoes() {
+  await requireSession();
+
   let linhas: ConnectionRow[] = [];
   let erroGeral: string | undefined;
 

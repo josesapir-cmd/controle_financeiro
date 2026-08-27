@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireSession } from "@/lib/auth/guard";
 import { AccountFilter } from "@/components/AccountFilter";
 import { DayStrip } from "@/components/DayStrip";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
@@ -36,6 +37,8 @@ export default async function Dia({
 }: {
   searchParams: Promise<{ d?: string; f?: string; contas?: string | string[] }>;
 }) {
+  await requireSession();
+
   const params = await searchParams;
   const dia = params.d && DATA_ISO.test(params.d) ? params.d : localDay(new Date());
   const verTudo = params.f === "tudo";

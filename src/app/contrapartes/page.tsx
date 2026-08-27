@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import Link from "next/link";
+import { requireSession } from "@/lib/auth/guard";
 import { AccountFilter } from "@/components/AccountFilter";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import { translateCategory } from "@/lib/finance/categories";
@@ -206,6 +207,8 @@ export default async function Contrapartes({
     contas?: string | string[];
   }>;
 }) {
+  await requireSession();
+
   const params = await searchParams;
   const periodo = lerPeriodo(params);
   const incluirInternas = params.internas === "1";
