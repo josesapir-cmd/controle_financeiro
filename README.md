@@ -37,7 +37,7 @@ Pluggy e precisa ser guardado pela aplicacao.
 ```bash
 cp .env.example .env.local   # preencha as credenciais e os itemIds
 npm install
-npm run dev -- -p 3210       # escolha a porta se a 3000 ja estiver ocupada
+npm run dev                  # sobe na porta 3210
 ```
 
 ### Cadastrando as conexoes
@@ -59,8 +59,8 @@ O `.env.local` esta no `.gitignore`. Nenhuma credencial deve ser commitada.
 
 | Comando | O que faz |
 | --- | --- |
-| `npm run dev` | Servidor de desenvolvimento (porta 3000) |
-| `npm run dev -- -p 3210` | Idem, em outra porta, se a 3000 ja estiver em uso |
+| `npm run dev` | Servidor de desenvolvimento em http://localhost:3210 |
+| `npm run dev -- -p 4000` | Idem, em outra porta |
 | `npm run build` | Build de producao |
 | `npm run typecheck` | Checagem de tipos |
 | `npm test` | Testes |
