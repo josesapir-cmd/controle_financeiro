@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { DayStrip } from "@/components/DayStrip";
+import { isUserInitiatedExpense } from "@/lib/finance/automatic";
 import { translateCategory } from "@/lib/finance/categories";
 import { maskDocument } from "@/lib/finance/counterparties";
 import { localDay, localTime, shiftDay } from "@/lib/finance/dates";
@@ -30,12 +32,21 @@ function periodoDoDia(hora: string): string {
 export default async function Dia({
   searchParams,
 }: {
-  searchParams: Promise<{ d?: string }>;
+  searchParams: Promise<{ d?: string; f?: string }>;
 }) {
   const params = await searchParams;
   const dia = params.d && DATA_ISO.test(params.d) ? params.d : localDay(new Date());
+  const verTudo = params.f === "tudo";
 
   const dados = await loadDay(dia);
+
+  // Por padrao a aba responde "o que eu fiz neste dia": so despesas iniciadas
+  // por voce, sem IOF, rendimento de saldo remunerado nem movimentacoes.
+  const lancamentos = verTudo
+    ? dados.transactions
+    : dados.transactions.filter(isUserInitiatedExpense);
+
+  const escondidos = dados.transactions.length - lancamentos.length;
 
   let blocoAtual = "";
 
@@ -74,6 +85,15 @@ export default async function Dia({
         {diaExtenso.format(new Date(`${dia}T12:00:00Z`))}
       </p>
 
+      <div className="filtros">
+        <Link className={verTudo ? "preset" : "preset ativo"} href={`/dia?d=${dia}`}>
+          Despesas que eu iniciei
+        </Link>
+        <Link className={verTudo ? "preset ativo" : "preset"} href={`/dia?d=${dia}&f=tudo`}>
+          Todos os lancamentos
+        </Link>
+      </div>
+
       {dados.isMock ? (
         <p className="banner">
           <strong>Dados ficticios.</strong> <code>PLUGGY_MOCK</code> esta ativo.
@@ -97,7 +117,7 @@ export default async function Dia({
         </div>
         <div className="card">
           <div className="tile-label">Lancamentos</div>
-          <div className="tile-value">{dados.transactions.length}</div>
+          <div className="tile-value">{lancamentos.length}</div>
           {dados.transfers > 0 ? (
             <div className="tile-note">
               inclui {formatBRL(dados.transfers)} em movimentacoes
@@ -106,16 +126,27 @@ export default async function Dia({
         </div>
       </div>
 
+      <DayStrip transactions={lancamentos} />
+
       <section>
-        {dados.transactions.length === 0 ? (
+        {!verTudo && escondidos > 0 ? (
+          <p className="period" style={{ display: "block", marginBottom: 12 }}>
+            {escondidos} {escondidos === 1 ? "lancamento oculto" : "lancamentos ocultos"}: entradas,
+            IOF, rendimento de saldo remunerado e movimentacoes.
+          </p>
+        ) : null}
+
+        {lancamentos.length === 0 ? (
           <div className="card">
             <p className="empty">
-              Nenhum lancamento neste dia. Use as setas acima para navegar.
+              {dados.transactions.length === 0
+                ? "Nenhum lancamento neste dia. Use as setas acima para navegar."
+                : "Nenhuma despesa iniciada por voce neste dia. Veja todos os lancamentos acima."}
             </p>
           </div>
         ) : (
           <ol className="timeline">
-            {dados.transactions.map((t) => {
+            {lancamentos.map((t) => {
               const hora = localTime(t.date);
               const bloco = periodoDoDia(hora);
               const abreBloco = bloco !== blocoAtual;

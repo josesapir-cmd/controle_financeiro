@@ -549,3 +549,97 @@ td.amount {
     padding-left: 62px;
   }
 }
+
+/* --- Faixa horizontal de despesas do dia --- */
+.strip {
+  margin: 20px 0 0;
+  padding: 18px 20px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.strip-titulo {
+  margin-bottom: 22px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.strip-plot {
+  position: relative;
+  height: 40px;
+  /* Margem lateral para que pontos as 00h e 24h nao sejam cortados. */
+  margin: 0 16px;
+}
+
+.strip-eixo {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--baseline);
+}
+
+.strip-grade {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--gridline);
+}
+
+.strip-marca-envelope {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.strip-marca {
+  display: block;
+  border-radius: 50%;
+  background: var(--series-1);
+  /* Anel na cor da superficie separa pontos sobrepostos. */
+  box-shadow: 0 0 0 2px var(--surface);
+  cursor: default;
+  transition: transform 120ms ease;
+}
+
+.strip-marca:hover {
+  transform: scale(1.25);
+}
+
+.strip-rotulo {
+  position: absolute;
+  bottom: 100%;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.strip-horas {
+  position: relative;
+  height: 20px;
+  margin: 6px 16px 0;
+}
+
+.strip-horas span {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* --- Filtro de lancamentos --- */
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
