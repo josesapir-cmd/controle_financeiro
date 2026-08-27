@@ -338,12 +338,18 @@ export async function listLabels(db: Db): Promise<LabelRow[]> {
   }));
 }
 
+/**
+ * Grava o rotulo de uma contraparte.
+ *
+ * Recebe o fingerprint pronto, nao a chave original: as telas so conhecem o
+ * fingerprint, e calcula-lo de novo aqui produziria um hash de hash, que nunca
+ * casaria com as transacoes.
+ */
 export async function setLabel(
   db: Db,
-  chave: string,
+  fp: string,
   valores: { category?: string | null; subcategory?: string | null; alias?: string | null },
 ): Promise<void> {
-  const fp = counterpartyFingerprint(chave);
   const category = valores.category?.trim() || null;
   const subcategory = valores.subcategory?.trim() || null;
   const alias = valores.alias?.trim() || null;

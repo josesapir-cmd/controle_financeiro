@@ -5,6 +5,13 @@ import { removerConexao } from "./actions";
 
 export const dynamic = "force-dynamic";
 
+const quando = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 export default async function Conexoes() {
   let linhas: ConnectionRow[] = [];
   let erroGeral: string | undefined;
@@ -19,9 +26,10 @@ export default async function Conexoes() {
     <main className="page">
       <div className="masthead">
         <h1>Conexoes</h1>
-        <Link href="/" className="period">
-          ← Voltar ao painel
-        </Link>
+        <span className="period">
+          <Link href="/">Painel</Link> · <Link href="/dia">Dia</Link> ·{" "}
+          <Link href="/contrapartes">Contrapartes</Link>
+        </span>
       </div>
 
       <section className="card">
@@ -33,14 +41,14 @@ export default async function Conexoes() {
           automaticamente.
           <br />
           <br />
-          Precisa ser manual porque a API da Pluggy nao permite listar conexoes com credenciais
-          pessoais: as rotas de listagem respondem 403.
+          E manual por limitacao da API: com credenciais pessoais, as rotas de listagem respondem
+          403. A conexao aparece abaixo assim que a proxima sincronizacao rodar.
         </p>
         <ConnectionForm />
       </section>
 
       <section>
-        <h2>Conexoes cadastradas ({linhas.length})</h2>
+        <h2>Conexoes ({linhas.length})</h2>
 
         {erroGeral ? <p className="banner">{erroGeral}</p> : null}
 
@@ -51,38 +59,35 @@ export default async function Conexoes() {
         ) : null}
 
         <div className="accounts">
-          {linhas.map(({ stored, item, contas, erro }) => {
-            const nome = item?.connector.name ?? (erro ? "Conexao indisponivel" : "Conexao ativa");
-            const detalhe = item
-              ? `Status ${item.status}`
-              : erro
-                ? erro
-                : `${contas} ${contas === 1 ? "conta encontrada" : "contas encontradas"}`;
+          {linhas.map((linha) => (
+            <div className="card" key={linha.itemId}>
+              <div className="account-name">{linha.connectorName}</div>
 
-            return (
-            <div className="card" key={stored.id}>
-              <div className="account-name">{nome}</div>
-              <div className="account-meta">{detalhe}</div>
-              <div className="account-meta" style={{ marginTop: 8, wordBreak: "break-all" }}>
-                <code>{stored.id}</code>
+              <div className="account-meta">
+                {linha.accounts} {linha.accounts === 1 ? "conta" : "contas"}
+                {linha.lastSyncedAt
+                  ? ` · sincronizado em ${quando.format(linha.lastSyncedAt)}`
+                  : " · nunca sincronizado"}
               </div>
 
-              {stored.source === "env" ? (
-                <div className="tile-note">
-                  Definida em <code>PLUGGY_ITEM_IDS</code>. Para remover, edite o{" "}
-                  <code>.env.local</code>.
-                </div>
-              ) : (
-                <form action={removerConexao} style={{ marginTop: 12 }}>
-                  <input type="hidden" name="itemId" value={stored.id} />
-                  <button type="submit" className="danger">
-                    Remover
-                  </button>
-                </form>
-              )}
+              {/* Erro de sincronizacao precisa aparecer: sem isso, dado velho
+                  passa por dado atual sem ninguem notar. */}
+              {linha.lastSyncError ? (
+                <div className="tile-note negative">{linha.lastSyncError}</div>
+              ) : null}
+
+              <div className="account-meta" style={{ marginTop: 8, wordBreak: "break-all" }}>
+                <code>{linha.itemId}</code>
+              </div>
+
+              <form action={removerConexao} style={{ marginTop: 12 }}>
+                <input type="hidden" name="itemId" value={linha.itemId} />
+                <button type="submit" className="danger">
+                  Remover
+                </button>
+              </form>
             </div>
-            );
-          })}
+          ))}
         </div>
       </section>
     </main>

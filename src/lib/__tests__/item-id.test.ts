@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isValidItemId, parseItemId } from "../store";
+import { isValidItemId, parseItemId } from "../item-id";
 
 const ID = "fe3eb491-3896-4bb7-a292-b5881fdaa4e3";
 

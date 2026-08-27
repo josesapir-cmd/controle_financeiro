@@ -1,22 +1,26 @@
 import "server-only";
 
-import * as pluggy from "@/lib/pluggy/client";
+import { fromPostgres, type Db } from "@/lib/db/adapter";
+import { getSql } from "@/lib/db/client";
+import {
+  listAccounts,
+  listLabels,
+  listTransactions,
+  syncStatus,
+  type AccountRow,
+  type SyncStatus,
+} from "@/lib/db/repository";
 import { mockAccounts, mockItems, mockTransactions } from "@/lib/pluggy/mock";
-import type { AccountWithConnector, Item, Transaction } from "@/lib/pluggy/types";
-import { readRegistry } from "@/lib/counterparty-store";
+import type { AccountWithConnector, Transaction } from "@/lib/pluggy/types";
 import { classify } from "./categories";
-import { localDay } from "./dates";
 import {
   aggregateCounterparties,
-  extractCounterparty,
+  type CounterpartyRegistry,
   type CounterpartyTotal,
-  type PaymentData,
 } from "./counterparties";
-import { extractDetails } from "./details";
-import { listItemIds, listItems, type StoredItem } from "@/lib/store";
+import { currentMonthRange, localDay } from "./dates";
 import { netWorth, normalizeAmount, sumBy } from "./money";
 import {
-  currentMonthRange,
   totalExpenses,
   totalIncome,
   totalTransfers,
@@ -25,40 +29,17 @@ import {
 } from "./summary";
 
 /**
- * A v2 devolve, em cada transacao, um bloco paymentData que carrega o CPF do
- * pagador e dados do recebedor. Nada disso e usado pelo painel, e trafegar PII
- * alem do necessario so cria superficie de vazamento — em log, em cache, ou na
- * serializacao para o navegador. Copiamos apenas os campos que a interface usa.
+ * Fonte de dados das telas.
+ *
+ * Le do banco, nunca da Pluggy. A API e alcancada apenas pelo job de
+ * sincronizacao — ver docs/arquitetura.md. Isso torna as telas rapidas, faz o
+ * app sobreviver a uma conexao caida ou a um consentimento vencido, e preserva
+ * o historico quando uma conexao e removida no Meu Pluggy.
  */
-type TransacaoBruta = Transaction & {
-  paymentData?: PaymentData | null;
-  merchant?: Record<string, unknown> | null;
-  creditCardMetadata?: Record<string, unknown> | null;
-  operationType?: string | null;
-  operationTypeAdditionalInfo?: string | null;
-  providerCode?: string | null;
-};
 
-function sanitize(transaction: TransacaoBruta): Transaction {
-  return {
-    counterparty: extractCounterparty(
-      transaction.paymentData,
-      transaction.amount,
-      transaction.description,
-    ),
-    details: extractDetails(transaction as Parameters<typeof extractDetails>[0]),
-    descriptionRaw: transaction.descriptionRaw ?? null,
-    id: transaction.id,
-    accountId: transaction.accountId,
-    description: transaction.description,
-    amount: transaction.amount,
-    currencyCode: transaction.currencyCode,
-    date: transaction.date,
-    category: transaction.category ?? null,
-    categoryId: transaction.categoryId ?? null,
-    type: transaction.type,
-    status: transaction.status,
-  };
+export interface Period {
+  from: string;
+  to: string;
 }
 
 export interface AccountOption {
@@ -67,25 +48,121 @@ export interface AccountOption {
   connectorName: string;
 }
 
-/**
- * Aplica a selecao de contas. Lista vazia significa "todas" — e nao "nenhuma" —
- * porque e o estado inicial da tela, quando o usuario ainda nao escolheu nada.
- */
-function aplicarSelecao<T extends { accountId?: string }>(
-  registros: T[],
-  accountIds: string[],
-): T[] {
-  if (accountIds.length === 0) return registros;
-  const selecionadas = new Set(accountIds);
-  return registros.filter((r) => (r.accountId ? selecionadas.has(r.accountId) : false));
+function useMock(): boolean {
+  return process.env.PLUGGY_MOCK === "true";
 }
 
-function opcoesDeConta(accounts: AccountWithConnector[]): AccountOption[] {
-  return accounts.map((account) => ({
-    id: account.id,
-    label: account.marketingName || account.name,
-    connectorName: account.connectorName,
+function db(): Db {
+  return fromPostgres(getSql());
+}
+
+function paraContaExibivel(conta: AccountRow): AccountWithConnector {
+  return {
+    id: conta.id,
+    itemId: conta.itemId ?? "",
+    type: conta.type,
+    subtype: conta.subtype ?? undefined,
+    name: conta.name ?? conta.connectorName,
+    number: conta.number ?? undefined,
+    balance: conta.balance,
+    currencyCode: conta.currency,
+    connectorName: conta.connectorName,
+  };
+}
+
+/** Converte a linha do banco para a forma que os agregadores ja consomem. */
+function paraTransacao(linha: Awaited<ReturnType<typeof listTransactions>>[number]): Transaction {
+  return {
+    id: linha.id,
+    accountId: linha.accountId,
+    description: linha.description ?? "",
+    amount: linha.amount,
+    currencyCode: linha.currency,
+    date: linha.postedAt.toISOString(),
+    category: linha.category,
+    categoryId: linha.categoryId,
+    details: linha.details ?? undefined,
+    counterparty: linha.counterpartyFingerprint
+      ? {
+          // A chave passa a ser o fingerprint: e o que o banco agrupa e o que o
+          // cadastro de rotulos usa.
+          key: linha.counterpartyFingerprint,
+          name: linha.counterpartyName ?? undefined,
+          document: linha.counterpartyDocument ?? undefined,
+          self: linha.counterpartySelf,
+        }
+      : null,
+  };
+}
+
+async function carregar(
+  periodo: Period,
+  accountIds: string[],
+): Promise<{
+  contas: AccountWithConnector[];
+  todasAsContas: AccountWithConnector[];
+  transacoes: Transaction[];
+  registry: CounterpartyRegistry;
+  status: SyncStatus[];
+}> {
+  if (useMock()) {
+    const todas = mockAccounts.map((conta) => ({
+      ...conta,
+      connectorName: mockItems[0].connector.name,
+      connectorPrimaryColor: mockItems[0].connector.primaryColor,
+    }));
+    const selecionadas = accountIds.length
+      ? todas.filter((c) => accountIds.includes(c.id))
+      : todas;
+
+    const transacoes = selecionadas.flatMap((conta) =>
+      mockTransactions(conta.id, new Date(`${periodo.to}T12:00:00Z`)).map((t) => ({
+        ...t,
+        amount: normalizeAmount(t.amount, conta.type),
+      })),
+    );
+
+    return { contas: selecionadas, todasAsContas: todas, transacoes, registry: {}, status: [] };
+  }
+
+  const conexao = db();
+  const [contasBrutas, linhas, rotulos, estado] = await Promise.all([
+    listAccounts(conexao),
+    listTransactions(conexao, { ...periodo, accountIds }),
+    listLabels(conexao),
+    syncStatus(conexao),
+  ]);
+
+  const todasAsContas = contasBrutas.map(paraContaExibivel);
+  const contas = accountIds.length
+    ? todasAsContas.filter((c) => accountIds.includes(c.id))
+    : todasAsContas;
+
+  const registry: CounterpartyRegistry = {};
+  for (const rotulo of rotulos) {
+    registry[rotulo.fingerprint] = {
+      category: rotulo.category ?? undefined,
+      subcategory: rotulo.subcategory ?? undefined,
+      alias: rotulo.alias ?? undefined,
+    };
+  }
+
+  return { contas, todasAsContas, transacoes: linhas.map(paraTransacao), registry, status: estado };
+}
+
+function opcoes(contas: AccountWithConnector[]): AccountOption[] {
+  return contas.map((conta) => ({
+    id: conta.id,
+    label: conta.marketingName || conta.name,
+    connectorName: conta.connectorName,
   }));
+}
+
+/** Conexoes que falharam na ultima sincronizacao, para avisar sem esconder o resto. */
+function falhas(status: SyncStatus[]): { itemId: string; message: string }[] {
+  return status
+    .filter((s) => s.lastSyncError)
+    .map((s) => ({ itemId: s.itemId, message: `${s.connectorName}: ${s.lastSyncError}` }));
 }
 
 export interface DashboardData {
@@ -97,88 +174,19 @@ export interface DashboardData {
   creditBalance: number;
   income: number;
   expenses: number;
-  /** Movimentacoes que nao sao consumo: aplicacoes, transferencias proprias. */
   transfers: number;
-  period: { from: string; to: string };
-  /** Conexoes que falharam, para avisar sem derrubar o resto do painel. */
+  period: Period;
   failures: { itemId: string; message: string }[];
   isMock: boolean;
   accountOptions: AccountOption[];
   selectedAccountIds: string[];
+  syncedAt: Date | null;
 }
 
-function useMock(): boolean {
-  return process.env.PLUGGY_MOCK === "true";
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : "Erro desconhecido";
-}
-
-async function loadReal(period: { from: string; to: string }) {
-  const itemIds = await listItemIds();
-  const accounts: AccountWithConnector[] = [];
-  const transactions: Transaction[] = [];
-  const failures: { itemId: string; message: string }[] = [];
-
-  // Uma conexao com problema (banco fora do ar, credencial expirada) nao deve
-  // esconder as demais, entao cada item e isolado em seu proprio try.
-  await Promise.all(
-    itemIds.map(async (itemId) => {
-      try {
-        // O item so fornece o nome do banco para exibicao. Algumas conexoes
-        // respondem 404 em GET /items/{id} mesmo tendo contas acessiveis por
-        // /accounts?itemId=, entao a falha aqui nao pode derrubar a conexao
-        // inteira: seria descartar dados bons por causa de um rotulo.
-        const item = await pluggy.getItem(itemId).catch(() => undefined);
-        const itemAccounts = await pluggy.getAccounts(itemId);
-
-        for (const account of itemAccounts) {
-          accounts.push({
-            ...account,
-            connectorName: item?.connector.name ?? account.marketingName ?? account.name,
-            connectorImageUrl: item?.connector.imageUrl,
-            connectorPrimaryColor: item?.connector.primaryColor,
-          });
-        }
-
-        // A normalizacao de sinal precisa acontecer antes da sanitizacao: a
-        // identificacao da contraparte usa a direcao do valor para saber qual
-        // lado do pagamento e o usuario.
-        const perAccount = await Promise.all(
-          itemAccounts.map(async (account) => {
-            const doAccount = await pluggy.getTransactions(account.id, period);
-            return doAccount.map((transaction) => ({
-              ...transaction,
-              amount: normalizeAmount(transaction.amount, account.type),
-            }));
-          }),
-        );
-        transactions.push(...perAccount.flat().map(sanitize));
-      } catch (error) {
-        failures.push({ itemId, message: describe(error) });
-      }
-    }),
-  );
-
-  return { accounts, transactions, failures };
-}
-
-function loadMock(reference: Date) {
-  const accounts: AccountWithConnector[] = mockAccounts.map((account) => ({
-    ...account,
-    connectorName: mockItems[0].connector.name,
-    connectorPrimaryColor: mockItems[0].connector.primaryColor,
-  }));
-
-  const transactions = accounts.flatMap((account) =>
-    mockTransactions(account.id, reference).map((transaction) => ({
-      ...transaction,
-      amount: normalizeAmount(transaction.amount, account.type),
-    })),
-  );
-
-  return { accounts, transactions, failures: [] };
+/** Data da sincronizacao mais antiga entre as conexoes: e a que limita a confianca. */
+function sincronizadoEm(status: SyncStatus[]): Date | null {
+  const datas = status.map((s) => s.lastSyncedAt).filter((d): d is Date => Boolean(d));
+  return datas.length ? new Date(Math.min(...datas.map((d) => d.getTime()))) : null;
 }
 
 export async function loadDashboard(
@@ -186,160 +194,25 @@ export async function loadDashboard(
   options: { accountIds?: string[] } = {},
 ): Promise<DashboardData> {
   const period = currentMonthRange(reference);
-  const isMock = useMock();
-
-  const { accounts: todasAsContas, transactions: todas, failures } = isMock
-    ? loadMock(reference)
-    : await loadReal(period);
-
   const accountIds = options.accountIds ?? [];
-  const accounts =
-    accountIds.length === 0
-      ? todasAsContas
-      : todasAsContas.filter((a) => accountIds.includes(a.id));
-  const transactions = aplicarSelecao(todas, accountIds);
-
-  transactions.sort((a, b) => b.date.localeCompare(a.date));
+  const { contas, todasAsContas, transacoes, status } = await carregar(period, accountIds);
 
   return {
-    accountOptions: opcoesDeConta(todasAsContas),
-    selectedAccountIds: accountIds,
-    accounts,
-    transactions,
-    categories: totalsByCategory(transactions),
-    netWorth: netWorth(accounts),
-    cashBalance: sumBy(accounts, "BANK"),
-    creditBalance: sumBy(accounts, "CREDIT"),
-    income: totalIncome(transactions),
-    expenses: totalExpenses(transactions),
-    transfers: totalTransfers(transactions),
+    accounts: contas,
+    transactions: transacoes,
+    categories: totalsByCategory(transacoes),
+    netWorth: netWorth(contas),
+    cashBalance: sumBy(contas, "BANK"),
+    creditBalance: sumBy(contas, "CREDIT"),
+    income: totalIncome(transacoes),
+    expenses: totalExpenses(transacoes),
+    transfers: totalTransfers(transacoes),
     period,
-    failures,
-    isMock,
-  };
-}
-
-export interface ConnectionRow {
-  stored: StoredItem;
-  item?: Item;
-  /** Contas encontradas quando o item nao pode ser consultado. */
-  contas?: number;
-  erro?: string;
-}
-
-/**
- * Conexoes cadastradas com o estado de cada uma. Vive aqui, e nao na pagina,
- * para que a decisao entre dados reais e ficticios continue em um lugar so.
- */
-export async function loadConnections(): Promise<ConnectionRow[]> {
-  const armazenados = await listItems();
-
-  if (useMock()) {
-    return armazenados.map((stored) => ({
-      stored,
-      item: { ...mockItems[0], id: stored.id },
-    }));
-  }
-
-  // Cada conexao e consultada isoladamente: uma credencial expirada em um banco
-  // nao pode impedir a tela de mostrar e gerenciar as demais.
-  return Promise.all(
-    armazenados.map(async (stored): Promise<ConnectionRow> => {
-      const item = await pluggy.getItem(stored.id).catch(() => undefined);
-      if (item) return { stored, item };
-
-      // Sem o item, ainda vale checar as contas: ha conexoes que respondem 404
-      // em /items/{id} e mesmo assim entregam contas.
-      //
-      // Cuidado ao ler o resultado: /accounts?itemId= devolve 200 com lista
-      // vazia tambem para itemId inexistente (verificado com um UUID inventado),
-      // entao lista vazia NAO significa "conexao sem contas". Nesse caso a
-      // unica evidencia confiavel e o 404, e a mensagem precisa dizer isso em
-      // vez de sugerir um problema de consentimento que pode nao existir.
-      try {
-        const accounts = await pluggy.getAccounts(stored.id);
-        if (accounts.length > 0) return { stored, contas: accounts.length };
-
-        return {
-          stored,
-          erro:
-            "Este itemId nao pertence as suas credenciais. Confirme no Meu Pluggy que a conexao " +
-            "terminou de sincronizar e que voce copiou o link da propria conexao.",
-        };
-      } catch (error) {
-        return { stored, erro: describe(error) };
-      }
-    }),
-  );
-}
-
-export interface Period {
-  from: string;
-  to: string;
-}
-
-export interface CounterpartiesData {
-  counterparties: CounterpartyTotal[];
-  period: Period;
-  totalSent: number;
-  totalReceived: number;
-  /** Lancamentos internos omitidos: transferencias proprias e aplicacoes. */
-  internalCount: number;
-  /** Nome da conta de origem por id, para identificar o banco de cada lancamento. */
-  accountNames: Record<string, string>;
-  accountOptions: AccountOption[];
-  selectedAccountIds: string[];
-  failures: { itemId: string; message: string }[];
-  isMock: boolean;
-}
-
-/**
- * Contrapartes do periodo escolhido. Recebe a janela pronta porque a aba tem
- * seletor proprio — diferente do painel, que olha sempre o mes corrente.
- */
-export async function loadCounterparties(
-  period: Period,
-  options: { includeInternal?: boolean; accountIds?: string[] } = {},
-): Promise<CounterpartiesData> {
-  const isMock = useMock();
-
-  const { accounts, transactions: todas, failures } = isMock
-    ? loadMock(new Date(`${period.to}T12:00:00Z`))
-    : await loadReal(period);
-
-  const accountIds = options.accountIds ?? [];
-  const transactions = aplicarSelecao(todas, accountIds);
-
-  const accountNames: Record<string, string> = {};
-  for (const account of accounts) {
-    accountNames[account.id] = `${account.connectorName} · ${account.name}`;
-  }
-
-  // Transferencia entre contas proprias e aplicacao nao sao contraparte: o
-  // dinheiro mudou de bolso dentro do proprio patrimonio. Ficam de fora por
-  // padrao para nao competir com quem de fato recebe e envia dinheiro.
-  const relevantes = options.includeInternal
-    ? transactions
-    : transactions.filter(
-        (t) => !t.counterparty?.self && classify(t) !== "transfer",
-      );
-
-  const internos = transactions.length - relevantes.length;
-
-  const registry = await readRegistry();
-  const counterparties = aggregateCounterparties(relevantes, registry);
-
-  return {
-    counterparties,
-    period,
-    totalSent: counterparties.reduce((total, c) => total + c.sent, 0),
-    totalReceived: counterparties.reduce((total, c) => total + c.received, 0),
-    internalCount: internos,
-    accountNames,
-    accountOptions: opcoesDeConta(accounts),
+    failures: falhas(status),
+    isMock: useMock(),
+    accountOptions: opcoes(todasAsContas),
     selectedAccountIds: accountIds,
-    failures,
-    isMock,
+    syncedAt: sincronizadoEm(status),
   };
 }
 
@@ -348,53 +221,143 @@ export interface DayData {
   transactions: Transaction[];
   spent: number;
   received: number;
-  /** Aplicacoes e transferencias proprias do dia, contadas a parte. */
   transfers: number;
   failures: { itemId: string; message: string }[];
   isMock: boolean;
-  /** Contas do periodo, para nomear a origem de cada lancamento. */
   accountNames: Record<string, string>;
   accountOptions: AccountOption[];
   selectedAccountIds: string[];
 }
 
-/**
- * Lancamentos de um unico dia, em ordem cronologica.
- *
- * Existe porque a Pluggy entrega horario junto da data, e ver a sequencia do dia
- * costuma ser o que permite reconhecer uma compra que a descricao nao explica.
- */
 export async function loadDay(
   day: string,
   options: { accountIds?: string[] } = {},
 ): Promise<DayData> {
-  const isMock = useMock();
-  const period = { from: day, to: day };
-
-  const { accounts, transactions: todas, failures } = isMock
-    ? loadMock(new Date(`${day}T12:00:00Z`))
-    : await loadReal(period);
-
   const accountIds = options.accountIds ?? [];
-  const doDia = aplicarSelecao(todas, accountIds).filter((t) => localDay(t.date) === day);
+  const { contas, todasAsContas, transacoes, status } = await carregar(
+    { from: day, to: day },
+    accountIds,
+  );
+
+  const doDia = transacoes.filter((t) => localDay(t.date) === day);
   doDia.sort((a, b) => a.date.localeCompare(b.date));
 
   const accountNames: Record<string, string> = {};
-  for (const account of accounts) {
-    accountNames[account.id] = account.marketingName || account.name;
-  }
+  for (const conta of contas) accountNames[conta.id] = conta.marketingName || conta.name;
 
   return {
     day,
     transactions: doDia,
-    // Mesma regra do painel: aplicacao e transferencia propria nao sao consumo.
     spent: totalExpenses(doDia),
     received: totalIncome(doDia),
     transfers: totalTransfers(doDia),
-    failures,
-    isMock,
+    failures: falhas(status),
+    isMock: useMock(),
     accountNames,
-    accountOptions: opcoesDeConta(accounts),
+    accountOptions: opcoes(todasAsContas),
     selectedAccountIds: accountIds,
+  };
+}
+
+export interface CounterpartiesData {
+  counterparties: CounterpartyTotal[];
+  period: Period;
+  totalSent: number;
+  totalReceived: number;
+  internalCount: number;
+  accountNames: Record<string, string>;
+  accountOptions: AccountOption[];
+  selectedAccountIds: string[];
+  failures: { itemId: string; message: string }[];
+  isMock: boolean;
+}
+
+export async function loadCounterparties(
+  period: Period,
+  options: { includeInternal?: boolean; accountIds?: string[] } = {},
+): Promise<CounterpartiesData> {
+  const accountIds = options.accountIds ?? [];
+  const { contas, todasAsContas, transacoes, registry, status } = await carregar(
+    period,
+    accountIds,
+  );
+
+  // Transferencia entre contas proprias e aplicacao nao sao contraparte: o
+  // dinheiro mudou de bolso dentro do proprio patrimonio.
+  const relevantes = options.includeInternal
+    ? transacoes
+    : transacoes.filter((t) => !t.counterparty?.self && classify(t) !== "transfer");
+
+  const counterparties = aggregateCounterparties(relevantes, registry);
+
+  const accountNames: Record<string, string> = {};
+  for (const conta of contas) {
+    accountNames[conta.id] = `${conta.connectorName} · ${conta.name}`;
+  }
+
+  return {
+    counterparties,
+    period,
+    totalSent: counterparties.reduce((total, c) => total + c.sent, 0),
+    totalReceived: counterparties.reduce((total, c) => total + c.received, 0),
+    internalCount: transacoes.length - relevantes.length,
+    accountNames,
+    accountOptions: opcoes(todasAsContas),
+    selectedAccountIds: accountIds,
+    failures: falhas(status),
+    isMock: useMock(),
+  };
+}
+
+export interface ConnectionRow {
+  itemId: string;
+  connectorName: string;
+  lastSyncedAt: Date | null;
+  lastSyncError: string | null;
+  accounts: number;
+}
+
+export async function loadConnections(): Promise<ConnectionRow[]> {
+  if (useMock()) {
+    return [
+      {
+        itemId: mockItems[0].id,
+        connectorName: mockItems[0].connector.name,
+        lastSyncedAt: new Date(),
+        lastSyncError: null,
+        accounts: mockAccounts.length,
+      },
+    ];
+  }
+
+  const conexao = db();
+  const [estado, contas] = await Promise.all([syncStatus(conexao), listAccounts(conexao)]);
+
+  return estado.map((s) => ({
+    ...s,
+    accounts: contas.filter((c) => c.itemId === s.itemId).length,
+  }));
+}
+
+/**
+ * Categorias e subcategorias ja usadas, para sugerir em vez de exigir digitacao
+ * — e, com isso, evitar que a mesma categoria vire tres variacoes de grafia.
+ */
+export async function loadTaxonomy(): Promise<{ categories: string[]; subcategories: string[] }> {
+  if (useMock()) return { categories: [], subcategories: [] };
+
+  const rotulos = await listLabels(db());
+  const categorias = new Set<string>();
+  const subcategorias = new Set<string>();
+
+  for (const rotulo of rotulos) {
+    if (rotulo.category) categorias.add(rotulo.category);
+    if (rotulo.subcategory) subcategorias.add(rotulo.subcategory);
+  }
+
+  const ordenar = (a: string, b: string) => a.localeCompare(b, "pt-BR");
+  return {
+    categories: [...categorias].sort(ordenar),
+    subcategories: [...subcategorias].sort(ordenar),
   };
 }

@@ -10,6 +10,13 @@ import { loadDashboard, type DashboardData } from "@/lib/finance/service";
 
 export const dynamic = "force-dynamic";
 
+const sincronizacao = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 function formatarPeriodo(period: { from: string; to: string }): string {
   const formatar = (iso: string) =>
     new Date(`${iso}T12:00:00Z`).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" });
@@ -69,6 +76,7 @@ export default async function Home({
       <div className="masthead">
         <h1>Controle Financeiro</h1>
         <span className="period">
+          {dados.syncedAt ? `Atualizado em ${sincronizacao.format(dados.syncedAt)} · ` : ""}
           {formatarPeriodo(dados.period)} · <Link href={`/dia?${contasQuery}`}>Dia</Link> ·{" "}
           <Link href={`/contrapartes?${contasQuery}`}>Contrapartes</Link> ·{" "}
           <Link href="/conexoes">Conexoes</Link>
@@ -89,6 +97,13 @@ export default async function Home({
           aqui vem da sua conta.
         </p>
       ) : null}
+
+      {dados.syncedAt ? null : (
+        <p className="banner">
+          <strong>Ainda nao sincronizado.</strong> As telas leem do banco, que sera populado na
+          primeira sincronizacao.
+        </p>
+      )}
 
       {dados.failures.length > 0 ? (
         <p className="banner">

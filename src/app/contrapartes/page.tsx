@@ -1,7 +1,6 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { AccountFilter } from "@/components/AccountFilter";
-import { listTaxonomy } from "@/lib/counterparty-store";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import { translateCategory } from "@/lib/finance/categories";
 import {
@@ -12,7 +11,7 @@ import {
 } from "@/lib/finance/counterparties";
 import { currentMonthRange, localTime } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
-import { loadCounterparties } from "@/lib/finance/service";
+import { loadCounterparties, loadTaxonomy } from "@/lib/finance/service";
 import { PeriodForm } from "./PeriodForm";
 import { salvarContraparte } from "./actions";
 
@@ -216,7 +215,7 @@ export default async function Contrapartes({
 
   const [dados, taxonomia] = await Promise.all([
     loadCounterparties(periodo, { includeInternal: incluirInternas, accountIds }),
-    listTaxonomy(),
+    loadTaxonomy(),
   ]);
 
   const queryPeriodo = buildQuery(

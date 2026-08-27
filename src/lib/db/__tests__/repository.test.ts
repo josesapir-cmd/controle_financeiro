@@ -281,7 +281,7 @@ describe("transacoes", () => {
 
 describe("rotulos de contraparte", () => {
   it("grava e devolve com o apelido decifrado", async () => {
-    await setLabel(db, "12345678901", {
+    await setLabel(db, "fp-contraparte", {
       category: "Viagem",
       subcategory: "Viagem FDS Familia",
       alias: "Hotel Fazenda Cascatinha",
@@ -293,14 +293,14 @@ describe("rotulos de contraparte", () => {
   });
 
   it("nao guarda o apelido em claro", async () => {
-    await setLabel(db, "12345678901", { alias: "Hotel Fazenda Cascatinha" });
+    await setLabel(db, "fp-contraparte", { alias: "Hotel Fazenda Cascatinha" });
     const { rows } = await pg.query<{ alias_enc: string }>("SELECT alias_enc FROM counterparty_labels");
     expect(rows[0].alias_enc).not.toContain("Cascatinha");
   });
 
   it("apaga o registro quando todos os campos ficam vazios", async () => {
-    await setLabel(db, "12345678901", { category: "Viagem" });
-    await setLabel(db, "12345678901", { category: "", subcategory: "", alias: "" });
+    await setLabel(db, "fp-contraparte", { category: "Viagem" });
+    await setLabel(db, "fp-contraparte", { category: "", subcategory: "", alias: "" });
     expect(await listLabels(db)).toHaveLength(0);
   });
 });
