@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "migrate": "node scripts/migrate.mjs",
-    "importar": "node scripts/importar-local.mjs"
+    "importar": "node scripts/importar-local.mjs",
+    "sync": "node scripts/sincronizar.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.3.0",

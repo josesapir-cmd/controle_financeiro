@@ -9,8 +9,18 @@ import { safeEqual } from "@/lib/crypto";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-/** Janela padrao. Cobre folgadamente o atraso com que bancos liquidam lancamentos. */
+/**
+ * Janela padrao do cron. Cobre folgadamente o atraso com que bancos liquidam
+ * lancamentos, sem refazer trabalho a cada seis horas.
+ *
+ * Carga historica e outra coisa: passe ?dias=365. Ela demora e nao cabe no
+ * limite de tempo da funcao serverless, entao roda pelo script local, contra o
+ * app em desenvolvimento.
+ */
 const DIAS_PADRAO = 45;
+
+/** Teto de sanidade: alem disso e engano de digitacao, nao intencao. */
+const DIAS_MAXIMO = 3650;
 
 /**
  * Autoriza tanto o cron da Vercel (cabecalho proprio) quanto uma chamada manual
@@ -51,8 +61,9 @@ export async function POST(request: Request) {
   const db = fromPostgres(getSql());
   const url = new URL(request.url);
 
-  const dias = Number(url.searchParams.get("dias") ?? DIAS_PADRAO);
-  const periodo = Number.isFinite(dias) && dias > 0 ? lastDaysRange(dias) : currentMonthRange();
+  const pedido = Number(url.searchParams.get("dias") ?? DIAS_PADRAO);
+  const dias = Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, DIAS_MAXIMO) : DIAS_PADRAO;
+  const periodo = lastDaysRange(dias);
 
   const itemIds = await itensCadastrados(db);
   if (itemIds.length === 0) {
