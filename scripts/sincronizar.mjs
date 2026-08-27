@@ -39,6 +39,11 @@ async function lerEnv() {
 
 await lerEnv();
 
+// O fetch do Node ignora as variaveis de proxy por padrao, ao contrario do
+// curl. Deixamos explicito para que uma futura mudanca de comportamento do
+// Node nao passe a rotear chamadas de localhost pelo proxy do usuario.
+process.env.NODE_USE_ENV_PROXY = "0";
+
 const dias = Number(process.argv[2] ?? 45);
 const origem = process.env.APP_ORIGIN || "http://localhost:3210";
 const segredo = process.env.SYNC_SECRET;

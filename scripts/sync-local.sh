@@ -10,7 +10,13 @@ DIAS="${1:-45}"
 PORTA=3210
 LOG=/tmp/controle-financeiro-dev.log
 
-pronto() { curl -s -o /dev/null --max-time 2 "http://localhost:$PORTA/api/sync"; }
+# --noproxy e essencial: com HTTP_PROXY definido no shell, o curl manda a
+# requisicao de localhost para o proxy, que nao a entrega. O sintoma e o pior
+# possivel — o script conclui que o servidor esta fora quando ele esta de pe,
+# mata a porta e tenta subir outro por cima.
+pronto() {
+  curl -s -o /dev/null --max-time 2 --noproxy '*' "http://localhost:$PORTA/api/sync"
+}
 
 if pronto; then
   echo "servidor ja esta de pe na porta $PORTA"
@@ -18,9 +24,17 @@ else
   # Um processo antigo pode estar segurando a porta sem atender — foi o que
   # aconteceu antes. Limpamos antes de tentar subir.
   if lsof -ti:"$PORTA" > /dev/null 2>&1; then
-    echo "liberando a porta $PORTA (processo antigo sem resposta)"
+    echo "porta $PORTA ocupada por um processo que nao responde:"
+    lsof -nP -iTCP:"$PORTA" -sTCP:LISTEN | tail -n +2
     lsof -ti:"$PORTA" | xargs kill -9 2>/dev/null
-    sleep 1
+
+    # Esperar a porta liberar de verdade: o kill retorna antes de o sistema
+    # devolver o socket, e subir em seguida daria EADDRINUSE.
+    for _ in $(seq 1 10); do
+      lsof -ti:"$PORTA" > /dev/null 2>&1 || break
+      sleep 1
+    done
+    echo "porta liberada"
   fi
 
   echo "subindo o servidor (a primeira compilacao leva ~40s)..."
