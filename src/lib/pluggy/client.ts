@@ -9,6 +9,33 @@ const DEFAULT_API_URL = "https://api.pluggy.ai";
 const API_KEY_TTL_MS = 2 * 60 * 60 * 1000;
 const RENEWAL_MARGIN_MS = 5 * 60 * 1000;
 
+/**
+ * Toda chamada externa feita durante a renderizacao no servidor precisa de
+ * limite de tempo. Sem isso, uma API lenta nao vira erro — vira pagina em branco
+ * carregando para sempre, que e muito pior de diagnosticar do que uma mensagem.
+ */
+const REQUEST_TIMEOUT_MS = Number(process.env.PLUGGY_TIMEOUT_MS ?? 15000);
+
+function timeoutSignal(): AbortSignal {
+  return AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+}
+
+function isTimeout(error: unknown): boolean {
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
+function describeNetworkError(error: unknown, path: string): PluggyError {
+  if (isTimeout(error)) {
+    return new PluggyError(
+      `A Pluggy nao respondeu em ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s (${path}).`,
+      504,
+      path,
+    );
+  }
+  const detalhe = error instanceof Error ? error.message : "falha de rede";
+  return new PluggyError(`Nao foi possivel falar com a Pluggy (${path}): ${detalhe}`, 502, path);
+}
+
 export class PluggyError extends Error {
   constructor(
     message: string,
@@ -59,12 +86,18 @@ async function getApiKey(): Promise<string> {
 
   const { clientId, clientSecret, apiUrl } = readCredentials();
 
-  const response = await fetch(`${apiUrl}/auth`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ clientId, clientSecret }),
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}/auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, clientSecret }),
+      cache: "no-store",
+      signal: timeoutSignal(),
+    });
+  } catch (error) {
+    throw describeNetworkError(error, "/auth");
+  }
 
   const body = await readBody(response);
 
@@ -124,15 +157,21 @@ async function request<T>(
     if (value !== undefined) url.searchParams.set(key, String(value));
   }
 
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      "X-API-KEY": apiKey,
-      "Content-Type": "application/json",
-      ...init.headers,
-    },
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: {
+        "X-API-KEY": apiKey,
+        "Content-Type": "application/json",
+        ...init.headers,
+      },
+      cache: "no-store",
+      signal: timeoutSignal(),
+    });
+  } catch (error) {
+    throw describeNetworkError(error, path);
+  }
 
   const body = await readBody(response);
 
