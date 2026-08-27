@@ -40,9 +40,18 @@ npm install
 npm run dev -- -p 3210       # escolha a porta se a 3000 ja estiver ocupada
 ```
 
-O `itemId` de cada conexao aparece na URL do dashboard do Meu Pluggy:
-`meu.pluggy.ai/connections/<itemId>`. Va em `PLUGGY_ITEM_IDS`, separados por
-virgula, porque a API nao expoe rota de listagem.
+### Cadastrando as conexoes
+
+Abra `/conexoes` no app e cole a URL da conexao no Meu Pluggy
+(`meu.pluggy.ai/connections/<itemId>`) — o id e extraido e guardado em
+`data/items.json`, fora do controle de versao.
+
+E manual por limitacao da API, nao por escolha: com credenciais pessoais, as
+rotas de listagem respondem 403 (`/v2/items`, `/connections`, `/v2/connections`)
+e nao existe rota que enumere as conexoes da conta.
+
+Alternativa: `PLUGGY_ITEM_IDS` no `.env.local`, separados por virgula. Conexoes
+definidas por ali aparecem na tela como somente leitura.
 
 O `.env.local` esta no `.gitignore`. Nenhuma credencial deve ser commitada.
 

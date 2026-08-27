@@ -17,9 +17,27 @@ interface StoredItems {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_ANYWHERE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 export function isValidItemId(value: string): boolean {
   return UUID.test(value.trim());
+}
+
+/**
+ * Aceita tanto o UUID puro quanto a URL da conexao no Meu Pluggy
+ * (meu.pluggy.ai/connections/<itemId>), que e o que o usuario tem a mao ao
+ * copiar da barra de enderecos. Devolve null se nao houver UUID no texto.
+ */
+export function parseItemId(input: string): string | null {
+  const match = input.trim().match(UUID_ANYWHERE);
+  return match ? match[0].toLowerCase() : null;
+}
+
+export type ItemSource = "env" | "file";
+
+export interface StoredItem {
+  id: string;
+  source: ItemSource;
 }
 
 async function read(): Promise<StoredItems> {
@@ -54,22 +72,52 @@ export async function listItemIds(): Promise<string[]> {
   return [...new Set([...fromEnv, ...stored.itemIds])];
 }
 
-export async function addItemId(itemId: string): Promise<string[]> {
-  const trimmed = itemId.trim();
-  if (!isValidItemId(trimmed)) {
-    throw new Error("itemId precisa ser um UUID.");
-  }
+/**
+ * Lista as conexoes indicando de onde cada uma veio. As definidas em
+ * PLUGGY_ITEM_IDS nao podem ser removidas pela interface — o arquivo nao manda
+ * no ambiente — e a tela precisa dizer isso em vez de oferecer um botao que
+ * nao funciona.
+ */
+export async function listItems(): Promise<StoredItem[]> {
+  const fromEnv = (process.env.PLUGGY_ITEM_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(isValidItemId);
 
   const stored = await read();
-  if (!stored.itemIds.includes(trimmed)) {
-    stored.itemIds.push(trimmed);
-    await write(stored);
+  const vistos = new Set<string>();
+  const items: StoredItem[] = [];
+
+  for (const id of fromEnv) {
+    if (vistos.has(id)) continue;
+    vistos.add(id);
+    items.push({ id, source: "env" });
   }
-  return listItemIds();
+  for (const id of stored.itemIds) {
+    if (vistos.has(id)) continue;
+    vistos.add(id);
+    items.push({ id, source: "file" });
+  }
+
+  return items;
 }
 
-export async function removeItemId(itemId: string): Promise<string[]> {
+export async function addItemId(input: string): Promise<void> {
+  const itemId = parseItemId(input);
+  if (!itemId) {
+    throw new Error(
+      "Nao encontrei um itemId no que voce colou. Cole a URL da conexao no Meu Pluggy ou o UUID.",
+    );
+  }
+
+  const stored = await read();
+  if (!stored.itemIds.includes(itemId)) {
+    stored.itemIds.push(itemId);
+    await write(stored);
+  }
+}
+
+export async function removeItemId(itemId: string): Promise<void> {
   const stored = await read();
   await write({ itemIds: stored.itemIds.filter((id) => id !== itemId) });
-  return listItemIds();
 }

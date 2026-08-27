@@ -292,3 +292,58 @@ tr:last-child td {
 a {
   color: var(--series-1);
 }
+
+/* --- Formulario de conexoes --- */
+.connection-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.connection-form input {
+  flex: 1 1 320px;
+  min-width: 0;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-family: var(--font);
+  color: var(--text-primary);
+  background: var(--plane);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.connection-form input:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 1px;
+}
+
+button {
+  padding: 9px 16px;
+  font-size: 13px;
+  font-family: var(--font);
+  font-weight: 500;
+  color: #ffffff;
+  background: var(--series-1);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+button.danger {
+  background: transparent;
+  color: var(--negative);
+  border: 1px solid var(--border);
+}
+
+.form-message {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  font-size: 13px;
+}

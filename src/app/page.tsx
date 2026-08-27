@@ -2,6 +2,7 @@ import { AccountsList } from "@/components/AccountsList";
 import { CategoryBars } from "@/components/CategoryBars";
 import { StatTile } from "@/components/StatTile";
 import { TransactionsTable } from "@/components/TransactionsTable";
+import Link from "next/link";
 import { formatBRL } from "@/lib/finance/money";
 import { loadDashboard, type DashboardData } from "@/lib/finance/service";
 
@@ -27,6 +28,10 @@ function Setup({ mensagem }: { mensagem: string }) {
           <code>PLUGGY_CLIENT_ID</code> e <code>PLUGGY_CLIENT_SECRET</code> com as credenciais do
           Meu Pluggy. Depois cadastre o <code>itemId</code> de cada conexao em{" "}
           <code>PLUGGY_ITEM_IDS</code>, separando por virgula.
+          <br />
+          <br />
+          Com as credenciais no lugar, cadastre as conexoes em{" "}
+          <Link href="/conexoes">Conexoes</Link> colando a URL do Meu Pluggy.
           <br />
           <br />
           Para ver a interface sem tocar na API, use <code>PLUGGY_MOCK=true</code>.
@@ -55,7 +60,9 @@ export default async function Home() {
     <main className="page">
       <div className="masthead">
         <h1>Controle Financeiro</h1>
-        <span className="period">{formatarPeriodo(dados.period)}</span>
+        <span className="period">
+          {formatarPeriodo(dados.period)} · <Link href="/conexoes">Conexoes</Link>
+        </span>
       </div>
 
       {dados.isMock ? (

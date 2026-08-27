@@ -3,7 +3,7 @@ import "server-only";
 import * as pluggy from "@/lib/pluggy/client";
 import { mockAccounts, mockItems, mockTransactions } from "@/lib/pluggy/mock";
 import type { AccountWithConnector, Item, Transaction } from "@/lib/pluggy/types";
-import { listItemIds } from "@/lib/store";
+import { listItemIds, listItems, type StoredItem } from "@/lib/store";
 import { netWorth, sumBy } from "./money";
 import {
   currentMonthRange,
@@ -132,4 +132,37 @@ export async function loadDashboard(reference: Date = new Date()): Promise<Dashb
     failures,
     isMock,
   };
+}
+
+export interface ConnectionRow {
+  stored: StoredItem;
+  item?: Item;
+  erro?: string;
+}
+
+/**
+ * Conexoes cadastradas com o estado de cada uma. Vive aqui, e nao na pagina,
+ * para que a decisao entre dados reais e ficticios continue em um lugar so.
+ */
+export async function loadConnections(): Promise<ConnectionRow[]> {
+  const armazenados = await listItems();
+
+  if (useMock()) {
+    return armazenados.map((stored) => ({
+      stored,
+      item: { ...mockItems[0], id: stored.id },
+    }));
+  }
+
+  // Cada conexao e consultada isoladamente: uma credencial expirada em um banco
+  // nao pode impedir a tela de mostrar e gerenciar as demais.
+  return Promise.all(
+    armazenados.map(async (stored): Promise<ConnectionRow> => {
+      try {
+        return { stored, item: await pluggy.getItem(stored.id) };
+      } catch (error) {
+        return { stored, erro: describe(error) };
+      }
+    }),
+  );
 }
