@@ -1,8 +1,10 @@
 /*
- * Tokens da paleta de visualizacao. Os valores claros ficam no :root; o modo
- * escuro e redefinido em dois escopos porque a media query cobre a preferencia
- * do sistema e o [data-theme] cobre uma escolha explicita — a escolha precisa
- * ganhar nos dois sentidos.
+ * Tokens da paleta de visualizacao.
+ *
+ * O app e deliberadamente claro, sem variante escura: nao acompanha a
+ * preferencia do sistema. Por isso `color-scheme: light` esta fixo — sem ele, os
+ * controles nativos (campos de data, caixas de selecao, barras de rolagem)
+ * seguiriam o tema escuro do sistema e destoariam da pagina.
  */
 :root {
   color-scheme: light;
@@ -23,38 +25,6 @@
 
   --radius: 10px;
   --font: system-ui, -apple-system, "Segoe UI", sans-serif;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) {
-    color-scheme: dark;
-    --plane: #0d0d0d;
-    --surface: #1a1a19;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #898781;
-    --gridline: #2c2c2a;
-    --baseline: #383835;
-    --border: rgba(255, 255, 255, 0.1);
-    --series-1: #3987e5;
-    --positive: #0ca30c;
-    --negative: #e66767;
-  }
-}
-
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --plane: #0d0d0d;
-  --surface: #1a1a19;
-  --text-primary: #ffffff;
-  --text-secondary: #c3c2b7;
-  --text-muted: #898781;
-  --gridline: #2c2c2a;
-  --baseline: #383835;
-  --border: rgba(255, 255, 255, 0.1);
-  --series-1: #3987e5;
-  --positive: #0ca30c;
-  --negative: #e66767;
 }
 
 * {

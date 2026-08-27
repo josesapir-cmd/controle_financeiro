@@ -43,6 +43,11 @@ Pluggy e precisa ser guardado pela aplicacao.
 
 ## Decisoes que valem conhecer
 
+**Tema claro fixo.** O app nao acompanha a preferencia de tema do sistema. O
+`color-scheme: light` no `:root` e necessario: sem ele, os controles nativos
+(campos de data, caixas de selecao, barra de rolagem) seguiriam o tema escuro do
+sistema e destoariam da pagina.
+
 **Fuso horario.** A Pluggy devolve datas em UTC com horario. Brasilia e UTC-3,
 entao extrair o dia cortando a string ISO joga toda transacao apos as 21h para o
 dia seguinte — e, na virada do mes, para o mes seguinte. Toda comparacao de data
