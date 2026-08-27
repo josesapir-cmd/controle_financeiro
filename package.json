@@ -11,7 +11,8 @@
     "test": "vitest run",
     "migrate": "node scripts/migrate.mjs",
     "importar": "node scripts/importar-local.mjs",
-    "sync": "node scripts/sincronizar.mjs"
+    "sync": "node scripts/sincronizar.mjs",
+    "sync:local": "bash scripts/sync-local.sh"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.3.0",

@@ -63,8 +63,9 @@ try {
     signal: AbortSignal.timeout(30 * 60 * 1000),
   });
 } catch (erro) {
-  console.error("falha ao chamar o app:", erro.message);
-  console.error("o servidor esta rodando? (npm run dev)");
+  console.error(`falha ao chamar ${origem}: ${erro.message}\n`);
+  console.error("O servidor precisa estar de pe. Para subir e sincronizar de uma vez:\n");
+  console.error("  npm run sync:local 365\n");
   process.exit(1);
 }
 
