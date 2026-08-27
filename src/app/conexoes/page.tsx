@@ -51,12 +51,18 @@ export default async function Conexoes() {
         ) : null}
 
         <div className="accounts">
-          {linhas.map(({ stored, item, erro }) => (
+          {linhas.map(({ stored, item, contas, erro }) => {
+            const nome = item?.connector.name ?? (erro ? "Conexao indisponivel" : "Conexao ativa");
+            const detalhe = item
+              ? `Status ${item.status}`
+              : erro
+                ? erro
+                : `${contas} ${contas === 1 ? "conta encontrada" : "contas encontradas"}`;
+
+            return (
             <div className="card" key={stored.id}>
-              <div className="account-name">{item?.connector.name ?? "Conexao indisponivel"}</div>
-              <div className="account-meta">
-                {item ? `Status ${item.status}` : erro}
-              </div>
+              <div className="account-name">{nome}</div>
+              <div className="account-meta">{detalhe}</div>
               <div className="account-meta" style={{ marginTop: 8, wordBreak: "break-all" }}>
                 <code>{stored.id}</code>
               </div>
@@ -75,7 +81,8 @@ export default async function Conexoes() {
                 </form>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       </section>
     </main>

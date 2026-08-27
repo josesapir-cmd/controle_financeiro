@@ -71,15 +71,19 @@ async function loadReal(period: { from: string; to: string }) {
   await Promise.all(
     itemIds.map(async (itemId) => {
       try {
-        const item: Item = await pluggy.getItem(itemId);
+        // O item so fornece o nome do banco para exibicao. Algumas conexoes
+        // respondem 404 em GET /items/{id} mesmo tendo contas acessiveis por
+        // /accounts?itemId=, entao a falha aqui nao pode derrubar a conexao
+        // inteira: seria descartar dados bons por causa de um rotulo.
+        const item = await pluggy.getItem(itemId).catch(() => undefined);
         const itemAccounts = await pluggy.getAccounts(itemId);
 
         for (const account of itemAccounts) {
           accounts.push({
             ...account,
-            connectorName: item.connector.name,
-            connectorImageUrl: item.connector.imageUrl,
-            connectorPrimaryColor: item.connector.primaryColor,
+            connectorName: item?.connector.name ?? account.marketingName ?? account.name,
+            connectorImageUrl: item?.connector.imageUrl,
+            connectorPrimaryColor: item?.connector.primaryColor,
           });
         }
 
@@ -137,6 +141,8 @@ export async function loadDashboard(reference: Date = new Date()): Promise<Dashb
 export interface ConnectionRow {
   stored: StoredItem;
   item?: Item;
+  /** Contas encontradas quando o item nao pode ser consultado. */
+  contas?: number;
   erro?: string;
 }
 
@@ -158,8 +164,21 @@ export async function loadConnections(): Promise<ConnectionRow[]> {
   // nao pode impedir a tela de mostrar e gerenciar as demais.
   return Promise.all(
     armazenados.map(async (stored): Promise<ConnectionRow> => {
+      const item = await pluggy.getItem(stored.id).catch(() => undefined);
+      if (item) return { stored, item };
+
+      // Sem o item, a conexao ainda pode estar boa: o que importa e se as contas
+      // carregam. Verificamos antes de declarar a conexao indisponivel.
       try {
-        return { stored, item: await pluggy.getItem(stored.id) };
+        const accounts = await pluggy.getAccounts(stored.id);
+        return {
+          stored,
+          contas: accounts.length,
+          erro:
+            accounts.length > 0
+              ? undefined
+              : "Nenhuma conta encontrada. Verifique no Meu Pluggy se o consentimento cobre contas e transacoes.",
+        };
       } catch (error) {
         return { stored, erro: describe(error) };
       }
