@@ -4,7 +4,6 @@
   "crons": [
     {
       "path": "/api/sync",
-      "//": "O plano gratuito da Vercel permite apenas uma execucao diaria. 09:00 UTC e 06:00 em Brasilia — os lancamentos da vespera ja liquidaram e o painel esta atualizado ao acordar. Para sincronizar com mais frequencia sem pagar, ver .github/workflows/sincronizar.yml",
       "schedule": "0 9 * * *"
     }
   ]

@@ -63,6 +63,10 @@ O plano gratuito da Vercel permite **uma execucao de cron por dia**. O
 `vercel.json` ja esta configurado para 09:00 UTC — 06:00 em Brasilia, quando os
 lancamentos da vespera ja liquidaram e o painel esta pronto ao acordar.
 
+O `vercel.json` nao leva comentarios: a Vercel valida o esquema e recusa
+qualquer chave desconhecida, inclusive a convencao `"//"`. As razoes das
+escolhas ficam aqui.
+
 Para sincronizar com mais frequencia sem pagar, o repositorio traz
 `.github/workflows/sincronizar.yml`, que chama a mesma rota a cada 6 horas pelo
 GitHub Actions. Para ativar, adicione dois segredos em **Settings → Secrets and
