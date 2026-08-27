@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { listTaxonomy } from "@/lib/counterparty-store";
 import { translateCategory } from "@/lib/finance/categories";
@@ -39,36 +40,104 @@ function Classificacao({ c }: { c: CounterpartyTotal }) {
   );
 }
 
-function IdentidadeContraparte({ c }: { c: CounterpartyTotal }) {
+/**
+ * Identidade da contraparte com um botao proprio para expandir.
+ *
+ * O caret e um link para a mesma pagina com ?open=<key>, e as transacoes saem em
+ * <tr> irmas. Assim a linha da contraparte nao muda de altura nem de largura ao
+ * abrir — colocar o conteudo expansivel dentro da celula refluia a tabela toda.
+ */
+function IdentidadeContraparte({
+  c,
+  aberta,
+  alternarPara,
+}: {
+  c: CounterpartyTotal;
+  aberta: boolean;
+  alternarPara: string;
+}) {
   return (
-    <details>
-      <summary>
-        {c.name}
+    <div className="identidade">
+      <Link
+        className="caret"
+        href={alternarPara}
+        aria-expanded={aberta}
+        aria-label={`${aberta ? "Fechar" : "Abrir"} lancamentos de ${c.name}`}
+        scroll={false}
+      >
+        {aberta ? "▴" : "▾"}
+      </Link>
+      <div>
+        <span className="description">{c.name}</span>
         {c.self ? <span className="tag">propria</span> : null}
         <div className="account-meta">
           {c.count} {c.count === 1 ? "movimentacao" : "movimentacoes"} · ultima em{" "}
           {dataCurta.format(new Date(c.lastDate))}
           {c.document ? ` · ${maskDocument(c.document, c.documentType)}` : ""}
         </div>
-      </summary>
+      </div>
+    </div>
+  );
+}
 
-      <ul className="lancamentos">
-        {c.transactions.map((lancamento) => (
-          <li key={lancamento.id}>
-            <span className="account-meta">
-              {dataCurta.format(new Date(lancamento.date))} {localTime(lancamento.date)}
-            </span>
-            <span className="description">{lancamento.description}</span>
-            <span className="account-meta">
-              {lancamento.category ? translateCategory(lancamento.category) : ""}
-            </span>
-            <span className={lancamento.amount < 0 ? "negative" : "positive"}>
+/**
+ * Uma <tr> por lancamento, com o mesmo numero de celulas da tabela que a contem.
+ * Mostra todos os campos que a Pluggy entrega para aquele lancamento — e o que
+ * permite separar, por exemplo, parcelas de contratos diferentes.
+ */
+function LinhasDeLancamentos({
+  c,
+  colunas,
+  accountNames,
+}: {
+  c: CounterpartyTotal;
+  colunas: number;
+  accountNames: Record<string, string>;
+}) {
+  return (
+    <>
+      {c.transactions.map((lancamento) => {
+        const conta = lancamento.accountId ? accountNames[lancamento.accountId] : undefined;
+        const detalhes = lancamento.details ?? [];
+
+        return (
+          <tr className="linha-detalhe" key={`${c.key}-${lancamento.id}`}>
+            <td colSpan={Math.max(colunas - 1, 1)}>
+              <div className="detalhe-cabecalho">
+                <span className="detalhe-quando">
+                  {dataCurta.format(new Date(lancamento.date))} {localTime(lancamento.date)}
+                </span>
+                <span className="detalhe-descricao">{lancamento.description}</span>
+              </div>
+
+              <dl className="detalhe-campos">
+                {conta ? (
+                  <div>
+                    <dt>Conta</dt>
+                    <dd>{conta}</dd>
+                  </div>
+                ) : null}
+                {lancamento.category ? (
+                  <div>
+                    <dt>Categoria</dt>
+                    <dd>{translateCategory(lancamento.category)}</dd>
+                  </div>
+                ) : null}
+                {detalhes.map((detalhe) => (
+                  <div key={`${detalhe.label}-${detalhe.value}`}>
+                    <dt>{detalhe.label}</dt>
+                    <dd>{detalhe.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </td>
+            <td className={`amount ${lancamento.amount < 0 ? "negative" : "positive"}`}>
               {formatBRL(lancamento.amount)}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </details>
+            </td>
+          </tr>
+        );
+      })}
+    </>
   );
 }
 
@@ -127,7 +196,13 @@ function FormularioClassificacao({ c, voltarPara }: { c: CounterpartyTotal; volt
 export default async function Contrapartes({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string; internas?: string; edit?: string }>;
+  searchParams: Promise<{
+    from?: string;
+    to?: string;
+    internas?: string;
+    edit?: string;
+    open?: string;
+  }>;
 }) {
   const params = await searchParams;
   const periodo = lerPeriodo(params);
@@ -140,7 +215,14 @@ export default async function Contrapartes({
 
   const queryPeriodo = `from=${periodo.from}&to=${periodo.to}${incluirInternas ? "&internas=1" : ""}`;
   const editando = params.edit;
+  const aberta = params.open;
   const voltarPara = `/contrapartes?${queryPeriodo}`;
+
+  /** Link que abre a contraparte, ou fecha se ela ja estiver aberta. */
+  const alternar = (key: string) =>
+    aberta === key
+      ? `/contrapartes?${queryPeriodo}`
+      : `/contrapartes?${queryPeriodo}&open=${encodeURIComponent(key)}`;
   const identificadas = dados.counterparties.filter((c) => c.key !== NAO_IDENTIFICADA);
   const naoIdentificada = dados.counterparties.find((c) => c.key === NAO_IDENTIFICADA);
   const porCategoria = groupByCategory(identificadas);
@@ -291,15 +373,24 @@ export default async function Contrapartes({
               </thead>
               <tbody>
                 {pendentes.map((c) => (
-                  <tr key={c.key}>
-                    <td className="description">
-                      <IdentidadeContraparte c={c} />
-                    </td>
-                    <Valores c={c} />
-                    <td>
-                      <FormularioClassificacao c={c} />
-                    </td>
-                  </tr>
+                  <Fragment key={c.key}>
+                    <tr>
+                      <td className="description">
+                        <IdentidadeContraparte
+                          c={c}
+                          aberta={aberta === c.key}
+                          alternarPara={alternar(c.key)}
+                        />
+                      </td>
+                      <Valores c={c} />
+                      <td>
+                        <FormularioClassificacao c={c} />
+                      </td>
+                    </tr>
+                    {aberta === c.key ? (
+                      <LinhasDeLancamentos c={c} colunas={5} accountNames={dados.accountNames} />
+                    ) : null}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -324,37 +415,50 @@ export default async function Contrapartes({
                 </tr>
               </thead>
               <tbody>
-                {classificadas.map((c) =>
-                  editando === c.key ? (
-                    <tr key={c.key}>
-                      <td className="description">
-                        <IdentidadeContraparte c={c} />
-                      </td>
-                      <td colSpan={2}>
-                        <FormularioClassificacao c={c} voltarPara={voltarPara} />
-                      </td>
-                      <Valores c={c} />
-                      <td />
-                    </tr>
-                  ) : (
-                    <tr key={c.key} className="linha-classificada">
-                      <td className="description">
-                        <IdentidadeContraparte c={c} />
-                      </td>
-                      <td>{c.category}</td>
-                      <td>{c.subcategory ?? "—"}</td>
-                      <Valores c={c} />
-                      <td>
-                        <Link
-                          className="editar"
-                          href={`/contrapartes?${queryPeriodo}&edit=${encodeURIComponent(c.key)}`}
-                        >
-                          Editar
-                        </Link>
-                      </td>
-                    </tr>
-                  ),
-                )}
+                {classificadas.map((c) => (
+                  <Fragment key={c.key}>
+                    {editando === c.key ? (
+                      <tr>
+                        <td className="description">
+                          <IdentidadeContraparte
+                            c={c}
+                            aberta={aberta === c.key}
+                            alternarPara={alternar(c.key)}
+                          />
+                        </td>
+                        <td colSpan={2}>
+                          <FormularioClassificacao c={c} voltarPara={voltarPara} />
+                        </td>
+                        <Valores c={c} />
+                        <td />
+                      </tr>
+                    ) : (
+                      <tr className="linha-classificada">
+                        <td className="description">
+                          <IdentidadeContraparte
+                            c={c}
+                            aberta={aberta === c.key}
+                            alternarPara={alternar(c.key)}
+                          />
+                        </td>
+                        <td>{c.category}</td>
+                        <td>{c.subcategory ?? "—"}</td>
+                        <Valores c={c} />
+                        <td>
+                          <Link
+                            className="editar"
+                            href={`/contrapartes?${queryPeriodo}&edit=${encodeURIComponent(c.key)}`}
+                          >
+                            Editar
+                          </Link>
+                        </td>
+                      </tr>
+                    )}
+                    {aberta === c.key ? (
+                      <LinhasDeLancamentos c={c} colunas={7} accountNames={dados.accountNames} />
+                    ) : null}
+                  </Fragment>
+                ))}
               </tbody>
             </table>
           </div>

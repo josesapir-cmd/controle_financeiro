@@ -12,6 +12,7 @@ import {
   type CounterpartyTotal,
   type PaymentData,
 } from "./counterparties";
+import { extractDetails } from "./details";
 import { listItemIds, listItems, type StoredItem } from "@/lib/store";
 import { netWorth, sumBy } from "./money";
 import {
@@ -29,13 +30,24 @@ import {
  * alem do necessario so cria superficie de vazamento — em log, em cache, ou na
  * serializacao para o navegador. Copiamos apenas os campos que a interface usa.
  */
-function sanitize(transaction: Transaction & { paymentData?: PaymentData | null }): Transaction {
+type TransacaoBruta = Transaction & {
+  paymentData?: PaymentData | null;
+  merchant?: Record<string, unknown> | null;
+  creditCardMetadata?: Record<string, unknown> | null;
+  operationType?: string | null;
+  operationTypeAdditionalInfo?: string | null;
+  providerCode?: string | null;
+};
+
+function sanitize(transaction: TransacaoBruta): Transaction {
   return {
     counterparty: extractCounterparty(
       transaction.paymentData,
       transaction.amount,
       transaction.description,
     ),
+    details: extractDetails(transaction as Parameters<typeof extractDetails>[0]),
+    descriptionRaw: transaction.descriptionRaw ?? null,
     id: transaction.id,
     accountId: transaction.accountId,
     description: transaction.description,
@@ -218,6 +230,8 @@ export interface CounterpartiesData {
   totalReceived: number;
   /** Lancamentos internos omitidos: transferencias proprias e aplicacoes. */
   internalCount: number;
+  /** Nome da conta de origem por id, para identificar o banco de cada lancamento. */
+  accountNames: Record<string, string>;
   failures: { itemId: string; message: string }[];
   isMock: boolean;
 }
@@ -232,9 +246,14 @@ export async function loadCounterparties(
 ): Promise<CounterpartiesData> {
   const isMock = useMock();
 
-  const { transactions, failures } = isMock
+  const { accounts, transactions, failures } = isMock
     ? loadMock(new Date(`${period.to}T12:00:00Z`))
     : await loadReal(period);
+
+  const accountNames: Record<string, string> = {};
+  for (const account of accounts) {
+    accountNames[account.id] = `${account.connectorName} · ${account.name}`;
+  }
 
   // Transferencia entre contas proprias e aplicacao nao sao contraparte: o
   // dinheiro mudou de bolso dentro do proprio patrimonio. Ficam de fora por
@@ -256,6 +275,7 @@ export async function loadCounterparties(
     totalSent: counterparties.reduce((total, c) => total + c.sent, 0),
     totalReceived: counterparties.reduce((total, c) => total + c.received, 0),
     internalCount: internos,
+    accountNames,
     failures,
     isMock,
   };

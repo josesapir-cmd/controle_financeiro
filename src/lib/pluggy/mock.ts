@@ -73,6 +73,8 @@ interface Seed {
   parte?: { nome: string; doc: string };
   /** Reproduz o caso real em que payer vem nulo e a contraparte se perde. */
   semContraparte?: boolean;
+  /** Detalhes extras, como meio de pagamento e dados de contrato. */
+  detalhes?: { label: string; value: string }[];
 }
 
 const seeds: Seed[] = [
@@ -99,7 +101,12 @@ const seeds: Seed[] = [
   { day: 26, description: "Aplicacao CDB", amount: -45000, category: "Investments", hora: "08:12", accountId: CHECKING_ID },
   { day: 23, description: "Pix enviado", amount: -2000, category: "Same person transfer", hora: "09:35", accountId: CHECKING_ID },
   // Contrapartes: pagamentos recorrentes, recebimentos e um caso sem dados.
-  { day: 5, description: "Pix enviado - Maria Locadora", amount: -2600, category: "Housing", hora: "11:04", accountId: CHECKING_ID, parte: { nome: "Maria Locadora", doc: "12345678901" } },
+  { day: 5, description: "Pix enviado - Maria Locadora", amount: -2600, category: "Housing", hora: "11:04", accountId: CHECKING_ID, parte: { nome: "Maria Locadora", doc: "12345678901" }, detalhes: [
+    { label: "Meio", value: "Pix" },
+    { label: "Recebedor · Agencia/conta", value: "0001 / 45678-9" },
+    { label: "Recebedor · ISPB do banco", value: "60746948" },
+    { label: "Referencia", value: "CTR-2024-0091" },
+  ] },
   { day: 8, description: "Pix enviado - Joao Diarista", amount: -320, category: "Services", hora: "12:47", accountId: CHECKING_ID, parte: { nome: "Joao Diarista", doc: "98765432100" } },
   { day: 16, description: "Pix enviado - Joao Diarista", amount: -320, category: "Services", hora: "13:20", accountId: CHECKING_ID, parte: { nome: "Joao Diarista", doc: "98765432100" } },
   { day: 21, description: "Pix recebido - Cliente Alfa Ltda", amount: 1500, category: "Income", hora: "15:08", accountId: CHECKING_ID, parte: { nome: "Cliente Alfa Ltda", doc: "12345678000199" } },
@@ -138,6 +145,9 @@ export function mockTransactions(accountId: string, reference = new Date()): Tra
       category: seed.category,
       type: seed.amount < 0 ? ("DEBIT" as const) : ("CREDIT" as const),
       status: "POSTED",
+      details: seed.detalhes ?? [
+        { label: "Meio", value: seed.parte ? "Pix" : "Cartao de credito" },
+      ],
       counterparty: seed.semContraparte
         ? { key: NAO_IDENTIFICADA, self: false }
         : seed.parte

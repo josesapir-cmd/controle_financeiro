@@ -1,4 +1,5 @@
 import { translateCategory } from "./categories";
+import type { Detail } from "./details";
 
 /**
  * Extracao e agregacao de contrapartes.
@@ -170,6 +171,8 @@ export interface CounterpartyEntry {
   description: string;
   amount: number;
   category?: string | null;
+  accountId?: string;
+  details?: Detail[];
 }
 
 interface TransacaoComContraparte {
@@ -178,6 +181,8 @@ interface TransacaoComContraparte {
   category?: string | null;
   amount: number;
   date: string;
+  accountId?: string;
+  details?: Detail[];
   counterparty?: Counterparty | null;
 }
 
@@ -218,6 +223,8 @@ export function aggregateCounterparties(
       description: transaction.description ?? "",
       amount: transaction.amount,
       category: transaction.category ?? null,
+      accountId: transaction.accountId,
+      details: transaction.details,
     });
 
     if (transaction.amount < 0) bucket.sent += -transaction.amount;

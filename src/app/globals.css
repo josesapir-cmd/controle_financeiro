@@ -644,6 +644,100 @@ td.amount {
   margin-top: 14px;
 }
 
+/* --- Faixa horizontal de despesas do dia --- */
+.strip {
+  margin: 20px 0 0;
+  padding: 18px 20px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.strip-titulo {
+  margin-bottom: 22px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.strip-plot {
+  position: relative;
+  height: 40px;
+  /* Margem lateral para que pontos as 00h e 24h nao sejam cortados. */
+  margin: 0 16px;
+}
+
+.strip-eixo {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--baseline);
+}
+
+.strip-grade {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--gridline);
+}
+
+.strip-marca-envelope {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.strip-marca {
+  display: block;
+  border-radius: 50%;
+  background: var(--series-1);
+  /* Anel na cor da superficie separa pontos sobrepostos. */
+  box-shadow: 0 0 0 2px var(--surface);
+  cursor: default;
+  transition: transform 120ms ease;
+}
+
+.strip-marca:hover {
+  transform: scale(1.25);
+}
+
+.strip-rotulo {
+  position: absolute;
+  bottom: 100%;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.strip-horas {
+  position: relative;
+  height: 20px;
+  margin: 6px 16px 0;
+}
+
+.strip-horas span {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* --- Filtro de lancamentos --- */
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
 /* --- Linha expansivel de contraparte --- */
 details > summary {
   cursor: pointer;
@@ -778,4 +872,99 @@ ul.rollup ul {
 .rollup-linha.sub {
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+/* --- Expansao de contraparte ---
+   O caret e um link que alterna ?open= na URL. As transacoes saem em <tr>
+   irmas, entao abrir nao altera a altura nem a largura da linha da contraparte. */
+.identidade {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.caret {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--plane);
+}
+
+.caret:hover {
+  color: var(--text-primary);
+  border-color: var(--baseline);
+}
+
+.caret:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 1px;
+}
+
+.linha-detalhe > td {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--gridline);
+  background: var(--plane);
+}
+
+/* Recuo alinhado ao caret, para a sub-linha ler como filha da contraparte. */
+.linha-detalhe > td:first-child {
+  padding-left: 30px;
+}
+
+.detalhe-quando {
+  display: inline-block;
+  min-width: 88px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.detalhe-descricao {
+  color: var(--text-primary);
+}
+
+.detalhe-cabecalho {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+/* Campos em duas colunas: rotulo estreito, valor livre. Muitos lancamentos
+   trazem poucos campos, entao a grade se adapta em vez de reservar espaco. */
+.detalhe-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 2px 18px;
+  margin: 0;
+}
+
+.detalhe-campos > div {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.detalhe-campos dt {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.detalhe-campos dd {
+  margin: 0;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

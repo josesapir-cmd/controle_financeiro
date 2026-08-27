@@ -78,6 +78,7 @@ export interface Account {
 }
 
 import type { Counterparty } from "@/lib/finance/counterparties";
+import type { Detail } from "@/lib/finance/details";
 
 export type TransactionType = "DEBIT" | "CREDIT";
 
@@ -103,6 +104,12 @@ export interface Transaction {
    * que a aplicacao nao usa.
    */
   counterparty?: Counterparty | null;
+  /**
+   * Detalhes prontos para exibicao (meio de pagamento, estabelecimento, dados
+   * do cartao, identificadores). Extraidos na fronteira do servico, ja sem o
+   * documento do proprio usuario.
+   */
+  details?: Detail[];
 }
 
 export interface Paginated<T> {
