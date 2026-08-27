@@ -28,13 +28,20 @@ const DIAS_MAXIMO = 3650;
  * vazaria quantos caracteres iniciais estao certos.
  */
 function autorizado(request: Request): boolean {
-  const esperado = process.env.SYNC_SECRET;
-  if (!esperado) return false;
-
   const cabecalho = request.headers.get("authorization") ?? "";
   const token = cabecalho.startsWith("Bearer ") ? cabecalho.slice(7) : "";
+  if (!token) return false;
 
-  return safeEqual(token, esperado);
+  // A Vercel envia "Authorization: Bearer $CRON_SECRET" nas chamadas agendadas.
+  // Aceitamos os dois segredos para nao obrigar que sejam o mesmo valor: o do
+  // cron e gerenciado pela plataforma, o nosso serve as chamadas manuais.
+  const aceitos = [process.env.SYNC_SECRET, process.env.CRON_SECRET].filter(
+    (valor): valor is string => Boolean(valor),
+  );
+
+  // Compara com todos antes de responder, sem interromper no primeiro acerto:
+  // sair mais cedo faria o tempo de resposta revelar qual segredo casou.
+  return aceitos.reduce((valido, esperado) => safeEqual(token, esperado) || valido, false);
 }
 
 async function itensCadastrados(db: ReturnType<typeof fromPostgres>): Promise<string[]> {

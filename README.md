@@ -32,6 +32,11 @@ de dados. Confundir os dois custou uma volta neste projeto.
 Como a API nao lista items, o `itemId` de cada conexao vem do dashboard do Meu
 Pluggy e precisa ser guardado pela aplicacao.
 
+## Deploy
+
+Passo a passo em [docs/deploy.md](docs/deploy.md). Decisoes e razoes em
+[docs/arquitetura.md](docs/arquitetura.md).
+
 ## Telas
 
 | Rota | O que mostra |
