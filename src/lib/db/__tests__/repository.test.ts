@@ -116,8 +116,39 @@ describe("contas", () => {
     expect(await listAccounts(db)).toHaveLength(2);
   });
 
-  it("produz fingerprints diferentes para instituicoes diferentes", () => {
-    expect(accountFingerprint("Inter", "123")).not.toBe(accountFingerprint("Nubank", "123"));
+  it("produz fingerprints diferentes para contas distintas", () => {
+    expect(accountFingerprint("BANCO INTER", "123", "CHECKING_ACCOUNT")).not.toBe(
+      accountFingerprint("Nu Pagamentos", "123", "CHECKING_ACCOUNT"),
+    );
+  });
+
+  // Caso real: no BTG, duas contas correntes distintas tem o mesmo numero.
+  it("distingue contas de mesmo numero pelo nome", async () => {
+    await upsertAccount(db, {
+      itemId: ITEM, pluggyAccountId: "44444444-4444-4444-8444-444444444444",
+      connectorName: "BTG", type: "BANK", subtype: "CHECKING_ACCOUNT",
+      name: "BTG Pactual WM", number: "00028026-9", balance: 0.44,
+    });
+    await upsertAccount(db, {
+      itemId: ITEM, pluggyAccountId: "55555555-5555-4555-8555-555555555555",
+      connectorName: "BTG", type: "BANK", subtype: "CHECKING_ACCOUNT",
+      name: "BTG Banking", number: "00028026-9", balance: 1960,
+    });
+
+    expect(await listAccounts(db)).toHaveLength(2);
+  });
+
+  // A identidade nao pode depender do nome da instituicao: ele vem do item, e
+  // ha conexoes que respondem 404 nele enquanto entregam contas.
+  it("mantem a identidade quando o nome da instituicao muda", async () => {
+    const antes = await contaExemplo();
+    const depois = await upsertAccount(db, {
+      itemId: ITEM, pluggyAccountId: "22222222-2222-4222-8222-222222222222",
+      connectorName: "(desconhecido)", type: "BANK",
+      name: "BANCO INTER", number: "01212573-3", balance: 3153.01,
+    });
+
+    expect(depois).toBe(antes);
   });
 });
 

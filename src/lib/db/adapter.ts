@@ -10,13 +10,22 @@ export interface Db {
   query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>;
 }
 
-/** Adapta o cliente postgres.js, cujo `unsafe` aceita SQL com parametros. */
-export function fromPostgres(sql: {
-  unsafe: (text: string, params?: unknown[]) => Promise<unknown>;
-}): Db {
+/**
+ * Adapta o cliente postgres.js, cujo `unsafe` aceita SQL com parametros.
+ *
+ * A assinatura de `unsafe` na biblioteca e generica demais para casar com a
+ * nossa sem conversao; o cast fica confinado aqui, num lugar so, em vez de
+ * espalhar `any` pelo repositorio.
+ */
+type PostgresLike = {
+  unsafe: (text: string, params?: never[]) => Promise<unknown>;
+};
+
+export function fromPostgres(sql: unknown): Db {
+  const cliente = sql as PostgresLike;
   return {
     async query<T>(text: string, params: unknown[] = []) {
-      return (await sql.unsafe(text, params)) as T[];
+      return (await cliente.unsafe(text, params as never[])) as T[];
     },
   };
 }

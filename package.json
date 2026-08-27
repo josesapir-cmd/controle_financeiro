@@ -9,7 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "migrate": "node scripts/migrate.mjs"
+    "migrate": "node scripts/migrate.mjs",
+    "importar": "node scripts/importar-local.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.3.0",

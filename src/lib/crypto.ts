@@ -1,6 +1,8 @@
 import "server-only";
 
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from "node:crypto";
+
+import { fingerprintWith } from "./fingerprint.mjs";
 
 /**
  * Criptografia de campos identificadores.
@@ -116,11 +118,9 @@ export function safeEqual(a: string, b: string): boolean {
  * mesmo valor, mesmo hash — e, por depender da chave secreta, nao e passivel de
  * ataque de dicionario: sem a chave, varrer os 10^11 CPFs possiveis nao ajuda.
  *
- * O `dominio` separa espacos de chave, para que o hash de um CPF como
- * contraparte nunca colida com o mesmo CPF usado em outro contexto.
+ * A implementacao vive em fingerprint.mjs para ser compartilhada com os scripts
+ * de linha de comando, que precisam gerar exatamente o mesmo valor.
  */
 export function fingerprint(dominio: string, valor: string): string {
-  return createHmac("sha256", lerChave())
-    .update(`${dominio}:${valor.trim().toLowerCase()}`)
-    .digest("base64url");
+  return fingerprintWith(lerChave(), dominio, valor);
 }

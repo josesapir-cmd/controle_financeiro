@@ -50,14 +50,27 @@ export interface TransactionRow {
 }
 
 /**
- * Identidade estavel de uma conta: instituicao mais numero.
+ * Identidade estavel de uma conta.
  *
- * Nao usamos o id da Pluggy nem o do item porque ambos mudam ao reconectar um
- * banco — e amarrar o historico a eles significaria perde-lo a cada
- * reconexao, que e exatamente o que a persistencia veio evitar.
+ * Formada apenas por dados da propria conta — nome, numero e subtipo — e nunca
+ * pelo id da Pluggy, pelo item ou pelo nome da instituicao:
+ *
+ * - id da conta e do item mudam ao reconectar um banco, e amarrar o historico a
+ *   eles significaria perde-lo a cada reconexao.
+ * - o nome da instituicao vem do item, e ha conexoes reais que respondem 404 em
+ *   GET /items/{id} enquanto entregam contas normalmente. Se a identidade
+ *   dependesse dele, a mesma conta ganharia fingerprint diferente conforme o
+ *   item estivesse legivel ou nao, duplicando o historico.
+ *
+ * O subtipo e o nome entram porque numero sozinho colide: no BTG, "BTG Pactual
+ * WM" e "BTG Banking" sao contas correntes distintas com o mesmo numero.
  */
-export function accountFingerprint(connectorName: string, number: string | null | undefined): string {
-  return fingerprint("account", `${connectorName}|${number ?? ""}`);
+export function accountFingerprint(
+  name: string | null | undefined,
+  number: string | null | undefined,
+  subtype: string | null | undefined,
+): string {
+  return fingerprint("account", `${name ?? ""}|${number ?? ""}|${subtype ?? ""}`);
 }
 
 export function counterpartyFingerprint(chave: string): string {
@@ -105,7 +118,7 @@ export interface AccountInput {
 
 /** Devolve o id interno da conta, criando ou atualizando pelo fingerprint. */
 export async function upsertAccount(db: Db, conta: AccountInput): Promise<string> {
-  const fp = accountFingerprint(conta.connectorName, conta.number);
+  const fp = accountFingerprint(conta.name, conta.number, conta.subtype);
 
   const linhas = await db.query<{ id: string }>(
     `INSERT INTO accounts

@@ -67,7 +67,9 @@ interface TransacaoBruta {
   amount: number;
   description?: string;
   descriptionRaw?: string | null;
-  paymentData?: Record<string, unknown> | null;
+  // Aceita qualquer forma de paymentData: a extracao ja e defensiva campo a
+  // campo, e exigir um tipo exato aqui obrigaria a converter em cada chamador.
+  paymentData?: unknown;
   merchant?: Record<string, unknown> | null;
   creditCardMetadata?: Record<string, unknown> | null;
   operationType?: string | null;
@@ -79,6 +81,7 @@ interface TransacaoBruta {
 export function extractDetails(transaction: TransacaoBruta): Detail[] {
   const detalhes: Detail[] = [];
   const pagamento = (transaction.paymentData ?? {}) as Record<string, unknown>;
+
 
   const metodo = texto(pagamento.paymentMethod);
   if (metodo) detalhes.push({ label: "Meio", value: METODOS[metodo] ?? metodo });
