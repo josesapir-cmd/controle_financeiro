@@ -36,6 +36,24 @@ async function podeRegistrar(recoveryCode?: string): Promise<boolean> {
   return false;
 }
 
+/**
+ * Compara o dominio configurado com o dominio de onde a requisicao veio.
+ *
+ * Quando divergem, o navegador recusa com "The RP ID X is invalid for this
+ * domain" — mensagem correta, porem sem indicacao do que fazer. Aqui a causa e
+ * a correcao ficam explicitas, com os dois valores lado a lado.
+ */
+function conferirDominio(request: Request, rpID: string): string | null {
+  const host = (request.headers.get("host") ?? "").split(":")[0];
+  if (!host || host === rpID) return null;
+
+  return (
+    `APP_DOMAIN esta como "${rpID}", mas o app foi aberto em "${host}". ` +
+    `Ajuste APP_DOMAIN para "${host}" e APP_ORIGIN para "https://${host}" ` +
+    "nas variaveis de ambiente, e faca um novo deploy."
+  );
+}
+
 export async function POST(request: Request) {
   const corpo = (await request.json().catch(() => ({}))) as {
     etapa?: string;
@@ -46,6 +64,9 @@ export async function POST(request: Request) {
   };
 
   const { rpID, rpName } = authConfig();
+
+  const divergencia = conferirDominio(request, rpID);
+  if (divergencia) return NextResponse.json({ error: divergencia }, { status: 400 });
 
   if (!(await podeRegistrar(corpo.recoveryCode))) {
     return NextResponse.json({ error: "nao autorizado" }, { status: 401 });

@@ -23,6 +23,18 @@ export async function POST(request: Request) {
 
   const { rpID, origin } = authConfig();
 
+  const host = (request.headers.get("host") ?? "").split(":")[0];
+  if (host && host !== rpID) {
+    return NextResponse.json(
+      {
+        error:
+          `APP_DOMAIN esta como "${rpID}", mas o app foi aberto em "${host}". ` +
+          "Passkey so funciona no dominio configurado — ajuste as variaveis e faca um novo deploy.",
+      },
+      { status: 400 },
+    );
+  }
+
   if (corpo.etapa === "opcoes") {
     const credenciais = await listCredentials();
 
