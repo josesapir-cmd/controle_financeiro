@@ -144,3 +144,45 @@ export async function checkRecoveryCode(codigo: string): Promise<boolean> {
 
   return safeEqual(guardado, fingerprint("recovery", codigo.trim().toUpperCase()));
 }
+
+/**
+ * Codigo curto e temporario para registrar um dispositivo novo.
+ *
+ * Existe para que adicionar o celular nao gaste o codigo de recuperacao — que
+ * deveria ficar guardado offline para a emergencia de perder todos os
+ * dispositivos, nao ser digitado numa tela de cafe.
+ *
+ * Curto porque sera digitado a mao; de vida curta e uso unico porque e curto.
+ * Seis caracteres so sao seguros o suficiente por expirarem em dez minutos:
+ * fossem permanentes, seriam adivinhaveis.
+ */
+const ALFABETO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+export async function createDeviceCode(): Promise<string> {
+  const bytes = randomBytes(6);
+  // Alfabeto sem 0/O e 1/I/L: o codigo e lido de uma tela e digitado noutra.
+  const codigo = Array.from(bytes, (b) => ALFABETO[b % ALFABETO.length]).join("");
+
+  const expira = new Date(Date.now() + 10 * 60 * 1000);
+  await db().query(
+    "INSERT INTO auth_challenges (id, challenge, purpose, expires_at) VALUES ($1, $2, $3, $4)",
+    [`device-${codigo}`, fingerprint("device", codigo), "dispositivo", expira.toISOString()],
+  );
+
+  return codigo;
+}
+
+/** Consome o codigo: vale uma vez so. */
+export async function useDeviceCode(codigo: string): Promise<boolean> {
+  const limpo = codigo.trim().toUpperCase();
+
+  const linhas = await db().query<{ challenge: string }>(
+    `DELETE FROM auth_challenges
+      WHERE id = $1 AND purpose = 'dispositivo' AND expires_at > now()
+      RETURNING challenge`,
+    [`device-${limpo}`],
+  );
+
+  const guardado = linhas[0]?.challenge;
+  return Boolean(guardado) && safeEqual(guardado, fingerprint("device", limpo));
+}

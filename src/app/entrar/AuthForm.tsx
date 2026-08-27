@@ -14,7 +14,7 @@ export function AuthForm() {
   const [bootstrap, setBootstrap] = useState<boolean | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [recuperando, setRecuperando] = useState(false);
+  const [modo, setModo] = useState<"entrar" | "dispositivo" | "recuperar">("entrar");
   const [codigo, setCodigo] = useState("");
   const [codigoNovo, setCodigoNovo] = useState<string | null>(null);
 
@@ -33,7 +33,7 @@ export function AuthForm() {
       });
   }, []);
 
-  async function registrar(recoveryCode?: string) {
+  async function registrar(codigoDeAcesso?: string) {
     setOcupado(true);
     setErro(null);
 
@@ -41,7 +41,7 @@ export function AuthForm() {
       const inicio = await fetch("/api/auth/registrar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ etapa: "opcoes", recoveryCode }),
+        body: JSON.stringify({ etapa: "opcoes", codigo: codigoDeAcesso }),
       });
       const dados = await inicio.json();
       if (!inicio.ok) throw new Error(dados.error ?? "nao autorizado");
@@ -54,7 +54,7 @@ export function AuthForm() {
         body: JSON.stringify({
           etapa: "verificar",
           challengeId: dados.challengeId,
-          recoveryCode,
+          codigo: codigoDeAcesso,
           label: navigator.userAgent.slice(0, 60),
           resposta,
         }),
@@ -144,30 +144,40 @@ export function AuthForm() {
           </button>
 
           <div className="recuperacao">
-            {recuperando ? (
+            {modo === "entrar" ? (
+              <div className="filtros">
+                <button type="button" className="danger" onClick={() => setModo("dispositivo")}>
+                  Adicionar este dispositivo
+                </button>
+                <button type="button" className="danger" onClick={() => setModo("recuperar")}>
+                  Perdi meus dispositivos
+                </button>
+              </div>
+            ) : (
               <>
                 <p className="empty">
-                  Perdeu os dispositivos? Use o codigo de recuperacao para registrar uma passkey
-                  nova.
+                  {modo === "dispositivo"
+                    ? "Em um dispositivo onde voce ja entra, abra Conexoes e gere um codigo. Ele vale 10 minutos."
+                    : "Use o codigo de recuperacao guardado offline. Ele registra uma passkey nova aqui."}
                 </p>
                 <div className="connection-form">
                   <input
                     type="text"
                     value={codigo}
                     onChange={(e) => setCodigo(e.target.value)}
-                    placeholder="Codigo de recuperacao"
-                    aria-label="Codigo de recuperacao"
+                    placeholder={modo === "dispositivo" ? "Codigo de 6 caracteres" : "Codigo de recuperacao"}
+                    aria-label="Codigo"
                     autoComplete="off"
+                    autoCapitalize="characters"
                   />
                   <button type="button" onClick={() => registrar(codigo)} disabled={ocupado}>
-                    Recuperar
+                    {ocupado ? "Aguarde…" : "Registrar"}
+                  </button>
+                  <button type="button" className="danger" onClick={() => setModo("entrar")}>
+                    Voltar
                   </button>
                 </div>
               </>
-            ) : (
-              <button type="button" className="danger" onClick={() => setRecuperando(true)}>
-                Perdi meus dispositivos
-              </button>
             )}
           </div>
         </>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guard";
 import { loadConnections, type ConnectionRow } from "@/lib/finance/service";
+import { AddDeviceButton } from "@/components/AddDeviceButton";
 import { ConnectionForm } from "./ConnectionForm";
 import { SyncButton } from "./SyncButton";
 import { removerConexao } from "./actions";
@@ -49,6 +50,15 @@ export default async function Conexoes() {
           403. A conexao aparece abaixo assim que a proxima sincronizacao rodar.
         </p>
         <ConnectionForm />
+      </section>
+
+      <section className="card">
+        <h2>Dispositivos</h2>
+        <p className="empty" style={{ marginTop: 0 }}>
+          Passkey vale por dispositivo. Para entrar pelo celular, gere um codigo aqui — assim voce
+          nao gasta o codigo de recuperacao, que deve ficar guardado para o caso de perder tudo.
+        </p>
+        <AddDeviceButton />
       </section>
 
       <section className="card">

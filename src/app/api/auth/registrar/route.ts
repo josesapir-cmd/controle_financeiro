@@ -6,12 +6,14 @@ import {
 import { authConfig } from "@/lib/auth/config";
 import {
   checkRecoveryCode,
+  createDeviceCode,
   createRecoveryCode,
   hasCredentials,
   listCredentials,
   saveChallenge,
   saveCredential,
   takeChallenge,
+  useDeviceCode,
 } from "@/lib/auth/credentials";
 import { createSession, currentSession } from "@/lib/auth/session";
 
@@ -29,11 +31,15 @@ export const dynamic = "force-dynamic";
  * depende de o dono lembrar de desligar nada, que e o tipo de passo esquecido
  * que deixa um app aberto na internet.
  */
-async function podeRegistrar(recoveryCode?: string): Promise<boolean> {
+async function podeRegistrar(codigo?: string): Promise<boolean> {
   if (!(await hasCredentials())) return true;
   if (await currentSession()) return true;
-  if (recoveryCode) return checkRecoveryCode(recoveryCode);
-  return false;
+  if (!codigo) return false;
+
+  // Codigo de dispositivo primeiro: e o caminho esperado para adicionar o
+  // celular, e consumi-lo evita gastar o de recuperacao.
+  if (await useDeviceCode(codigo)) return true;
+  return checkRecoveryCode(codigo);
 }
 
 /**
@@ -58,6 +64,7 @@ export async function POST(request: Request) {
   const corpo = (await request.json().catch(() => ({}))) as {
     etapa?: string;
     recoveryCode?: string;
+    codigo?: string;
     challengeId?: string;
     label?: string;
     resposta?: unknown;
@@ -68,7 +75,9 @@ export async function POST(request: Request) {
   const divergencia = conferirDominio(request, rpID);
   if (divergencia) return NextResponse.json({ error: divergencia }, { status: 400 });
 
-  if (!(await podeRegistrar(corpo.recoveryCode))) {
+  const codigo = corpo.codigo ?? corpo.recoveryCode;
+
+  if (!(await podeRegistrar(codigo))) {
     return NextResponse.json({ error: "nao autorizado" }, { status: 401 });
   }
 
