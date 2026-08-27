@@ -61,7 +61,8 @@ export default async function Home() {
       <div className="masthead">
         <h1>Controle Financeiro</h1>
         <span className="period">
-          {formatarPeriodo(dados.period)} · <Link href="/contrapartes">Contrapartes</Link> ·{" "}
+          {formatarPeriodo(dados.period)} · <Link href="/dia">Dia</Link> ·{" "}
+          <Link href="/contrapartes">Contrapartes</Link> ·{" "}
           <Link href="/conexoes">Conexoes</Link>
         </span>
       </div>

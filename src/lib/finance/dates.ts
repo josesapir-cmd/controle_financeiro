@@ -46,3 +46,31 @@ export function currentYearRange(today: Date = new Date()): { from: string; to: 
   const hoje = localDay(today);
   return { from: `${hoje.slice(0, 4)}-01-01`, to: hoje };
 }
+
+const formatadorHora = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: FUSO,
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/** Hora local no formato HH:MM. */
+export function localTime(date: Date | string): string {
+  const valor = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(valor.getTime())) return "";
+  return formatadorHora.format(valor);
+}
+
+/** Minutos desde a meia-noite local, para posicionar na linha do tempo. */
+export function minutesOfDay(date: Date | string): number {
+  const hora = localTime(date);
+  if (!hora) return 0;
+  const [h, m] = hora.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/** Dia vizinho, deslocado em N dias. */
+export function shiftDay(day: string, delta: number): string {
+  const base = new Date(`${day}T12:00:00Z`);
+  base.setUTCDate(base.getUTCDate() + delta);
+  return base.toISOString().slice(0, 10);
+}

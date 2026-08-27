@@ -4,6 +4,7 @@ import * as pluggy from "@/lib/pluggy/client";
 import { mockAccounts, mockItems, mockTransactions } from "@/lib/pluggy/mock";
 import type { AccountWithConnector, Item, Transaction } from "@/lib/pluggy/types";
 import { readRegistry } from "@/lib/counterparty-store";
+import { localDay } from "./dates";
 import {
   aggregateCounterparties,
   extractCounterparty,
@@ -239,5 +240,53 @@ export async function loadCounterparties(period: Period): Promise<Counterparties
     totalReceived: counterparties.reduce((total, c) => total + c.received, 0),
     failures,
     isMock,
+  };
+}
+
+export interface DayData {
+  day: string;
+  transactions: Transaction[];
+  spent: number;
+  received: number;
+  /** Aplicacoes e transferencias proprias do dia, contadas a parte. */
+  transfers: number;
+  failures: { itemId: string; message: string }[];
+  isMock: boolean;
+  /** Contas do periodo, para nomear a origem de cada lancamento. */
+  accountNames: Record<string, string>;
+}
+
+/**
+ * Lancamentos de um unico dia, em ordem cronologica.
+ *
+ * Existe porque a Pluggy entrega horario junto da data, e ver a sequencia do dia
+ * costuma ser o que permite reconhecer uma compra que a descricao nao explica.
+ */
+export async function loadDay(day: string): Promise<DayData> {
+  const isMock = useMock();
+  const period = { from: day, to: day };
+
+  const { accounts, transactions, failures } = isMock
+    ? loadMock(new Date(`${day}T12:00:00Z`))
+    : await loadReal(period);
+
+  const doDia = transactions.filter((t) => localDay(t.date) === day);
+  doDia.sort((a, b) => a.date.localeCompare(b.date));
+
+  const accountNames: Record<string, string> = {};
+  for (const account of accounts) {
+    accountNames[account.id] = account.marketingName || account.name;
+  }
+
+  return {
+    day,
+    transactions: doDia,
+    // Mesma regra do painel: aplicacao e transferencia propria nao sao consumo.
+    spent: totalExpenses(doDia),
+    received: totalIncome(doDia),
+    transfers: totalTransfers(doDia),
+    failures,
+    isMock,
+    accountNames,
   };
 }

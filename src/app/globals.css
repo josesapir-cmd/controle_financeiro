@@ -441,3 +441,111 @@ th.num {
 td.amount {
   padding-right: 12px;
 }
+
+/* --- Linha do tempo do dia ---
+   Trilho vertical com a hora a esquerda. A marca colorida distingue entrada de
+   saida, mas nunca sozinha: o valor tem sinal e o texto diz o que e. */
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.timeline-bloco {
+  margin: 22px 0 10px;
+  padding-left: 76px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.timeline-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 56px 20px 1fr;
+  align-items: start;
+  gap: 0;
+}
+
+/* O trilho: linha contínua ligando os pontos do dia. */
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  left: 65px;
+  top: 0;
+  bottom: -14px;
+  width: 1px;
+  background: var(--gridline);
+}
+
+.timeline li:last-child .timeline-item::before {
+  bottom: auto;
+  height: 18px;
+}
+
+.timeline-hora {
+  padding-top: 14px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.timeline-marca {
+  position: relative;
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  margin: 19px auto 0;
+  border-radius: 50%;
+  /* Anel na cor da superficie separa a marca do trilho. */
+  box-shadow: 0 0 0 2px var(--plane);
+}
+
+.timeline-marca.saida {
+  background: var(--negative);
+}
+
+.timeline-marca.entrada {
+  background: var(--positive);
+}
+
+.timeline-corpo {
+  margin-left: 12px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  min-width: 0;
+}
+
+.timeline-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.timeline-linha .description {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.timeline-corpo .account-meta {
+  margin-top: 3px;
+}
+
+@media (max-width: 560px) {
+  .timeline-item {
+    grid-template-columns: 44px 18px 1fr;
+  }
+  .timeline-item::before {
+    left: 52px;
+  }
+  .timeline-bloco {
+    padding-left: 62px;
+  }
+}

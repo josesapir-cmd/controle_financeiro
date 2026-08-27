@@ -32,6 +32,31 @@ de dados. Confundir os dois custou uma volta neste projeto.
 Como a API nao lista items, o `itemId` de cada conexao vem do dashboard do Meu
 Pluggy e precisa ser guardado pela aplicacao.
 
+## Telas
+
+| Rota | O que mostra |
+| --- | --- |
+| `/` | Painel do mes: patrimonio liquido, entradas, saidas, contas, gastos por categoria, lancamentos |
+| `/dia` | Linha do tempo de um dia, com horario local — util para reconhecer uma compra que a descricao nao explica |
+| `/contrapartes` | Quem recebe e quem envia dinheiro, com janela selecionavel e cadastro de categoria por contraparte |
+| `/conexoes` | Cadastro dos itemIds das conexoes do Meu Pluggy |
+
+## Decisoes que valem conhecer
+
+**Fuso horario.** A Pluggy devolve datas em UTC com horario. Brasilia e UTC-3,
+entao extrair o dia cortando a string ISO joga toda transacao apos as 21h para o
+dia seguinte — e, na virada do mes, para o mes seguinte. Toda comparacao de data
+passa por `src/lib/finance/dates.ts`. Para outro fuso, defina `APP_TIMEZONE`.
+
+**Movimentacao nao e gasto.** Aplicacao em CDB, transferencia entre contas
+proprias e pagamento de fatura saem do total de despesas e aparecem a parte. Sem
+isso, um unico aporte esmaga todas as categorias do grafico.
+
+**PII.** O bloco `paymentData` de cada transacao carrega o CPF do proprio
+usuario. Na fronteira do servico guardamos apenas nome e documento da
+contraparte; o resto e descartado antes de seguir adiante. Os arquivos em
+`data/` ficam fora do versionamento.
+
 ## Configuracao
 
 ```bash

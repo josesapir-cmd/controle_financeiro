@@ -41,7 +41,8 @@ export default async function Contrapartes({
       <div className="masthead">
         <h1>Contrapartes</h1>
         <span className="period">
-          <Link href="/">Painel</Link> · <Link href="/conexoes">Conexoes</Link>
+          <Link href="/">Painel</Link> · <Link href="/dia">Dia</Link> ·{" "}
+          <Link href="/conexoes">Conexoes</Link>
         </span>
       </div>
 

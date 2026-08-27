@@ -67,6 +67,8 @@ interface Seed {
   amount: number;
   category: string;
   accountId: string;
+  /** Hora local do lancamento, para a linha do tempo do dia. */
+  hora?: string;
   /** Contraparte ficticia: nome e documento, como viriam de paymentData. */
   parte?: { nome: string; doc: string };
   /** Reproduz o caso real em que payer vem nulo e a contraparte se perde. */
@@ -74,35 +76,45 @@ interface Seed {
 }
 
 const seeds: Seed[] = [
-  { day: 5, description: "Salario", amount: 8400, category: "Salary", accountId: CHECKING_ID },
-  { day: 5, description: "Aluguel", amount: -2600, category: "Housing", accountId: CHECKING_ID },
-  { day: 6, description: "Condominio", amount: -680, category: "Housing", accountId: CHECKING_ID },
-  { day: 7, description: "Supermercado", amount: -412.9, category: "Groceries", accountId: CARD_ID },
-  { day: 9, description: "Farmacia", amount: -87.4, category: "Health", accountId: CARD_ID },
-  { day: 10, description: "Restaurante", amount: -132.5, category: "Food and drinks", accountId: CARD_ID },
-  { day: 11, description: "Transporte por app", amount: -46.2, category: "Transport", accountId: CARD_ID },
-  { day: 12, description: "Streaming", amount: -55.9, category: "Leisure", accountId: CARD_ID },
-  { day: 14, description: "Supermercado", amount: -298.15, category: "Groceries", accountId: CARD_ID },
-  { day: 15, description: "Energia eletrica", amount: -214.77, category: "Housing", accountId: CHECKING_ID },
-  { day: 17, description: "Livraria", amount: -119.9, category: "Leisure", accountId: CARD_ID },
-  { day: 18, description: "Transporte por app", amount: -38.7, category: "Transport", accountId: CARD_ID },
-  { day: 19, description: "Academia", amount: -149, category: "Health", accountId: CHECKING_ID },
-  { day: 20, description: "Restaurante", amount: -96.4, category: "Food and drinks", accountId: CARD_ID },
-  { day: 21, description: "Freelance", amount: 1500, category: "Income", accountId: CHECKING_ID },
-  { day: 22, description: "Internet", amount: -129.9, category: "Housing", accountId: CHECKING_ID },
-  { day: 24, description: "Supermercado", amount: -356.8, category: "Groceries", accountId: CARD_ID },
-  { day: 25, description: "Cinema", amount: -72, category: "Leisure", accountId: CARD_ID },
+  { day: 5, description: "Salario", amount: 8400, category: "Salary", hora: "08:12", accountId: CHECKING_ID },
+  { day: 5, description: "Aluguel", amount: -2600, category: "Housing", hora: "09:35", accountId: CHECKING_ID },
+  { day: 6, description: "Condominio", amount: -680, category: "Housing", hora: "11:04", accountId: CHECKING_ID },
+  { day: 7, description: "Supermercado", amount: -412.9, category: "Groceries", hora: "12:47", accountId: CARD_ID },
+  { day: 9, description: "Farmacia", amount: -87.4, category: "Health", hora: "13:20", accountId: CARD_ID },
+  { day: 10, description: "Restaurante", amount: -132.5, category: "Food and drinks", hora: "15:08", accountId: CARD_ID },
+  { day: 11, description: "Transporte por app", amount: -46.2, category: "Transport", hora: "16:41", accountId: CARD_ID },
+  { day: 12, description: "Streaming", amount: -55.9, category: "Leisure", hora: "18:03", accountId: CARD_ID },
+  { day: 14, description: "Supermercado", amount: -298.15, category: "Groceries", hora: "19:22", accountId: CARD_ID },
+  { day: 15, description: "Energia eletrica", amount: -214.77, category: "Housing", hora: "20:15", accountId: CHECKING_ID },
+  { day: 17, description: "Livraria", amount: -119.9, category: "Leisure", hora: "21:48", accountId: CARD_ID },
+  { day: 18, description: "Transporte por app", amount: -38.7, category: "Transport", hora: "07:55", accountId: CARD_ID },
+  { day: 19, description: "Academia", amount: -149, category: "Health", hora: "10:30", accountId: CHECKING_ID },
+  { day: 20, description: "Restaurante", amount: -96.4, category: "Food and drinks", hora: "14:12", accountId: CARD_ID },
+  { day: 21, description: "Freelance", amount: 1500, category: "Income", hora: "17:36", accountId: CHECKING_ID },
+  { day: 22, description: "Internet", amount: -129.9, category: "Housing", hora: "22:05", accountId: CHECKING_ID },
+  { day: 24, description: "Supermercado", amount: -356.8, category: "Groceries", hora: "06:40", accountId: CARD_ID },
+  { day: 25, description: "Cinema", amount: -72, category: "Leisure", hora: "23:10", accountId: CARD_ID },
   // Movimentacoes: saem da conta mas nao sao consumo. Presentes no mock porque
   // e exatamente o caso que distorce o painel se for tratado como gasto.
-  { day: 26, description: "Aplicacao CDB", amount: -45000, category: "Investments", accountId: CHECKING_ID },
-  { day: 23, description: "Pix enviado", amount: -2000, category: "Same person transfer", accountId: CHECKING_ID },
+  { day: 26, description: "Aplicacao CDB", amount: -45000, category: "Investments", hora: "08:12", accountId: CHECKING_ID },
+  { day: 23, description: "Pix enviado", amount: -2000, category: "Same person transfer", hora: "09:35", accountId: CHECKING_ID },
   // Contrapartes: pagamentos recorrentes, recebimentos e um caso sem dados.
-  { day: 5, description: "Pix enviado - Maria Locadora", amount: -2600, category: "Housing", accountId: CHECKING_ID, parte: { nome: "Maria Locadora", doc: "12345678901" } },
-  { day: 8, description: "Pix enviado - Joao Diarista", amount: -320, category: "Services", accountId: CHECKING_ID, parte: { nome: "Joao Diarista", doc: "98765432100" } },
-  { day: 16, description: "Pix enviado - Joao Diarista", amount: -320, category: "Services", accountId: CHECKING_ID, parte: { nome: "Joao Diarista", doc: "98765432100" } },
-  { day: 21, description: "Pix recebido - Cliente Alfa Ltda", amount: 1500, category: "Income", accountId: CHECKING_ID, parte: { nome: "Cliente Alfa Ltda", doc: "12345678000199" } },
-  { day: 13, description: "Transferencia recebida", amount: 450, category: "Income", accountId: CHECKING_ID, semContraparte: true },
+  { day: 5, description: "Pix enviado - Maria Locadora", amount: -2600, category: "Housing", hora: "11:04", accountId: CHECKING_ID, parte: { nome: "Maria Locadora", doc: "12345678901" } },
+  { day: 8, description: "Pix enviado - Joao Diarista", amount: -320, category: "Services", hora: "12:47", accountId: CHECKING_ID, parte: { nome: "Joao Diarista", doc: "98765432100" } },
+  { day: 16, description: "Pix enviado - Joao Diarista", amount: -320, category: "Services", hora: "13:20", accountId: CHECKING_ID, parte: { nome: "Joao Diarista", doc: "98765432100" } },
+  { day: 21, description: "Pix recebido - Cliente Alfa Ltda", amount: 1500, category: "Income", hora: "15:08", accountId: CHECKING_ID, parte: { nome: "Cliente Alfa Ltda", doc: "12345678000199" } },
+  { day: 13, description: "Transferencia recebida", amount: 450, category: "Income", hora: "16:41", accountId: CHECKING_ID, semContraparte: true },
 ];
+
+/**
+ * Converte hora local de Brasilia (UTC-3) para o instante UTC correspondente,
+ * que e o formato em que a Pluggy devolve as datas.
+ */
+function utcFromLocal(year: number, month: string, day: number, hora: string): string {
+  const [h, m] = hora.split(":").map(Number);
+  const instante = Date.UTC(year, Number(month) - 1, day, h + 3, m, 0);
+  return new Date(instante).toISOString();
+}
 
 /** Gera o extrato ficticio dentro do mes de referencia informado. */
 export function mockTransactions(accountId: string, reference = new Date()): Transaction[] {
@@ -117,7 +129,8 @@ export function mockTransactions(accountId: string, reference = new Date()): Tra
       description: seed.description,
       amount: seed.amount,
       currencyCode: "BRL",
-      date: `${year}-${month}-${String(seed.day).padStart(2, "0")}T12:00:00.000Z`,
+      // O mock guarda hora local; somamos 3h para gravar em UTC, como a Pluggy faz.
+      date: utcFromLocal(year, month, seed.day, seed.hora ?? "12:00"),
       category: seed.category,
       type: seed.amount < 0 ? ("DEBIT" as const) : ("CREDIT" as const),
       status: "POSTED",
