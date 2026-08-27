@@ -1,15 +1,19 @@
 import type { AccountOption } from "@/lib/finance/service";
 
 /**
- * Selecao multipla de contas, valida em todas as abas.
+ * Selecao multipla por instituicao.
  *
- * Usa <details> com um formulario GET dentro: abre como um menu, aceita varias
- * marcacoes de uma vez e envia tudo junto. Sem JavaScript no cliente — o estado
- * fica na URL, entao a visao filtrada e compartilhavel e o botao voltar
- * funciona como o usuario espera.
+ * Cada linha e um banco, nao uma conta: quem filtra quer "sem o BTG", nao "sem a
+ * conta corrente do BTG". O valor enviado continua sendo a lista de ids de conta
+ * daquele banco, separada por virgula — parseAccountIds ja aceita essa forma,
+ * entao o filtro do lado do servidor nao precisa saber de instituicoes.
  *
- * Nenhuma conta marcada significa "todas": e o estado inicial da tela, e um
- * filtro que comeca escondendo tudo seria hostil.
+ * Usa <details> com formulario GET: abre como menu, aceita varias marcacoes e
+ * envia tudo junto, sem JavaScript no cliente. O estado fica na URL, entao a
+ * visao filtrada e compartilhavel e o botao voltar funciona.
+ *
+ * Nenhuma marcacao significa "todas": e o estado inicial da tela, e um filtro
+ * que comeca escondendo tudo seria hostil.
  */
 export function AccountFilter({
   options,
@@ -33,10 +37,13 @@ export function AccountFilter({
     porBanco.set(opcao.connectorName, lista);
   }
 
+  const bancos = [...porBanco.entries()].sort(([a], [b]) => a.localeCompare(b, "pt-BR"));
+  const marcados = bancos.filter(([, contas]) => contas.every((c) => selected.includes(c.id)));
+
   const resumo =
     selected.length === 0
-      ? `Todas as contas (${options.length})`
-      : `${selected.length} de ${options.length} contas`;
+      ? `Todas as instituicoes (${bancos.length})`
+      : `${marcados.length} de ${bancos.length} instituicoes`;
 
   return (
     <details className="filtro-contas">
@@ -47,21 +54,22 @@ export function AccountFilter({
           valor ? <input key={nome} type="hidden" name={nome} value={valor} /> : null,
         )}
 
-        {[...porBanco.entries()].map(([banco, contas]) => (
-          <fieldset key={banco}>
-            <legend>{banco}</legend>
-            {contas.map((conta) => (
-              <label key={conta.id}>
-                <input
-                  type="checkbox"
-                  name="contas"
-                  value={conta.id}
-                  defaultChecked={selected.includes(conta.id)}
-                />
-                {conta.label}
-              </label>
-            ))}
-          </fieldset>
+        {bancos.map(([banco, contas]) => (
+          <label key={banco}>
+            <input
+              type="checkbox"
+              name="contas"
+              value={contas.map((c) => c.id).join(",")}
+              defaultChecked={contas.every((c) => selected.includes(c.id))}
+            />
+            <span>
+              {banco}
+              <span className="account-meta">
+                {" "}
+                · {contas.length} {contas.length === 1 ? "conta" : "contas"}
+              </span>
+            </span>
+          </label>
         ))}
 
         <div className="filtro-contas-acoes">
