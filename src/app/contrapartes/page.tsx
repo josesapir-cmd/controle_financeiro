@@ -187,7 +187,7 @@ function FormularioClassificacao({ c, voltarPara }: { c: CounterpartyTotal; volt
       />
       <button type="submit">Salvar</button>
       {voltarPara ? (
-        <Link className="cancelar" href={voltarPara}>
+        <Link className="cancelar" href={voltarPara} scroll={false}>
           Cancelar
         </Link>
       ) : null}
@@ -431,11 +431,11 @@ export default async function Contrapartes({
               <thead>
                 <tr>
                   <th scope="col">Contraparte</th>
-                  <th scope="col">Categoria</th>
-                  <th scope="col">Subcategoria</th>
                   <th scope="col" className="num">Enviado</th>
                   <th scope="col" className="num">Recebido</th>
                   <th scope="col" className="num">Liquido</th>
+                  <th scope="col">Categoria</th>
+                  <th scope="col">Subcategoria</th>
                   <th scope="col" aria-label="Acoes" />
                 </tr>
               </thead>
@@ -451,11 +451,10 @@ export default async function Contrapartes({
                             alternarPara={alternar(c.key)}
                           />
                         </td>
-                        <td colSpan={2}>
+                        <Valores c={c} />
+                        <td colSpan={3}>
                           <FormularioClassificacao c={c} voltarPara={voltarPara} />
                         </td>
-                        <Valores c={c} />
-                        <td />
                       </tr>
                     ) : (
                       <tr className="linha-classificada">
@@ -466,13 +465,14 @@ export default async function Contrapartes({
                             alternarPara={alternar(c.key)}
                           />
                         </td>
+                        <Valores c={c} />
                         <td>{c.category}</td>
                         <td>{c.subcategory ?? "—"}</td>
-                        <Valores c={c} />
                         <td>
                           <Link
                             className="editar"
                             href={`/contrapartes?${queryPeriodo}&edit=${encodeURIComponent(c.key)}`}
+                            scroll={false}
                           >
                             Editar
                           </Link>
