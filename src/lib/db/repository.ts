@@ -134,6 +134,9 @@ export async function upsertAccount(db: Db, conta: AccountInput): Promise<string
            number_enc = EXCLUDED.number_enc,
            balance = EXCLUDED.balance,
            currency = EXCLUDED.currency,
+           -- Reconectar reativa: uma conta que voltou a sincronizar nao pode
+           -- continuar marcada como arquivada.
+           archived_at = NULL,
            updated_at = now()
      RETURNING id`,
     [

@@ -317,3 +317,44 @@ describe("estado de sincronizacao", () => {
     expect(erro.lastSyncError).toBe("Pluggy respondeu 504");
   });
 });
+
+describe("remocao de conexao", () => {
+  /**
+   * O comportamento que o usuario vai exercitar ao trocar de banco: tirar a
+   * conexao precisa manter o historico e parar de contar o saldo.
+   */
+  it("arquiva as contas mas preserva as transacoes", async () => {
+    const accountId = await contaExemplo();
+    await upsertTransactions(db, [
+      { id: "tx-hist", accountId, postedAt: "2026-08-10T12:00:00Z", localDay: "2026-08-10", amount: -123 },
+    ]);
+
+    await db.query("DELETE FROM connections WHERE item_id = $1", [ITEM]);
+
+    // Fora do patrimonio: o saldo congelado mentiria.
+    expect(await listAccounts(db)).toHaveLength(0);
+    // Historico intacto: transacoes sao fatos passados.
+    expect(await listTransactions(db)).toHaveLength(1);
+  });
+
+  it("reconectar a mesma conta a desarquiva", async () => {
+    await contaExemplo();
+    await db.query("DELETE FROM connections WHERE item_id = $1", [ITEM]);
+    expect(await listAccounts(db)).toHaveLength(0);
+
+    const novoItem = "77777777-7777-4777-8777-777777777777";
+    await upsertConnection(db, { itemId: novoItem, connectorName: "XP" });
+    await upsertAccount(db, {
+      itemId: novoItem,
+      pluggyAccountId: "88888888-8888-4888-8888-888888888888",
+      connectorName: "XP",
+      type: "BANK",
+      name: "BANCO INTER",
+      number: "01212573-3",
+      balance: 4000,
+    });
+
+    const [conta] = await listAccounts(db);
+    expect(conta.balance).toBe(4000);
+  });
+});
