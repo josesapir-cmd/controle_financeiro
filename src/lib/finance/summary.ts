@@ -1,5 +1,6 @@
 import type { Transaction } from "@/lib/pluggy/types";
 import { classify, translateCategory } from "./categories";
+import { localMonth } from "./dates";
 import { expenseAmount, incomeAmount } from "./money";
 
 export interface CategoryTotal {
@@ -58,7 +59,7 @@ export function monthlyFlow(transactions: Transaction[]): MonthlyFlow[] {
   const buckets = new Map<string, { income: number; expenses: number }>();
 
   for (const transaction of transactions) {
-    const month = transaction.date.slice(0, 7);
+    const month = localMonth(transaction.date);
     if (!/^\d{4}-\d{2}$/.test(month)) continue;
 
     if (classify(transaction) === "transfer") continue;
@@ -110,12 +111,5 @@ export function totalTransfers(transactions: Transaction[]): number {
   );
 }
 
-/** Primeiro dia do mes corrente e hoje, no formato AAAA-MM-DD que a API espera. */
-export function currentMonthRange(today: Date = new Date()): { from: string; to: string } {
-  const year = today.getUTCFullYear();
-  const month = String(today.getUTCMonth() + 1).padStart(2, "0");
-  return {
-    from: `${year}-${month}-01`,
-    to: today.toISOString().slice(0, 10),
-  };
-}
+// currentMonthRange vive em dates.ts, junto do resto do tratamento de fuso.
+export { currentMonthRange } from "./dates";

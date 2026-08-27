@@ -3,6 +3,13 @@ import "server-only";
 import * as pluggy from "@/lib/pluggy/client";
 import { mockAccounts, mockItems, mockTransactions } from "@/lib/pluggy/mock";
 import type { AccountWithConnector, Item, Transaction } from "@/lib/pluggy/types";
+import { readRegistry } from "@/lib/counterparty-store";
+import {
+  aggregateCounterparties,
+  extractCounterparty,
+  type CounterpartyTotal,
+  type PaymentData,
+} from "./counterparties";
 import { listItemIds, listItems, type StoredItem } from "@/lib/store";
 import { netWorth, sumBy } from "./money";
 import {
@@ -20,8 +27,13 @@ import {
  * alem do necessario so cria superficie de vazamento — em log, em cache, ou na
  * serializacao para o navegador. Copiamos apenas os campos que a interface usa.
  */
-function sanitize(transaction: Transaction): Transaction {
+function sanitize(transaction: Transaction & { paymentData?: PaymentData | null }): Transaction {
   return {
+    counterparty: extractCounterparty(
+      transaction.paymentData,
+      transaction.amount,
+      transaction.description,
+    ),
     id: transaction.id,
     accountId: transaction.accountId,
     description: transaction.description,
@@ -190,4 +202,42 @@ export async function loadConnections(): Promise<ConnectionRow[]> {
       }
     }),
   );
+}
+
+export interface Period {
+  from: string;
+  to: string;
+}
+
+export interface CounterpartiesData {
+  counterparties: CounterpartyTotal[];
+  period: Period;
+  totalSent: number;
+  totalReceived: number;
+  failures: { itemId: string; message: string }[];
+  isMock: boolean;
+}
+
+/**
+ * Contrapartes do periodo escolhido. Recebe a janela pronta porque a aba tem
+ * seletor proprio — diferente do painel, que olha sempre o mes corrente.
+ */
+export async function loadCounterparties(period: Period): Promise<CounterpartiesData> {
+  const isMock = useMock();
+
+  const { transactions, failures } = isMock
+    ? loadMock(new Date(`${period.to}T12:00:00Z`))
+    : await loadReal(period);
+
+  const registry = await readRegistry();
+  const counterparties = aggregateCounterparties(transactions, registry);
+
+  return {
+    counterparties,
+    period,
+    totalSent: counterparties.reduce((total, c) => total + c.sent, 0),
+    totalReceived: counterparties.reduce((total, c) => total + c.received, 0),
+    failures,
+    isMock,
+  };
 }

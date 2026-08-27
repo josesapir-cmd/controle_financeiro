@@ -1,3 +1,4 @@
+import { localDay } from "@/lib/finance/dates";
 import type { Account, Item, Paginated, Transaction } from "./types";
 
 const DEFAULT_API_URL = "https://api.pluggy.ai";
@@ -250,9 +251,12 @@ function extractCursor(body: unknown): string | null {
   return null;
 }
 
-/** Data de uma transacao no formato AAAA-MM-DD, ignorando a hora. */
+/**
+ * Dia da transacao no fuso local. Nao use slice(0,10) na data ISO: ela vem em
+ * UTC, e transacoes noturnas cairiam no dia seguinte.
+ */
 function transactionDay(transaction: Transaction): string {
-  return transaction.date.slice(0, 10);
+  return localDay(transaction.date);
 }
 
 export function withinPeriod(

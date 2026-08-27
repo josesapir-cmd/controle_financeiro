@@ -347,3 +347,97 @@ button.danger {
   margin: 4px 0 0;
   font-size: 13px;
 }
+
+/* --- Contrapartes --- */
+.period-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.preset {
+  padding: 6px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  background: var(--surface);
+}
+
+.preset.ativo {
+  color: #ffffff;
+  background: var(--series-1);
+  border-color: var(--series-1);
+}
+
+.range-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.range-form input[type="date"] {
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+th.num {
+  text-align: right;
+  padding-right: 12px;
+}
+
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  font-size: 11px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.inline-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.inline-form input {
+  width: 138px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--text-primary);
+  background: var(--plane);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.inline-form button {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+/* Numeros das colunas de valor alinhados a direita, com digitos de mesma largura. */
+td.amount {
+  padding-right: 12px;
+}

@@ -86,9 +86,9 @@ describe("totalsByCategory", () => {
 describe("monthlyFlow", () => {
   it("separa entradas de saidas por mes, em ordem cronologica", () => {
     const result = monthlyFlow([
-      tx(-100, { date: "2026-08-05" }),
-      tx(3000, { date: "2026-08-01" }),
-      tx(-200, { date: "2026-07-20" }),
+      tx(-100, { date: "2026-08-05T15:00:00.000Z" }),
+      tx(3000, { date: "2026-08-01T15:00:00.000Z" }),
+      tx(-200, { date: "2026-07-20T15:00:00.000Z" }),
     ]);
 
     expect(result.map((r) => r.month)).toEqual(["2026-07", "2026-08"]);
@@ -97,6 +97,12 @@ describe("monthlyFlow", () => {
 
   it("ignora datas fora do formato esperado", () => {
     expect(monthlyFlow([tx(-100, { date: "sem-data" })])).toEqual([]);
+  });
+
+  // 01/09 as 01h UTC e 31/08 as 22h em Brasilia: pertence a agosto.
+  it("atribui a virada do mes pelo fuso local", () => {
+    const [mes] = monthlyFlow([tx(-100, { date: "2026-09-01T01:00:00.000Z" })]);
+    expect(mes.month).toBe("2026-08");
   });
 });
 

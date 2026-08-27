@@ -1,3 +1,4 @@
+import { NAO_IDENTIFICADA } from "@/lib/finance/counterparties";
 import type { Account, Item, Transaction } from "./types";
 
 /**
@@ -66,6 +67,10 @@ interface Seed {
   amount: number;
   category: string;
   accountId: string;
+  /** Contraparte ficticia: nome e documento, como viriam de paymentData. */
+  parte?: { nome: string; doc: string };
+  /** Reproduz o caso real em que payer vem nulo e a contraparte se perde. */
+  semContraparte?: boolean;
 }
 
 const seeds: Seed[] = [
@@ -91,6 +96,12 @@ const seeds: Seed[] = [
   // e exatamente o caso que distorce o painel se for tratado como gasto.
   { day: 26, description: "Aplicacao CDB", amount: -45000, category: "Investments", accountId: CHECKING_ID },
   { day: 23, description: "Pix enviado", amount: -2000, category: "Same person transfer", accountId: CHECKING_ID },
+  // Contrapartes: pagamentos recorrentes, recebimentos e um caso sem dados.
+  { day: 5, description: "Pix enviado - Maria Locadora", amount: -2600, category: "Housing", accountId: CHECKING_ID, parte: { nome: "Maria Locadora", doc: "12345678901" } },
+  { day: 8, description: "Pix enviado - Joao Diarista", amount: -320, category: "Services", accountId: CHECKING_ID, parte: { nome: "Joao Diarista", doc: "98765432100" } },
+  { day: 16, description: "Pix enviado - Joao Diarista", amount: -320, category: "Services", accountId: CHECKING_ID, parte: { nome: "Joao Diarista", doc: "98765432100" } },
+  { day: 21, description: "Pix recebido - Cliente Alfa Ltda", amount: 1500, category: "Income", accountId: CHECKING_ID, parte: { nome: "Cliente Alfa Ltda", doc: "12345678000199" } },
+  { day: 13, description: "Transferencia recebida", amount: 450, category: "Income", accountId: CHECKING_ID, semContraparte: true },
 ];
 
 /** Gera o extrato ficticio dentro do mes de referencia informado. */
@@ -110,5 +121,16 @@ export function mockTransactions(accountId: string, reference = new Date()): Tra
       category: seed.category,
       type: seed.amount < 0 ? ("DEBIT" as const) : ("CREDIT" as const),
       status: "POSTED",
+      counterparty: seed.semContraparte
+        ? { key: NAO_IDENTIFICADA, self: false }
+        : seed.parte
+          ? {
+              key: seed.parte.doc,
+              name: seed.parte.nome,
+              document: seed.parte.doc,
+              documentType: seed.parte.doc.length === 14 ? "CNPJ" : "CPF",
+              self: false,
+            }
+          : null,
     }));
 }

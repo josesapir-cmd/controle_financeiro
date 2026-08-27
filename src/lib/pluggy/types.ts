@@ -77,6 +77,8 @@ export interface Account {
   } | null;
 }
 
+import type { Counterparty } from "@/lib/finance/counterparties";
+
 export type TransactionType = "DEBIT" | "CREDIT";
 
 export interface Transaction {
@@ -95,6 +97,12 @@ export interface Transaction {
   categoryId?: string | null;
   type?: TransactionType;
   status?: string;
+  /**
+   * Contraparte extraida de paymentData na fronteira do servico. O bloco
+   * original nao trafega: ele carrega o CPF do proprio usuario e varios campos
+   * que a aplicacao nao usa.
+   */
+  counterparty?: Counterparty | null;
 }
 
 export interface Paginated<T> {

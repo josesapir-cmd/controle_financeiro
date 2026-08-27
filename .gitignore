@@ -10,5 +10,6 @@ npm-debug.log*
 .env*.local
 next-env.d.ts
 *.tsbuildinfo
+# itemIds e cadastro de contrapartes ficam fora do versionamento
 /data/*.json
 !/data/.gitkeep
