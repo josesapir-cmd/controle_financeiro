@@ -7,6 +7,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import postgres from "postgres";
+import { normalizeConnectionString } from "../src/lib/db/connection-string.mjs";
 import { migrate } from "../src/lib/db/migrate.mjs";
 
 async function lerEnv() {
@@ -36,7 +37,10 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-const sql = postgres(process.env.DATABASE_URL, { max: 1, ssl: "require" });
+const sql = postgres(normalizeConnectionString(process.env.DATABASE_URL), {
+  max: 1,
+  ssl: "require",
+});
 
 try {
   const novas = await migrate(sql, (m) => console.log(m));

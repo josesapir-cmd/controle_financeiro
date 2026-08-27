@@ -2,6 +2,8 @@ import "server-only";
 
 import postgres from "postgres";
 
+import { normalizeConnectionString } from "./connection-string.mjs";
+
 /**
  * Conexao com o Postgres (Neon).
  *
@@ -22,7 +24,7 @@ function criar() {
     throw new Error("DATABASE_URL nao definida. Copie a connection string do Neon.");
   }
 
-  return postgres(url, {
+  return postgres(normalizeConnectionString(url), {
     max: 3,
     idle_timeout: 20,
     connect_timeout: 10,
