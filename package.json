@@ -9,7 +9,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "migrate": "node --experimental-strip-types scripts/migrate.mjs"
+    "migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.3.0",

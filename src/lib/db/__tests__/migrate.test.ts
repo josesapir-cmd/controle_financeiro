@@ -1,6 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { migrate, type Executor } from "../migrate";
+import { migrate, type Executor } from "../migrate.mjs";
 
 /**
  * As migracoes rodam contra um Postgres de verdade, compilado para WASM. Isso

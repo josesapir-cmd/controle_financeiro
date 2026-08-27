@@ -7,7 +7,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import postgres from "postgres";
-import { migrate } from "../src/lib/db/migrate.ts";
+import { migrate } from "../src/lib/db/migrate.mjs";
 
 async function lerEnv() {
   for (const arquivo of [".env.local", ".env"]) {

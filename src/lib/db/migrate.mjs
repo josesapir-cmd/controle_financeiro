@@ -10,16 +10,22 @@ import path from "node:path";
  * testes.
  */
 
-export interface Executor {
-  unsafe(query: string): Promise<unknown>;
-}
+/**
+ * @typedef {{ unsafe: (query: string) => Promise<unknown> }} Executor
+ */
 
 const DIRETORIO = path.join(process.cwd(), "src", "lib", "db", "migrations");
 
-export async function migrate(
-  executor: Executor,
-  log: (mensagem: string) => void = () => {},
-): Promise<string[]> {
+/**
+ * Em JavaScript puro de proposito: e o mesmo arquivo usado pelo script de linha
+ * de comando e pelos testes, e importar TypeScript de um script depende de uma
+ * flag do Node que muda entre versoes.
+ *
+ * @param {Executor} executor
+ * @param {(mensagem: string) => void} [log]
+ * @returns {Promise<string[]>}
+ */
+export async function migrate(executor, log = () => {}) {
   await executor.unsafe(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       name       text PRIMARY KEY,
@@ -27,14 +33,14 @@ export async function migrate(
     );
   `);
 
-  const aplicadas = new Set(
-    ((await executor.unsafe("SELECT name FROM schema_migrations")) as { name: string }[]).map(
-      (linha) => linha.name,
-    ),
+  const linhas = /** @type {{ name: string }[]} */ (
+    await executor.unsafe("SELECT name FROM schema_migrations")
   );
+  const aplicadas = new Set(linhas.map((linha) => linha.name));
 
   const arquivos = (await readdir(DIRETORIO)).filter((nome) => nome.endsWith(".sql")).sort();
-  const novas: string[] = [];
+  /** @type {string[]} */
+  const novas = [];
 
   for (const arquivo of arquivos) {
     if (aplicadas.has(arquivo)) continue;
