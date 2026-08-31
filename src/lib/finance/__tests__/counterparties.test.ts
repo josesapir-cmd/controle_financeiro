@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { classify } from "../categories";
+import { totalExpenses } from "../summary";
 import {
   aggregateCounterparties,
   groupByCategory,
@@ -214,5 +216,40 @@ describe("classificacao em dois niveis", () => {
     const [hotel] = aggregateCounterparties([transacoes[0]]);
     expect(hotel.transactions).toHaveLength(1);
     expect(hotel.transactions[0].description).toBe("Hotel Fazenda Cascatinha");
+  });
+});
+
+describe("transferencia interna nao e despesa", () => {
+  /**
+   * Caso real: o envio para o saldo compartilhado do Nubank vem categorizado
+   * como "Transfer - Internal" e somava R$ 1,08 milhao contado como despesa. O
+   * gasto de verdade acontece depois, do outro lado, e registra-lo aqui tambem
+   * contaria o mesmo dinheiro duas vezes.
+   */
+  it("classifica Transfer - Internal como movimentacao", () => {
+    const t = {
+      id: "t",
+      accountId: "a",
+      description: "Transferencia",
+      amount: -22000,
+      currencyCode: "BRL",
+      date: "2026-08-10T15:00:00Z",
+      category: "Transfer - Internal",
+    };
+    expect(classify(t)).toBe("transfer");
+    expect(totalExpenses([t])).toBe(0);
+  });
+
+  it("mantem Pix como despesa, porque Pix para terceiro e pagamento", () => {
+    const t = {
+      id: "t",
+      accountId: "a",
+      description: "Pix enviado",
+      amount: -161,
+      currencyCode: "BRL",
+      date: "2026-08-10T15:00:00Z",
+      category: "Transfer - PIX",
+    };
+    expect(classify(t)).toBe("expense");
   });
 });

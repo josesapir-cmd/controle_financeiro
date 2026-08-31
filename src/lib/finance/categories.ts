@@ -22,17 +22,31 @@ const MOVIMENTACOES = new Set([
   "same person transfer",
   "transfers",
   "transfer",
+  // Transferencia interna a instituicao. No caso deste usuario e o envio para o
+  // saldo compartilhado do Nubank: R$ 1,08 milhao que o app contava como
+  // despesa, quando o gasto de verdade acontece depois, do outro lado.
+  "transfer - internal",
+  "transfer - ted",
+  "transfer - doc",
   "credit card payment",
   "credit card bill payment",
   "loans",
   "loan",
 ]);
 
+// "Transfer - PIX" fica de fora de proposito: Pix para terceiro e pagamento de
+// verdade. Pix para si mesmo ja e reconhecido pela comparacao de documentos das
+// duas pontas, sem depender da categoria.
+
 const TRADUCOES: Record<string, string> = {
   "investments": "Investimentos",
   "same person transfer": "Transferencia entre contas proprias",
   "transfers": "Transferencias",
   "transfer": "Transferencia",
+  "transfer - internal": "Transferencia interna",
+  "transfer - ted": "TED",
+  "transfer - doc": "DOC",
+  "transfer - pix": "Pix",
   "credit card payment": "Pagamento de fatura",
   "income": "Renda",
   "salary": "Salario",
