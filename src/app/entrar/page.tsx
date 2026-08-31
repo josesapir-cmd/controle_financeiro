@@ -8,7 +8,7 @@ export default async function Entrar() {
   if (await currentSession()) redirect("/");
 
   return (
-    <main className="page" style={{ maxWidth: 520 }}>
+    <main className="page solo">
       <h1>Controle Financeiro</h1>
       <div style={{ marginTop: 20 }}>
         <AuthForm />

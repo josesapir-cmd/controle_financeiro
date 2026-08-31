@@ -28,7 +28,7 @@ function formatarPeriodo(period: { from: string; to: string }): string {
 
 function Setup({ mensagem }: { mensagem: string }) {
   return (
-    <main className="page">
+    <main className="page solo">
       <h1>Controle Financeiro</h1>
       <section className="card" style={{ marginTop: 24 }}>
         <h2>Configuracao pendente</h2>

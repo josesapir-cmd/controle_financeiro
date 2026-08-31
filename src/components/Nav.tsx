@@ -87,6 +87,10 @@ const ITENS: Item[] = [
 export function Nav({ atual, contasQuery = "" }: { atual: Aba; contasQuery?: string }) {
   return (
     <nav className="abas" aria-label="Secoes">
+      {/* Marca no topo da barra lateral. Fica na marcacao, e nao em `content:`
+          de pseudo-elemento, para ser texto de verdade para quem le a tela. */}
+      <span className="abas-marca">Controle Financeiro</span>
+
       {ITENS.map((item) => {
         const destino =
           item.preservaContas && contasQuery ? `${item.href}?${contasQuery}` : item.href;

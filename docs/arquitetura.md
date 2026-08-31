@@ -220,6 +220,31 @@ Finance (`normalizeName`), entao nome identico pelas duas vias ja vira uma
 contraparte so, sem depender de conciliacao. A conciliacao cobre so o caso do
 nome cortado.
 
+### 7. Sistema visual
+
+A referencia e o template financeiro do AlignUI: fundo cinza-claro frio, cartoes
+brancos de canto generoso, Inter, azul unico como cor de acao. Tudo vive em
+`globals.css`, em tokens — nao ha CSS por componente, e trocar a paleta e trocar
+o bloco `:root`.
+
+Duas regras que a paleta impoe:
+
+- **Uma cor de acao.** O azul `--primary` e usado so por controles que agem.
+  Nada decora com ele.
+- **Cor de estado so comunica estado**, e nunca sozinha: linha repetida na
+  conferencia tem fundo avermelhado *e* etiqueta escrita, valor negativo tem cor
+  *e* sinal. Quem nao distingue as cores le a mesma informacao.
+
+A navegacao usa a mesma marcacao em todas as larguras: barra lateral fixa a
+partir de 1000px, pastilhas em linha entre 720 e 1000, barra inferior abaixo de
+720. A diferenca esta toda no CSS — nao ha duas listas de links para manter em
+sincronia, e os esqueletos de carregamento tambem renderizam a navegacao, senao
+a barra lateral pisca a cada troca de aba.
+
+A Inter e servida pelo proprio app: `next/font` a baixa no build e a hospeda no
+nosso dominio. Um `<link>` para o Google Fonts entregaria o IP e o horario de
+cada acesso a um terceiro, o que a secao seguinte proibe.
+
 ## O que nao muda
 
 - Nenhum dado financeiro trafega para terceiros **exceto** os prints do saldo
