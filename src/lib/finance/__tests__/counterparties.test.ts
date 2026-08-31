@@ -253,3 +253,53 @@ describe("transferencia interna nao e despesa", () => {
     expect(classify(t)).toBe("expense");
   });
 });
+
+describe("nome oficial e apelido", () => {
+  const transacao = (nome: string, chave = "k") => ({
+    id: "t1",
+    amount: -100,
+    date: "2026-05-12T15:00:00.000Z",
+    description: "compra",
+    counterparty: { key: chave, name: nome, self: false },
+  });
+
+  it("sem apelido, o nome exibido e o oficial", () => {
+    const [c] = aggregateCounterparties([transacao("HOTEL FAZENDA CASCATINHA LTDA")]);
+
+    expect(c.officialName).toBe("HOTEL FAZENDA CASCATINHA LTDA");
+    expect(c.alias).toBeUndefined();
+    expect(c.name).toBe("HOTEL FAZENDA CASCATINHA LTDA");
+  });
+
+  it("com apelido, o nome oficial continua acessivel em vez de ser sobrescrito", () => {
+    // Antes o apelido substituia o nome e apagava a unica pista de qual
+    // contraparte era aquela no extrato.
+    const [c] = aggregateCounterparties([transacao("HOTEL FAZENDA CASCATINHA LTDA")], {
+      k: { alias: "Cascatinha" },
+    });
+
+    expect(c.name).toBe("Cascatinha");
+    expect(c.alias).toBe("Cascatinha");
+    expect(c.officialName).toBe("HOTEL FAZENDA CASCATINHA LTDA");
+  });
+
+  it("o nome oficial cadastrado vence o que veio do extrato", () => {
+    const [c] = aggregateCounterparties([transacao("HOTEL FAZENDA CASC")], {
+      k: { officialName: "HOTEL FAZENDA CASCATINHA LTDA" },
+    });
+
+    expect(c.officialName).toBe("HOTEL FAZENDA CASCATINHA LTDA");
+  });
+
+  // Depois da conciliacao o mesmo balde recebe o nome recortado e o completo; a
+  // ordem em que chegam e acaso, e so o completo identifica.
+  it("num balde unido, fica com o nome mais longo", () => {
+    const [c] = aggregateCounterparties([
+      transacao("HOTEL FAZENDA CASC"),
+      { ...transacao("HOTEL FAZENDA CASCATINHA LTDA"), id: "t2" },
+    ]);
+
+    expect(c.officialName).toBe("HOTEL FAZENDA CASCATINHA LTDA");
+    expect(c.count).toBe(2);
+  });
+});

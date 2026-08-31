@@ -43,6 +43,7 @@ describe("migracoes", () => {
       "auth_challenges",
       "connections",
       "counterparty_labels",
+      "counterparty_links",
       "credentials",
       "schema_migrations",
       "sessions",

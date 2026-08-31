@@ -176,6 +176,50 @@ E uma ponte, nao a fonte definitiva: o arquivo do Poupa.ai preenchido pela
 assistente traz as mesmas despesas ja categorizadas, e substitui a leitura por
 foto quando for carregado.
 
+### 6. Contraparte: nome oficial, apelido, e conciliacao de nomes recortados
+
+A contraparte passa a ter dois nomes, porque sao duas coisas:
+
+- **nome oficial** — como ela aparece no extrato. Serve para reconhecer e para
+  conciliar.
+- **apelido** — a abreviacao usada para falar dela ("Cascatinha").
+
+Antes havia so o apelido, e ele *substituia* o nome do extrato na exibicao.
+Batizar uma contraparte apagava a unica pista de qual lancamento era aquele.
+Agora o apelido e o titulo e o nome oficial fica visivel abaixo.
+
+**Conciliacao.** A tela do saldo compartilhado corta o nome do estabelecimento
+("HOTEL FAZENDA CASC"); o mesmo gasto, quando chega pelo Open Finance, vem
+inteiro ("HOTEL FAZENDA CASCATINHA LTDA"). Sao a mesma contraparte, e trata-las
+como duas parte o historico e a classificacao em dois.
+
+A comparacao mora na aplicacao, nao no SQL, e nao ha alternativa: o fingerprint
+gravado e um HMAC, entao o banco nao tem como saber que um nome e comeco do
+outro. `finance/conciliacao.ts` compara os nomes ja decifrados e sugere unioes;
+o servico reescreve a chave da transacao antes de agregar.
+
+As regras, e o que cada uma evita:
+
+- direcao sempre do nome curto para o longo, e **nunca a partir de uma
+  contraparte com documento**: CPF e CNPJ sao identidade forte, e dobra-los num
+  casamento de nome trocaria uma identidade forte por uma fraca.
+- prefixo minimo de 12 caracteres, ou 8 quando o proprio texto traz reticencias
+  — ali ja sabemos que ha continuacao. "PADARIA" prefixa meia duzia de padarias
+  diferentes.
+- prefixo que serve a mais de um nome completo **nunca** vira uniao automatica:
+  escolher no chute misturaria o gasto de dois lugares. Vira sugestao.
+- toda uniao, automatica ou nao, fica visivel e reversivel na aba de
+  contrapartes. A recusa tambem e gravada (destino nulo), senao a mesma
+  sugestao voltaria para sempre.
+- o rotulo segue a contraparte unida: classificacao feita antes da uniao nao se
+  perde, porque perder trabalho ja feito e a maneira mais rapida de alguem parar
+  de classificar.
+
+As despesas lidas de print usam a **mesma** normalizacao de nome que o Open
+Finance (`normalizeName`), entao nome identico pelas duas vias ja vira uma
+contraparte so, sem depender de conciliacao. A conciliacao cobre so o caso do
+nome cortado.
+
 ## O que nao muda
 
 - Nenhum dado financeiro trafega para terceiros **exceto** os prints do saldo

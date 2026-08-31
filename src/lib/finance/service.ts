@@ -4,6 +4,7 @@ import { fromPostgres, type Db } from "@/lib/db/adapter";
 import { getSql } from "@/lib/db/client";
 import {
   listAccounts,
+  listCounterpartyLinks,
   listLabels,
   listTransactions,
   listarImportacoes,
@@ -15,6 +16,13 @@ import { classificarParaConferencia } from "@/lib/importacao/linhas";
 import { mockAccounts, mockItems, mockTransactions } from "@/lib/pluggy/mock";
 import type { AccountWithConnector, Transaction } from "@/lib/pluggy/types";
 import { classify } from "./categories";
+import {
+  chaveEfetiva,
+  mapaDeConciliacao,
+  sugerirConciliacoes,
+  type Candidata,
+  type Sugestao,
+} from "./conciliacao";
 import {
   aggregateCounterparties,
   type CounterpartyRegistry,
@@ -42,6 +50,15 @@ import {
 export interface Period {
   from: string;
   to: string;
+}
+
+/** Uniao (ou separacao) de contrapartes ja decidida pelo usuario. */
+export interface Decisao {
+  de: string;
+  /** null significa "sao contrapartes diferentes mesmo". */
+  para: string | null;
+  nomeDe: string;
+  nomePara?: string;
 }
 
 export interface AccountOption {
@@ -119,6 +136,7 @@ async function carregar(
   transacoes: Transaction[];
   registry: CounterpartyRegistry;
   status: SyncStatus[];
+  decisoes: Record<string, string | null>;
 }> {
   if (useMock()) {
     const todas = mockAccounts.map((conta) => ({
@@ -137,15 +155,23 @@ async function carregar(
       })),
     );
 
-    return { contas: selecionadas, todasAsContas: todas, transacoes, registry: {}, status: [] };
+    return {
+      contas: selecionadas,
+      todasAsContas: todas,
+      transacoes,
+      registry: {},
+      status: [],
+      decisoes: {},
+    };
   }
 
   const conexao = db();
-  const [contasBrutas, linhas, rotulos, estado] = await Promise.all([
+  const [contasBrutas, linhas, rotulos, estado, decisoes] = await Promise.all([
     listAccounts(conexao),
     listTransactions(conexao, { ...periodo, accountIds }),
     listLabels(conexao),
     syncStatus(conexao),
+    listCounterpartyLinks(conexao),
   ]);
 
   const todasAsContas = contasBrutas.map(paraContaExibivel);
@@ -159,10 +185,118 @@ async function carregar(
       category: rotulo.category ?? undefined,
       subcategory: rotulo.subcategory ?? undefined,
       alias: rotulo.alias ?? undefined,
+      officialName: rotulo.officialName ?? undefined,
     };
   }
 
-  return { contas, todasAsContas, transacoes: linhas.map(paraTransacao), registry, status: estado };
+  return {
+    contas,
+    todasAsContas,
+    transacoes: linhas.map(paraTransacao),
+    registry,
+    status: estado,
+    decisoes,
+  };
+}
+
+/**
+ * Aplica a conciliacao de contrapartes as transacoes do periodo.
+ *
+ * Um nome recortado de print e o nome inteiro do Open Finance sao a mesma
+ * contraparte; sem isso o historico e a classificacao ficam partidos em dois. A
+ * uniao acontece aqui, reescrevendo a chave antes de agregar, e nao no banco: o
+ * fingerprint gravado e um HMAC, entao so na aplicacao — com os nomes ja
+ * decifrados — da para ver que um e comeco do outro.
+ *
+ * Devolve tambem as sugestoes, porque a tela precisa mostrar o que foi unido
+ * sozinho (para poder ser desfeito) e o que espera decisao.
+ */
+function conciliar(
+  transacoes: Transaction[],
+  decisoes: Record<string, string | null>,
+): { transacoes: Transaction[]; sugestoes: Sugestao[]; decididas: Decisao[] } {
+  const candidatas = new Map<string, Candidata>();
+
+  for (const t of transacoes) {
+    const c = t.counterparty;
+    if (!c) continue;
+
+    const atual = candidatas.get(c.key);
+    if (atual) {
+      atual.count += 1;
+      // O nome mais longo representa o balde: e o que tem chance de ser o
+      // completo, e a comparacao por prefixo depende dele.
+      if (c.name && c.name.length > atual.name.length) atual.name = c.name;
+      if (c.document) atual.hasDocument = true;
+    } else {
+      candidatas.set(c.key, {
+        key: c.key,
+        name: c.name ?? "",
+        hasDocument: Boolean(c.document),
+        count: 1,
+      });
+    }
+  }
+
+  const sugestoes = sugerirConciliacoes([...candidatas.values()], decisoes);
+  const mapa = mapaDeConciliacao(sugestoes, decisoes);
+
+  // Decisoes ja tomadas, para a tela poder mostra-las e desfaze-las. So as que
+  // aparecem nos dados do periodo: as outras nao teriam nome para exibir.
+  const nome = (chave: string) => candidatas.get(chave)?.name || chave;
+  const decididas: Decisao[] = Object.entries(decisoes)
+    .filter(([de]) => candidatas.has(de))
+    .map(([de, para]) => ({
+      de,
+      para,
+      nomeDe: nome(de),
+      nomePara: para ? nome(para) : undefined,
+    }));
+
+  if (Object.keys(mapa).length === 0) return { transacoes, sugestoes, decididas };
+
+  return {
+    transacoes: transacoes.map((t) =>
+      t.counterparty
+        ? { ...t, counterparty: { ...t.counterparty, key: chaveEfetiva(t.counterparty.key, mapa) } }
+        : t,
+    ),
+    sugestoes,
+    decididas,
+  };
+}
+
+/**
+ * O rotulo segue a contraparte unida.
+ *
+ * Se o usuario ja tinha classificado o nome recortado antes da uniao, essa
+ * classificacao nao pode se perder ao virar outra chave — perder trabalho ja
+ * feito e a maneira mais rapida de o usuario parar de classificar.
+ */
+function herdarRotulos(
+  registry: CounterpartyRegistry,
+  sugestoes: Sugestao[],
+  decisoes: Record<string, string | null>,
+): CounterpartyRegistry {
+  const mapa = mapaDeConciliacao(sugestoes, decisoes);
+  const resultado: CounterpartyRegistry = { ...registry };
+
+  for (const [de, para] of Object.entries(mapa)) {
+    const origem = registry[de];
+    if (!origem) continue;
+
+    const destino = resultado[para] ?? {};
+    resultado[para] = {
+      // O que o destino ja tinha vence: e o cadastro da contraparte que
+      // sobreviveu a uniao.
+      category: destino.category ?? origem.category,
+      subcategory: destino.subcategory ?? origem.subcategory,
+      alias: destino.alias ?? origem.alias,
+      officialName: destino.officialName ?? origem.officialName,
+    };
+  }
+
+  return resultado;
 }
 
 function opcoes(contas: AccountWithConnector[]): AccountOption[] {
@@ -293,6 +427,10 @@ export interface CounterpartiesData {
   selectedAccountIds: string[];
   failures: { itemId: string; message: string }[];
   isMock: boolean;
+  /** Unioes aplicadas sozinhas e as que esperam decisao. */
+  conciliacoes: Sugestao[];
+  /** Decisoes ja registradas pelo usuario, para poderem ser revistas. */
+  conciliacoesDecididas: Decisao[];
 }
 
 export async function loadCounterparties(
@@ -300,18 +438,21 @@ export async function loadCounterparties(
   options: { includeInternal?: boolean; accountIds?: string[] } = {},
 ): Promise<CounterpartiesData> {
   const accountIds = options.accountIds ?? [];
-  const { contas, todasAsContas, transacoes, registry, status } = await carregar(
+  const { contas, todasAsContas, transacoes, registry, status, decisoes } = await carregar(
     period,
     accountIds,
   );
 
+  const conciliado = conciliar(transacoes, decisoes);
+  const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
+
   // Transferencia entre contas proprias e aplicacao nao sao contraparte: o
   // dinheiro mudou de bolso dentro do proprio patrimonio.
   const relevantes = options.includeInternal
-    ? transacoes
-    : transacoes.filter((t) => !t.counterparty?.self && classify(t) !== "transfer");
+    ? conciliado.transacoes
+    : conciliado.transacoes.filter((t) => !t.counterparty?.self && classify(t) !== "transfer");
 
-  const counterparties = aggregateCounterparties(relevantes, registry);
+  const counterparties = aggregateCounterparties(relevantes, cadastro);
 
   const accountNames: Record<string, string> = {};
   for (const conta of contas) {
@@ -329,6 +470,8 @@ export async function loadCounterparties(
     selectedAccountIds: accountIds,
     failures: falhas(status),
     isMock: useMock(),
+    conciliacoes: conciliado.sugestoes,
+    conciliacoesDecididas: conciliado.decididas,
   };
 }
 

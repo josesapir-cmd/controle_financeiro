@@ -348,12 +348,20 @@ export interface LabelRow {
   fingerprint: string;
   category: string | null;
   subcategory: string | null;
+  /** Apelido: a abreviacao usada para falar da contraparte. */
   alias: string | null;
+  /**
+   * Nome oficial: como a contraparte aparece no extrato. Guardado quando o
+   * usuario corrige ou fixa o nome — util sobretudo depois de conciliar um nome
+   * recortado de print com o nome inteiro do Open Finance.
+   */
+  officialName: string | null;
 }
 
 export async function listLabels(db: Db): Promise<LabelRow[]> {
   const linhas = await db.query<Record<string, unknown>>(
-    `SELECT fingerprint, category, subcategory, alias_enc FROM counterparty_labels`,
+    `SELECT fingerprint, category, subcategory, alias_enc, official_name_enc
+       FROM counterparty_labels`,
   );
 
   return linhas.map((linha) => ({
@@ -361,6 +369,7 @@ export async function listLabels(db: Db): Promise<LabelRow[]> {
     category: linha.category ? String(linha.category) : null,
     subcategory: linha.subcategory ? String(linha.subcategory) : null,
     alias: decryptOptional(linha.alias_enc as string | null),
+    officialName: decryptOptional(linha.official_name_enc as string | null),
   }));
 }
 
@@ -374,28 +383,84 @@ export async function listLabels(db: Db): Promise<LabelRow[]> {
 export async function setLabel(
   db: Db,
   fp: string,
-  valores: { category?: string | null; subcategory?: string | null; alias?: string | null },
+  valores: {
+    category?: string | null;
+    subcategory?: string | null;
+    alias?: string | null;
+    officialName?: string | null;
+  },
 ): Promise<void> {
   const category = valores.category?.trim() || null;
   const subcategory = valores.subcategory?.trim() || null;
   const alias = valores.alias?.trim() || null;
+  const officialName = valores.officialName?.trim() || null;
 
   // Registro sem nenhum rotulo nao precisa ocupar espaco.
-  if (!category && !subcategory && !alias) {
+  if (!category && !subcategory && !alias && !officialName) {
     await db.query(`DELETE FROM counterparty_labels WHERE fingerprint = $1`, [fp]);
     return;
   }
 
   await db.query(
-    `INSERT INTO counterparty_labels (fingerprint, category, subcategory, alias_enc, updated_at)
-     VALUES ($1, $2, $3, $4, now())
+    `INSERT INTO counterparty_labels
+       (fingerprint, category, subcategory, alias_enc, official_name_enc, updated_at)
+     VALUES ($1, $2, $3, $4, $5, now())
      ON CONFLICT (fingerprint) DO UPDATE
        SET category = EXCLUDED.category,
            subcategory = EXCLUDED.subcategory,
            alias_enc = EXCLUDED.alias_enc,
+           official_name_enc = EXCLUDED.official_name_enc,
            updated_at = now()`,
-    [fp, category, subcategory, encryptOptional(alias)],
+    [fp, category, subcategory, encryptOptional(alias), encryptOptional(officialName)],
   );
+}
+
+/**
+ * Decisoes de identidade entre contrapartes.
+ *
+ * Destino preenchido significa "e a mesma contraparte"; destino nulo significa
+ * "sao diferentes mesmo, pare de sugerir". Guardamos as duas porque a segunda e
+ * informacao tanto quanto a primeira: sem ela, a mesma sugestao recusada
+ * voltaria a aparecer para sempre.
+ *
+ * So a decisao trafega. Os nomes ficam de fora — a comparacao acontece na
+ * aplicacao, sobre valores decifrados, e o banco nao precisa ve-los.
+ */
+export async function listCounterpartyLinks(db: Db): Promise<Record<string, string | null>> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT from_fingerprint, to_fingerprint FROM counterparty_links`,
+  );
+
+  const decisoes: Record<string, string | null> = {};
+  for (const linha of linhas) {
+    decisoes[String(linha.from_fingerprint)] = linha.to_fingerprint
+      ? String(linha.to_fingerprint)
+      : null;
+  }
+  return decisoes;
+}
+
+export async function setCounterpartyLink(
+  db: Db,
+  de: string,
+  para: string | null,
+): Promise<void> {
+  // Uma contraparte apontando para si mesma nao e uniao: e ruido que produziria
+  // cadeia degenerada no mapa.
+  if (!de || de === para) return;
+
+  await db.query(
+    `INSERT INTO counterparty_links (from_fingerprint, to_fingerprint, decided_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (from_fingerprint) DO UPDATE
+       SET to_fingerprint = EXCLUDED.to_fingerprint, decided_at = now()`,
+    [de, para],
+  );
+}
+
+/** Remove a decisao, devolvendo a contraparte a sugestao automatica. */
+export async function clearCounterpartyLink(db: Db, de: string): Promise<void> {
+  await db.query(`DELETE FROM counterparty_links WHERE from_fingerprint = $1`, [de]);
 }
 
 export interface SyncStatus {

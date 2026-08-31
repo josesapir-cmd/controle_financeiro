@@ -4,18 +4,21 @@ import {
   upsertTransactions,
   type TransactionInput,
 } from "@/lib/db/repository";
+import { normalizeName } from "@/lib/finance/counterparties";
 import { noonAt } from "@/lib/finance/dates";
-import { chaveDeComparacao, type Linha } from "./linhas";
+import { type Linha } from "./linhas";
 
 /**
  * Gravacao das despesas do saldo compartilhado conferidas pelo usuario.
  *
  * Escolhas que valem registro:
  *
- * - a contraparte e a propria descricao. Assim esses gastos caem na aba de
- *   contrapartes junto com todos os outros e podem receber categoria e
- *   subcategoria pelo mesmo cadastro — sem isso, seriam um monte de linhas sem
- *   classificacao possivel.
+ * - a contraparte e a propria descricao, com a MESMA normalizacao que o Open
+ *   Finance usa para contraparte sem documento (`normalizeName`). Assim esses
+ *   gastos caem na aba de contrapartes junto com todos os outros, e um nome que
+ *   chegue identico pelas duas vias vira uma contraparte so, sem depender de
+ *   conciliacao. Nome recortado pelo print, que nao casa exato, e tratado por
+ *   `finance/conciliacao.ts`.
  * - o horario e meio-dia local. O print nao mostra hora; inventar uma exata
  *   seria pior. A etiqueta de origem fica visivel no detalhe do lancamento para
  *   que ninguem leia esse horario como medido.
@@ -35,7 +38,7 @@ export function paraLancamento(linha: Linha, accountId: string): TransactionInpu
     currency: "BRL",
     category: CATEGORIA,
     description: linha.descricao,
-    counterpartyKey: `saldo-compartilhado|${chaveDeComparacao(linha.descricao)}`,
+    counterpartyKey: normalizeName(linha.descricao),
     counterpartyName: linha.descricao,
     counterpartySelf: false,
     details: [

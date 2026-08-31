@@ -6,6 +6,9 @@ import { migrate } from "../migrate.mjs";
 import {
   accountFingerprint,
   anexarImportacao,
+  clearCounterpartyLink,
+  listCounterpartyLinks,
+  setCounterpartyLink,
   criarImportacao,
   encerrarImportacao,
   ensureSharedBalanceAccount,
@@ -499,5 +502,62 @@ describe("lotes lidos de print", () => {
     const novo = await criarImportacao(db, { linhas, images: 1 });
 
     expect((await listarImportacoes(db)).map((l) => l.id)).toEqual([novo, antigo]);
+  });
+});
+
+describe("nome oficial da contraparte", () => {
+  it("guarda nome oficial e apelido como campos distintos, ambos cifrados", async () => {
+    await setLabel(db, "fp1", { alias: "Cascatinha", officialName: "HOTEL FAZENDA CASCATINHA LTDA" });
+
+    const [rotulo] = await listLabels(db);
+    expect(rotulo.alias).toBe("Cascatinha");
+    expect(rotulo.officialName).toBe("HOTEL FAZENDA CASCATINHA LTDA");
+
+    const cru = await db.query<{ alias_enc: string; official_name_enc: string }>(
+      "SELECT alias_enc, official_name_enc FROM counterparty_labels",
+    );
+    expect(cru[0].alias_enc).not.toContain("Cascatinha");
+    expect(cru[0].official_name_enc).not.toContain("CASCATINHA");
+  });
+
+  it("apaga o registro so quando nenhum dos campos sobra", async () => {
+    await setLabel(db, "fp1", { officialName: "SO O NOME" });
+    expect(await listLabels(db)).toHaveLength(1);
+
+    await setLabel(db, "fp1", { officialName: "" });
+    expect(await listLabels(db)).toHaveLength(0);
+  });
+});
+
+describe("decisoes de identidade entre contrapartes", () => {
+  it("guarda uniao e separacao, distinguindo destino nulo de ausencia", async () => {
+    await setCounterpartyLink(db, "curta", "longa");
+    await setCounterpartyLink(db, "outra", null);
+
+    const decisoes = await listCounterpartyLinks(db);
+    expect(decisoes).toEqual({ curta: "longa", outra: null });
+    // "outra" existe com valor nulo: e a decisao "sao diferentes", nao a
+    // ausencia de decisao. A distincao e o que impede a sugestao de voltar.
+    expect("outra" in decisoes).toBe(true);
+  });
+
+  it("a decisao mais recente substitui a anterior", async () => {
+    await setCounterpartyLink(db, "curta", "longa");
+    await setCounterpartyLink(db, "curta", null);
+
+    expect(await listCounterpartyLinks(db)).toEqual({ curta: null });
+  });
+
+  it("ignora contraparte apontando para si mesma", async () => {
+    await setCounterpartyLink(db, "mesma", "mesma");
+
+    expect(await listCounterpartyLinks(db)).toEqual({});
+  });
+
+  it("limpar devolve a contraparte ao palpite automatico", async () => {
+    await setCounterpartyLink(db, "curta", null);
+    await clearCounterpartyLink(db, "curta");
+
+    expect(await listCounterpartyLinks(db)).toEqual({});
   });
 });

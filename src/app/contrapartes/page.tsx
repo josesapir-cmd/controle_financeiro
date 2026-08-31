@@ -13,9 +13,15 @@ import {
 } from "@/lib/finance/counterparties";
 import { currentMonthRange, localTime } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
-import { loadCounterparties, loadTaxonomy } from "@/lib/finance/service";
+import type { Sugestao } from "@/lib/finance/conciliacao";
+import { loadCounterparties, loadTaxonomy, type Decisao } from "@/lib/finance/service";
 import { PeriodForm } from "./PeriodForm";
-import { salvarContraparte } from "./actions";
+import {
+  reverDecisao,
+  salvarContraparte,
+  separarContrapartes,
+  unirContrapartes,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +79,11 @@ function IdentidadeContraparte({
       <div>
         <span className="description">{c.name}</span>
         {c.self ? <span className="tag">propria</span> : null}
+        {/* O nome oficial so aparece quando o apelido o esconde: sem apelido,
+            ele ja e o titulo, e repeti-lo seria ruido. */}
+        {c.alias && c.officialName && c.officialName !== c.alias ? (
+          <div className="account-meta oficial">{c.officialName}</div>
+        ) : null}
         <div className="account-meta">
           {c.count} {c.count === 1 ? "movimentacao" : "movimentacoes"} · ultima em{" "}
           {dataCurta.format(new Date(c.lastDate))}
@@ -80,6 +91,144 @@ function IdentidadeContraparte({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Contrapartes que parecem ser a mesma com nomes de tamanhos diferentes.
+ *
+ * O caso e o print do saldo compartilhado, que corta o nome do estabelecimento
+ * enquanto o Open Finance o entrega inteiro. Uniao errada mistura o gasto de
+ * dois lugares, entao o que e ambiguo espera decisao e o que foi unido sozinho
+ * continua visivel e reversivel — nada acontece em silencio.
+ */
+function Conciliacoes({
+  sugestoes,
+  decididas,
+}: {
+  sugestoes: Sugestao[];
+  decididas: Decisao[];
+}) {
+  const automaticas = sugestoes.filter((s) => s.automatica);
+  const aguardando = sugestoes.filter((s) => !s.automatica);
+  const separadas = decididas.filter((d) => d.para === null);
+  const unidas = decididas.filter((d) => d.para !== null);
+
+  if (sugestoes.length === 0 && decididas.length === 0) return null;
+
+  return (
+    <section className="conciliacoes">
+      <h2>Contrapartes com o mesmo nome em tamanhos diferentes</h2>
+      <p className="empty" style={{ marginTop: -6, marginBottom: 14 }}>
+        Print de tela corta o nome do estabelecimento; o Open Finance traz o nome inteiro. Quando
+        sao a mesma contraparte, unir mantem o historico e a classificacao num lugar so.
+      </p>
+
+      {aguardando.length > 0 ? (
+        <div className="card">
+          <h2>Precisam da sua decisao ({aguardando.length})</h2>
+          <ul className="conciliacao-lista">
+            {aguardando.map((s) => (
+              <li key={s.de}>
+                <div>
+                  <span className="description">{s.nomeDe}</span>
+                  <span className="seta">→</span>
+                  <span className="description">{s.nomePara}</span>
+                  <div className="account-meta">{s.motivo}</div>
+                </div>
+                <div className="conciliacao-acoes">
+                  <form action={unirContrapartes}>
+                    <input type="hidden" name="de" value={s.de} />
+                    <input type="hidden" name="para" value={s.para} />
+                    <button type="submit">E a mesma</button>
+                  </form>
+                  <form action={separarContrapartes}>
+                    <input type="hidden" name="de" value={s.de} />
+                    <button type="submit" className="danger">
+                      Sao diferentes
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {automaticas.length > 0 || unidas.length > 0 ? (
+        <details className="bloco-prontas" style={{ marginTop: 12 }}>
+          <summary>
+            <span className="description">
+              {automaticas.length + unidas.length} ja unidas
+            </span>
+            <span className="account-meta">abrir para revisar ou separar</span>
+          </summary>
+          <div className="card" style={{ marginTop: 12 }}>
+            <ul className="conciliacao-lista">
+              {automaticas.map((s) => (
+                <li key={s.de}>
+                  <div>
+                    <span className="description">{s.nomeDe}</span>
+                    <span className="seta">→</span>
+                    <span className="description">{s.nomePara}</span>
+                    <div className="account-meta">unida sozinha · {s.motivo}</div>
+                  </div>
+                  <form action={separarContrapartes}>
+                    <input type="hidden" name="de" value={s.de} />
+                    <button type="submit" className="danger">
+                      Separar
+                    </button>
+                  </form>
+                </li>
+              ))}
+              {unidas.map((d) => (
+                <li key={d.de}>
+                  <div>
+                    <span className="description">{d.nomeDe}</span>
+                    <span className="seta">→</span>
+                    <span className="description">{d.nomePara}</span>
+                    <div className="account-meta">unida por voce</div>
+                  </div>
+                  <form action={separarContrapartes}>
+                    <input type="hidden" name="de" value={d.de} />
+                    <button type="submit" className="danger">
+                      Separar
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </details>
+      ) : null}
+
+      {separadas.length > 0 ? (
+        <details className="bloco-prontas" style={{ marginTop: 12 }}>
+          <summary>
+            <span className="description">{separadas.length} mantidas separadas</span>
+            <span className="account-meta">abrir para rever</span>
+          </summary>
+          <div className="card" style={{ marginTop: 12 }}>
+            <ul className="conciliacao-lista">
+              {separadas.map((d) => (
+                <li key={d.de}>
+                  <div>
+                    <span className="description">{d.nomeDe}</span>
+                    <div className="account-meta">voce marcou como contraparte propria</div>
+                  </div>
+                  <form action={reverDecisao}>
+                    <input type="hidden" name="de" value={d.de} />
+                    <button type="submit" className="danger">
+                      Rever
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </details>
+      ) : null}
+    </section>
   );
 }
 
@@ -181,10 +330,19 @@ function FormularioClassificacao({ c, voltarPara }: { c: CounterpartyTotal; volt
       />
       <input
         type="text"
+        name="officialName"
+        placeholder="Nome oficial"
+        defaultValue={c.officialName ?? ""}
+        aria-label={`Nome oficial de ${c.name}`}
+        title="Como aparece no extrato"
+      />
+      <input
+        type="text"
         name="alias"
         placeholder="Apelido"
-        defaultValue={c.name !== c.key ? c.name : ""}
+        defaultValue={c.alias ?? ""}
         aria-label={`Apelido de ${c.name}`}
+        title="Como voce chama esta contraparte"
       />
       <button type="submit">Salvar</button>
       {voltarPara ? (
@@ -333,6 +491,11 @@ export default async function Contrapartes({
           recebidas, o banco nem sempre informa quem enviou — o dado nao existe na origem.
         </p>
       ) : null}
+
+      <Conciliacoes
+        sugestoes={dados.conciliacoes}
+        decididas={dados.conciliacoesDecididas}
+      />
 
       {classificadas.length > 0 ? (
         <section>

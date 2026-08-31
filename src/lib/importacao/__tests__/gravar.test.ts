@@ -4,6 +4,7 @@ import { resetKeyCache } from "@/lib/crypto";
 import type { Db } from "@/lib/db/adapter";
 import { migrate } from "@/lib/db/migrate.mjs";
 import { listAccounts, listTransactions } from "@/lib/db/repository";
+import { normalizeName } from "@/lib/finance/counterparties";
 import { localDay } from "@/lib/finance/dates";
 import { gravarLinhas, paraLancamento } from "../gravar";
 import { mesclar, validar, type Linha } from "../linhas";
@@ -63,7 +64,16 @@ describe("paraLancamento", () => {
     const lancamento = paraLancamento(exemplo(), "conta");
 
     expect(lancamento.counterpartyName).toBe("Mercado");
-    expect(lancamento.counterpartyKey).toContain("saldo-compartilhado|");
+  });
+
+  // A chave usa a MESMA normalizacao que o Open Finance aplica a contraparte sem
+  // documento. Com prefixo proprio, o mesmo nome chegando pelas duas vias virava
+  // duas contrapartes que nem a conciliacao uniria — os nomes sao identicos, e
+  // ela so procura um nome que seja comeco do outro.
+  it("gera a mesma chave que o Open Finance geraria para o mesmo nome", () => {
+    const lancamento = paraLancamento(exemplo(), "conta");
+
+    expect(lancamento.counterpartyKey).toBe(normalizeName("Mercado"));
   });
 
   it("diz no detalhe que o horario nao foi medido", () => {

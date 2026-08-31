@@ -126,7 +126,10 @@ export function extractCounterparty(
 export interface CounterpartyEntryRegistry {
   category?: string;
   subcategory?: string;
+  /** Abreviacao usada para falar da contraparte. */
   alias?: string;
+  /** Nome oficial fixado pelo usuario, quando o do extrato nao serve. */
+  officialName?: string;
 }
 
 export interface CounterpartyRegistry {
@@ -135,8 +138,20 @@ export interface CounterpartyRegistry {
 
 export interface CounterpartyTotal {
   key: string;
-  /** Nome para exibicao: apelido cadastrado, nome do banco, ou recuo. */
+  /**
+   * Nome para exibicao. Prefere o apelido, porque e como o usuario se refere a
+   * contraparte; sem apelido, cai no nome oficial.
+   */
   name: string;
+  /**
+   * Nome oficial: como a contraparte aparece no extrato. Fica separado do
+   * apelido porque sao coisas diferentes — este identifica e concilia, o outro
+   * so serve para ler. Some-los num campo so, como era antes, fazia o apelido
+   * apagar a unica pista de qual contraparte era aquela.
+   */
+  officialName?: string;
+  /** Apelido cadastrado, quando existe. */
+  alias?: string;
   document?: string;
   documentType?: string;
   category?: string;
@@ -235,8 +250,13 @@ export function aggregateCounterparties(
     if (transaction.date > bucket.lastDate) bucket.lastDate = transaction.date;
 
     // O nome pode faltar em algumas transacoes e vir em outras da mesma
-    // contraparte; ficamos com o primeiro que aparecer.
-    if (!bucket.name && contraparte.name) bucket.name = contraparte.name;
+    // contraparte. Ficamos com o mais longo, nao com o primeiro: depois da
+    // conciliacao o mesmo balde recebe o nome recortado do print e o nome
+    // inteiro do Open Finance, e a ordem em que chegam e acaso — o completo e
+    // que identifica.
+    if (contraparte.name && contraparte.name.length > bucket.name.length) {
+      bucket.name = contraparte.name;
+    }
     if (!bucket.document && contraparte.document) bucket.document = contraparte.document;
 
     buckets.set(contraparte.key, bucket);
@@ -254,12 +274,19 @@ export function aggregateCounterparties(
       }
       const sugestao = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
       const cadastro = registry[bucket.key];
+
+      // O nome oficial cadastrado tem precedencia sobre o que veio do extrato:
+      // e a correcao explicita do usuario sobre um nome truncado ou sujo.
+      const oficial =
+        cadastro?.officialName ||
+        bucket.name ||
+        (bucket.key === NAO_IDENTIFICADA ? "Contraparte nao identificada" : undefined);
+
       return {
         ...bucket,
-        name:
-          cadastro?.alias ||
-          bucket.name ||
-          (bucket.key === NAO_IDENTIFICADA ? "Contraparte nao identificada" : bucket.key),
+        officialName: oficial,
+        alias: cadastro?.alias,
+        name: cadastro?.alias || oficial || bucket.key,
         category: cadastro?.category,
         subcategory: cadastro?.subcategory,
         suggestedCategory: sugestao ? translateCategory(sugestao) : undefined,

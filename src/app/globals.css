@@ -1330,3 +1330,56 @@ td input[type="checkbox"] {
   margin-top: 4px;
   line-height: 1.5;
 }
+
+/* --- Conciliacao de contrapartes --- */
+.conciliacoes .card > h2 {
+  margin-bottom: 10px;
+}
+
+ul.conciliacao-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+ul.conciliacao-lista > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--gridline);
+}
+
+ul.conciliacao-lista > li:last-child {
+  border-bottom: none;
+}
+
+ul.conciliacao-lista .description {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* A seta e a relacao: nome curto vira nome completo. */
+.seta {
+  margin: 0 8px;
+  color: var(--text-muted);
+}
+
+.conciliacao-acoes {
+  display: flex;
+  gap: 8px;
+}
+
+.conciliacao-acoes button,
+ul.conciliacao-lista button {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* Nome oficial sob o apelido: presente para identificar, discreto para nao
+   competir com o nome que o usuario escolheu. */
+.account-meta.oficial {
+  color: var(--text-secondary);
+}
