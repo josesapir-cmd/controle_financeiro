@@ -15,7 +15,29 @@ const RENEWAL_MARGIN_MS = 5 * 60 * 1000;
  * limite de tempo. Sem isso, uma API lenta nao vira erro — vira pagina em branco
  * carregando para sempre, que e muito pior de diagnosticar do que uma mensagem.
  */
-const REQUEST_TIMEOUT_MS = Number(process.env.PLUGGY_TIMEOUT_MS ?? 15000);
+const TIMEOUT_PADRAO_MS = 15_000;
+
+/**
+ * Le um numero do ambiente com recuo seguro.
+ *
+ * `Number(process.env.X ?? padrao)` parece equivalente e nao e: `??` so cobre
+ * null e undefined, entao uma variavel definida porem VAZIA passa direto e
+ * `Number("")` vale 0. Foi o que aconteceu — um PLUGGY_TIMEOUT_MS vazio em
+ * producao virou timeout de zero milissegundos, abortando toda chamada antes de
+ * sair, todos os dias, com a mensagem "nao respondeu em 0s".
+ *
+ * Valor invalido tambem cai no padrao: um timeout de zero e pior que nenhum
+ * timeout, porque quebra tudo em vez de apenas nao proteger.
+ */
+function numeroDoAmbiente(nome: string, padrao: number): number {
+  const bruto = (process.env[nome] ?? "").trim();
+  if (!bruto) return padrao;
+
+  const valor = Number(bruto);
+  return Number.isFinite(valor) && valor > 0 ? valor : padrao;
+}
+
+const REQUEST_TIMEOUT_MS = numeroDoAmbiente("PLUGGY_TIMEOUT_MS", TIMEOUT_PADRAO_MS);
 
 function timeoutSignal(): AbortSignal {
   return AbortSignal.timeout(REQUEST_TIMEOUT_MS);
