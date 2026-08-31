@@ -91,6 +91,7 @@ try {
     for (const conta of resposta.results ?? []) {
       daPluggy.push({
         chave: `${conta.number ?? ""}|${conta.subtype ?? ""}`,
+        nome: conta.name ?? "",
         fingerprint: fingerprintWith(
           CHAVE,
           "account",
@@ -118,7 +119,36 @@ try {
   let rechaveadas = 0;
 
   for (const [chave, doGrupo] of grupos) {
-    const correta = daPluggy.find((c) => c.chave === chave);
+    const correspondentes = daPluggy.filter((c) => c.chave === chave);
+    const correta = correspondentes[0];
+
+    /**
+     * Numero e subtipo NAO bastam para identificar uma conta: no BTG, "BTG
+     * Pactual WM" e "BTG Banking" sao contas distintas com o mesmo numero e o
+     * mesmo subtipo. Unir esse grupo misturaria o extrato de duas contas — dano
+     * irreversivel.
+     *
+     * Quando a Pluggy mostra mais de uma conta para a mesma chave, o grupo tem
+     * o direito de existir com varias linhas e nao ha nada a unir.
+     */
+    if (correspondentes.length > 1) {
+      if (doGrupo.length > 1) {
+        console.log(
+          `pular ${correspondentes.map((c) => c.nome).join(" / ")}: ` +
+            `${correspondentes.length} contas distintas com o mesmo numero`,
+        );
+      }
+      continue;
+    }
+
+    // Sem correspondencia na Pluggy nao ha como saber se as linhas sao a mesma
+    // conta. Deixamos como esta: unir no escuro e pior que nao unir.
+    if (!correta) {
+      if (doGrupo.length > 1) {
+        console.log(`pular ${chave}: sem correspondencia na Pluggy`);
+      }
+      continue;
+    }
 
     // Mantemos a linha com mais transacoes: e a que carrega mais historico, e
     // mover menos linhas reduz a chance de erro.
@@ -126,7 +156,7 @@ try {
     const principal = ordenadas[0];
     const extras = ordenadas.slice(1);
 
-    const rotulo = correta?.rotulo ?? `${principal.connector_name} ${chave}`;
+    const rotulo = correta.rotulo;
 
     if (extras.length > 0) {
       console.log(`unir  ${rotulo}`);
@@ -143,7 +173,7 @@ try {
       unidas += extras.length;
     }
 
-    if (correta && principal.fingerprint !== correta.fingerprint) {
+    if (principal.fingerprint !== correta.fingerprint) {
       console.log(`chave ${rotulo}: impressao digital corrigida`);
       if (APLICAR) {
         await sql`
