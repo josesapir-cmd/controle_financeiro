@@ -260,3 +260,27 @@ export function doFormulario(campos: {
     duplicada: false,
   };
 }
+
+/**
+ * Reparte as linhas pelo trabalho que cada uma exige de quem confere.
+ *
+ * A tela de conferencia e ordenada por isto, nao pela ordem de leitura: linha
+ * que exige decisao no topo, linha duvidosa em seguida, e o resto somado em
+ * bloco fechado. Misturar as tres afoga as poucas que importam no meio das
+ * muitas que nao pedem nada.
+ *
+ * A regra e a mesma em qualquer lugar que conte esses grupos — tela de
+ * conferencia, lista de importacoes, avisos —, entao mora aqui.
+ */
+export function classificarParaConferencia<T extends { duplicada: boolean; confianca: string }>(
+  linhas: T[],
+): { decidir: T[]; conferir: T[]; prontas: T[] } {
+  return {
+    // Repetida entre envios: so quem viu as telas sabe se e a mesma compra
+    // fotografada duas vezes ou duas compras iguais de verdade.
+    decidir: linhas.filter((l) => l.duplicada),
+    // Lida sem confianca alta: entra, mas vale bater contra o print.
+    conferir: linhas.filter((l) => !l.duplicada && l.confianca !== "alta"),
+    prontas: linhas.filter((l) => !l.duplicada && l.confianca === "alta"),
+  };
+}

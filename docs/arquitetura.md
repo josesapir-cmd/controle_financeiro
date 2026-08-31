@@ -118,6 +118,21 @@ Quatro travas, porque leitura de imagem erra:
    status `pendente`. Uma tela de conferencia mostra cada linha editavel; so
    confirmar grava. Numero errado no painel e pior do que numero ausente: uma
    vez gravado, ele se mistura ao extrato do banco e ninguem mais distingue.
+
+   A tela e ordenada pelo trabalho que cada linha exige, nao pela ordem de
+   leitura: **decidir** (repetidas entre envios, desmarcadas, fora dos totais),
+   **conferir** (lidas sem confianca alta, ja marcadas) e o restante somado em
+   bloco fechado. Uma lista unica com dezenas de linhas sem acao a tomar afoga
+   as poucas que precisam de atencao — que e exatamente o que a revisao existe
+   para pegar. Os tres blocos vivem no mesmo formulario, entao o fechado
+   tambem e enviado. `classificarParaConferencia()` e a regra unica, usada
+   tambem pela lista de importacoes.
+
+   O envio e separado da aprovacao de proposito: fotografar a tela e coisa de
+   celular, na hora; conferir valor por valor e coisa de tela grande. Por isso
+   o envio nao leva a conferencia na marra, `/importar` lista o historico, e o
+   painel avisa enquanto houver lote pendente — leitura esquecida e dinheiro
+   que continua fora do controle.
 2. **Identidade deterministica.** O id do lancamento e o HMAC de
    (dia, valor, descricao, n-esima ocorrencia identica). Prints que se sobrepoem
    atualizam em vez de duplicar. A ocorrencia e fixada na leitura e viaja pelo

@@ -11,6 +11,7 @@ import {
   type AccountRow,
   type SyncStatus,
 } from "@/lib/db/repository";
+import { classificarParaConferencia } from "@/lib/importacao/linhas";
 import { mockAccounts, mockItems, mockTransactions } from "@/lib/pluggy/mock";
 import type { AccountWithConnector, Transaction } from "@/lib/pluggy/types";
 import { classify } from "./categories";
@@ -195,6 +196,8 @@ export interface DashboardData {
   accountOptions: AccountOption[];
   selectedAccountIds: string[];
   syncedAt: Date | null;
+  /** Leituras de print esperando conferencia — dinheiro ainda fora do painel. */
+  importacoesPendentes: number;
 }
 
 /** Data da sincronizacao mais antiga entre as conexoes: e a que limita a confianca. */
@@ -209,7 +212,10 @@ export async function loadDashboard(
 ): Promise<DashboardData> {
   const period = currentMonthRange(reference);
   const accountIds = options.accountIds ?? [];
-  const { contas, todasAsContas, transacoes, status } = await carregar(period, accountIds);
+  const [{ contas, todasAsContas, transacoes, status }, importacoesPendentes] = await Promise.all([
+    carregar(period, accountIds),
+    contarImportacoesPendentes(),
+  ]);
 
   const saldos = comSaldo(contas);
 
@@ -229,6 +235,7 @@ export async function loadDashboard(
     accountOptions: opcoes(todasAsContas),
     selectedAccountIds: accountIds,
     syncedAt: sincronizadoEm(status),
+    importacoesPendentes,
   };
 }
 
@@ -383,27 +390,58 @@ export interface ImportacaoResumo {
   createdAt: Date;
   status: string;
   images: number;
+  envios: number;
   linhas: number;
   /** Soma das saidas do lote, como numero positivo. */
   saidas: number;
+  /** Linhas repetidas entre envios: exigem decisao de quem viu as telas. */
+  decidir: number;
+  /** Linhas lidas com confianca menor que alta: valem uma olhada. */
+  conferir: number;
 }
 
 /**
- * Ultimos lotes lidos de prints do saldo compartilhado.
+ * Lotes lidos de prints do saldo compartilhado, do mais recente ao mais antigo.
  *
- * A tela de conexoes mostra isso para que um lote pendente nao seja esquecido:
- * leitura que ninguem confirmou e dinheiro que continua fora do controle.
+ * Existe para separar o envio da aprovacao: da para fotografar no celular e
+ * conferir no desktop depois. Um lote pendente esquecido e dinheiro que
+ * continua fora do controle, entao ele aparece aqui, na tela de conexoes e no
+ * painel ate ser resolvido.
  */
 export async function loadImportacoes(limite = 5): Promise<ImportacaoResumo[]> {
   if (useMock()) return [];
 
   const lotes = await listarImportacoes(db(), limite);
-  return lotes.map((lote) => ({
-    id: lote.id,
-    createdAt: lote.createdAt,
-    status: lote.status,
-    images: lote.images,
-    linhas: lote.linhas.length,
-    saidas: lote.linhas.reduce((total, l) => (l.valor < 0 ? total - l.valor : total), 0),
-  }));
+
+  return lotes.map((lote) => {
+    const { decidir, conferir } = classificarParaConferencia(lote.linhas);
+
+    return {
+      id: lote.id,
+      createdAt: lote.createdAt,
+      status: lote.status,
+      images: lote.images,
+      envios: lote.envios,
+      linhas: lote.linhas.length,
+      saidas: lote.linhas.reduce((total, l) => (l.valor < 0 ? total - l.valor : total), 0),
+      decidir: decidir.length,
+      conferir: conferir.length,
+    };
+  });
+}
+
+/** Quantos lotes esperam conferencia. Barato o bastante para o painel chamar. */
+export async function contarImportacoesPendentes(): Promise<number> {
+  if (useMock()) return 0;
+
+  try {
+    const linhas = await db().query<{ total: string }>(
+      "SELECT count(*) AS total FROM shared_imports WHERE status = 'pendente'",
+    );
+    return Number(linhas[0]?.total ?? 0);
+  } catch {
+    // A tabela pode nao existir ainda (migracao pendente). Um painel que quebra
+    // por causa de um aviso e pior do que um painel sem o aviso.
+    return 0;
+  }
 }

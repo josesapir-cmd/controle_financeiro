@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { ACCEPT, TAMANHO_DO_ENVIO, emBlocos } from "@/lib/importacao/limites";
 
@@ -31,7 +30,6 @@ interface Progresso {
  * continuar de onde parou.
  */
 export function UploadPrints() {
-  const router = useRouter();
   const campo = useRef<HTMLInputElement>(null);
 
   const [arquivos, setArquivos] = useState<File[]>([]);
@@ -42,6 +40,7 @@ export function UploadPrints() {
   const [lote, setLote] = useState<string | null>(null);
   /** Quantos blocos ja foram aceitos, para retomar do ponto certo. */
   const [concluidos, setConcluidos] = useState(0);
+  const [terminou, setTerminou] = useState(false);
 
   function limpar() {
     setArquivos([]);
@@ -49,6 +48,7 @@ export function UploadPrints() {
     setProgresso(null);
     setLote(null);
     setConcluidos(0);
+    setTerminou(false);
     if (campo.current) campo.current.value = "";
   }
 
@@ -57,6 +57,7 @@ export function UploadPrints() {
 
     setOcupado(true);
     setErro(null);
+    setTerminou(false);
 
     const blocos = emBlocos(arquivos);
     let loteAtual = lote;
@@ -93,7 +94,11 @@ export function UploadPrints() {
       }
     }
 
-    if (loteAtual) router.push(`/importar/${loteAtual}`);
+    setOcupado(false);
+    // Sem levar a conferencia na marra: o fluxo previsto e fotografar pelo
+    // celular e aprovar pelo computador depois. O lote fica guardado e a
+    // pagina de importacoes o encontra a qualquer momento.
+    if (loteAtual) setTerminou(true);
   }
 
   const blocos = Math.ceil(arquivos.length / TAMANHO_DO_ENVIO);
@@ -115,6 +120,7 @@ export function UploadPrints() {
           setProgresso(null);
           setLote(null);
           setConcluidos(0);
+          setTerminou(false);
         }}
       />
 
@@ -133,12 +139,38 @@ export function UploadPrints() {
           </button>
         ) : null}
 
-        {lote && !ocupado ? (
+        {lote && !ocupado && !terminou ? (
           <a className="preset" href={`/importar/${lote}`}>
             Conferir o que ja foi lido
           </a>
         ) : null}
       </div>
+
+      {terminou && lote ? (
+        <div className="leitura-pronta">
+          <p className="description">
+            Leitura concluida: {progresso?.linhas ?? 0}{" "}
+            {progresso?.linhas === 1 ? "linha" : "linhas"} de {progresso?.imagens ?? 0}{" "}
+            {progresso?.imagens === 1 ? "imagem" : "imagens"}
+            {progresso && progresso.duplicadas > 0
+              ? `, ${progresso.duplicadas} a decidir`
+              : ""}
+            .
+          </p>
+          <p className="account-meta">
+            Nada foi gravado. O lote fica aguardando conferencia — da para aprovar agora ou depois,
+            de outro aparelho, pela pagina de importacoes.
+          </p>
+          <div className="filtros">
+            <a className="preset ativo" href={`/importar/${lote}`}>
+              Conferir agora
+            </a>
+            <a className="preset" href="/importar">
+              Deixar para depois
+            </a>
+          </div>
+        </div>
+      ) : null}
 
       {arquivos.length > 0 && !progresso ? (
         <p className="account-meta">

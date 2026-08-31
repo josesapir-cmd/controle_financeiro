@@ -112,6 +112,18 @@ export default async function Home({
         </p>
       )}
 
+      {dados.importacoesPendentes > 0 ? (
+        <p className="banner">
+          <strong>
+            {dados.importacoesPendentes}{" "}
+            {dados.importacoesPendentes === 1 ? "leitura de print aguarda" : "leituras de print aguardam"}{" "}
+            conferencia.
+          </strong>{" "}
+          Sao despesas do saldo compartilhado que ainda nao entraram nos numeros acima:{" "}
+          <Link href="/importar">conferir</Link>.
+        </p>
+      ) : null}
+
       {dados.failures.length > 0 ? (
         <p className="banner">
           <strong>

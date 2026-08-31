@@ -1254,3 +1254,79 @@ td input[type="checkbox"] {
 .repetida.duvidosa > td {
   background: color-mix(in srgb, var(--negative) 8%, var(--surface));
 }
+
+/* --- Conferencia da leitura, em tres blocos ---
+   A ordem e por trabalho exigido, nao pela ordem de leitura: decidir, conferir,
+   e o resto somado. Exibir dezenas de linhas sem acao a tomar afogaria as
+   poucas que precisam de atencao. */
+.bloco-decidir > h2 {
+  padding-left: 10px;
+  border-left: 3px solid var(--negative);
+}
+
+.bloco-conferir > h2 {
+  padding-left: 10px;
+  border-left: 3px solid var(--warning);
+}
+
+.bloco-prontas > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 14px 16px 14px 30px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.bloco-prontas > summary::before {
+  margin-left: -16px;
+  margin-right: 6px;
+}
+
+.bloco-prontas > summary:hover {
+  border-color: var(--baseline);
+}
+
+.bloco-prontas > summary .description {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.acoes-conferencia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+/* Etiqueta de estado pendente: precisa saltar numa lista de cartoes iguais. */
+.tag.aviso {
+  color: #6b4a00;
+  background: color-mix(in srgb, var(--warning) 26%, transparent);
+  border-color: transparent;
+}
+
+/* --- Resultado do envio de prints --- */
+.leitura-pronta {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--plane);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--positive);
+  border-radius: var(--radius);
+}
+
+.leitura-pronta .description {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.leitura-pronta .account-meta {
+  margin-top: 4px;
+  line-height: 1.5;
+}

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetKeyCache } from "@/lib/crypto";
 import {
+  classificarParaConferencia,
   doFormulario,
   identidade,
   mesclar,
@@ -212,5 +213,54 @@ describe("totalDeSaidas", () => {
     );
 
     expect(totalDeSaidas(linhas)).toBe(125);
+  });
+});
+
+describe("classificarParaConferencia", () => {
+  const linha = (extra: Partial<{ duplicada: boolean; confianca: string; nome: string }> = {}) => ({
+    duplicada: false,
+    confianca: "alta",
+    nome: "x",
+    ...extra,
+  });
+
+  it("poe a repetida entre envios em 'decidir', mesmo lida com confianca alta", () => {
+    const { decidir, conferir, prontas } = classificarParaConferencia([
+      linha({ duplicada: true, nome: "repetida" }),
+    ]);
+
+    expect(decidir.map((l) => l.nome)).toEqual(["repetida"]);
+    expect(conferir).toHaveLength(0);
+    expect(prontas).toHaveLength(0);
+  });
+
+  it("poe a leitura incerta em 'conferir'", () => {
+    const { conferir } = classificarParaConferencia([
+      linha({ confianca: "baixa", nome: "borrada" }),
+      linha({ confianca: "media", nome: "cortada" }),
+    ]);
+
+    expect(conferir.map((l) => l.nome)).toEqual(["borrada", "cortada"]);
+  });
+
+  // Decidir vem antes de conferir: uma linha repetida E duvidosa exige a
+  // decisao primeiro, e aparecer nos dois blocos duplicaria o campo no
+  // formulario — dois checkboxes com o mesmo name, um sobrescrevendo o outro.
+  it("nao repete a mesma linha em dois blocos", () => {
+    const grupos = classificarParaConferencia([linha({ duplicada: true, confianca: "baixa" })]);
+    const total = grupos.decidir.length + grupos.conferir.length + grupos.prontas.length;
+
+    expect(total).toBe(1);
+    expect(grupos.decidir).toHaveLength(1);
+  });
+
+  it("deixa em 'prontas' so o que nao pede nada", () => {
+    const { prontas } = classificarParaConferencia([
+      linha({ nome: "ok" }),
+      linha({ duplicada: true }),
+      linha({ confianca: "baixa" }),
+    ]);
+
+    expect(prontas.map((l) => l.nome)).toEqual(["ok"]);
   });
 });

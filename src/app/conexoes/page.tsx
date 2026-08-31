@@ -8,7 +8,6 @@ import {
 } from "@/lib/finance/service";
 import { AddDeviceButton } from "@/components/AddDeviceButton";
 import { Nav } from "@/components/Nav";
-import { formatBRL } from "@/lib/finance/money";
 import { ConnectionForm } from "./ConnectionForm";
 import { SyncButton } from "./SyncButton";
 import { UploadPrints } from "./UploadPrints";
@@ -76,7 +75,7 @@ export default async function Conexoes({
             {pendentes.length === 1 ? "leitura aguarda" : "leituras aguardam"} conferencia.
           </strong>{" "}
           Enquanto nao forem confirmadas, esses gastos continuam fora do controle:{" "}
-          <Link href={`/importar/${pendentes[0].id}`}>conferir agora</Link>.
+          <Link href="/importar">conferir agora</Link>.
         </p>
       ) : null}
 
@@ -100,22 +99,11 @@ export default async function Conexoes({
         <UploadPrints />
 
         {lotes.length > 0 ? (
-          <ul className="resultado-sync" style={{ marginTop: 16 }}>
-            {lotes.map((lote) => (
-              <li key={lote.id}>
-                <span className="description">
-                  <Link href={`/importar/${lote.id}`}>
-                    {quando.format(lote.createdAt)} · {lote.images}{" "}
-                    {lote.images === 1 ? "imagem" : "imagens"}
-                  </Link>
-                </span>
-                <span className="account-meta">
-                  {lote.linhas} {lote.linhas === 1 ? "linha" : "linhas"} ·{" "}
-                  {formatBRL(-lote.saidas)} · {lote.status}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <p className="account-meta" style={{ marginTop: 16 }}>
+            <Link href="/importar">Ver todas as importacoes por imagem</Link> — {lotes.length}{" "}
+            {lotes.length === 1 ? "leitura" : "leituras"} ate agora
+            {pendentes.length > 0 ? `, ${pendentes.length} aguardando conferencia` : ""}.
+          </p>
         ) : null}
       </section>
 
