@@ -5,9 +5,12 @@ import { requireSession } from "@/lib/auth/guard";
 import { fromPostgres } from "@/lib/db/adapter";
 import { getSql } from "@/lib/db/client";
 import {
+  acharOuCriarCategoria,
+  acharOuCriarCentroDeCusto,
   clearCounterpartyLink,
   setCounterpartyLink,
   setLabel,
+  vincularCentroDeCusto,
 } from "@/lib/db/repository";
 
 export async function salvarContraparte(formData: FormData): Promise<void> {
@@ -17,14 +20,31 @@ export async function salvarContraparte(formData: FormData): Promise<void> {
   const fingerprint = String(formData.get("key") ?? "");
   if (!fingerprint) return;
 
-  await setLabel(fromPostgres(getSql()), fingerprint, {
-    category: String(formData.get("category") ?? ""),
-    subcategory: String(formData.get("subcategory") ?? ""),
+  const categoria = String(formData.get("category") ?? "");
+  const subcategoria = String(formData.get("subcategory") ?? "");
+
+  const db = fromPostgres(getSql());
+  await setLabel(db, fingerprint, {
+    category: categoria,
+    subcategory: subcategoria,
     alias: String(formData.get("alias") ?? ""),
     officialName: String(formData.get("officialName") ?? ""),
   });
 
+  // O texto digitado vira taxonomia. Digitar continua sendo a forma de
+  // classificar — e mais rapido que caçar numa lista longa —, mas o nome passa
+  // a existir como registro, entao a aba de categorias enxerga o que foi criado
+  // aqui e renomear la vale para todo o historico de uma vez.
+  const categoriaId = await acharOuCriarCategoria(db, categoria);
+  const centroId =
+    categoriaId && subcategoria.trim()
+      ? await acharOuCriarCentroDeCusto(db, categoriaId, subcategoria)
+      : null;
+
+  await vincularCentroDeCusto(db, fingerprint, centroId);
+
   revalidatePath("/contrapartes");
+  revalidatePath("/categorias");
 }
 
 /**

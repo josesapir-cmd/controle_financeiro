@@ -676,3 +676,230 @@ export async function encerrarImportacao(
     [id, status],
   );
 }
+
+/**
+ * Taxonomia de centros de custo.
+ *
+ * Categoria e o nivel largo ("Viagem", "Familia"); centro de custo e a coisa
+ * concreta dentro dela ("Viagem FDS Familia", "Pai"). O centro de custo existe
+ * como registro proprio — nao como texto repetido em cada contraparte — porque
+ * precisa poder ter orcamento, comeco e fim, e existir antes do primeiro gasto.
+ *
+ * Nomes ficam em claro, como as categorias ja ficavam: sao rotulos escolhidos
+ * pelo usuario e sao o que as telas agrupam no SQL.
+ */
+
+export type TipoDeCategoria = "despesa" | "receita" | "movimentacao";
+
+export interface CategoriaRow {
+  id: string;
+  name: string;
+  kind: TipoDeCategoria;
+  position: number;
+  archived: boolean;
+}
+
+export interface CentroDeCustoRow {
+  id: string;
+  categoryId: string;
+  name: string;
+  note: string | null;
+  startsOn: string | null;
+  endsOn: string | null;
+  budget: number | null;
+  archived: boolean;
+}
+
+function dia(valor: unknown): string | null {
+  if (!valor) return null;
+  return valor instanceof Date
+    ? valor.toISOString().slice(0, 10)
+    : String(valor).slice(0, 10);
+}
+
+export async function listCategorias(
+  db: Db,
+  incluirArquivadas = false,
+): Promise<CategoriaRow[]> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, name, kind, position, archived_at FROM categories
+      ${incluirArquivadas ? "" : "WHERE archived_at IS NULL"}
+      ORDER BY position, name`,
+  );
+
+  return linhas.map((linha) => ({
+    id: String(linha.id),
+    name: String(linha.name),
+    kind: String(linha.kind) as TipoDeCategoria,
+    position: Number(linha.position ?? 100),
+    archived: Boolean(linha.archived_at),
+  }));
+}
+
+export async function listCentrosDeCusto(
+  db: Db,
+  incluirArquivados = false,
+): Promise<CentroDeCustoRow[]> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, category_id, name, note, starts_on, ends_on, budget, archived_at
+       FROM cost_centers
+      ${incluirArquivados ? "" : "WHERE archived_at IS NULL"}
+      ORDER BY name`,
+  );
+
+  return linhas.map((linha) => ({
+    id: String(linha.id),
+    categoryId: String(linha.category_id),
+    name: String(linha.name),
+    note: linha.note ? String(linha.note) : null,
+    startsOn: dia(linha.starts_on),
+    endsOn: dia(linha.ends_on),
+    budget: linha.budget === null || linha.budget === undefined ? null : numero(linha.budget),
+    archived: Boolean(linha.archived_at),
+  }));
+}
+
+/**
+ * Encontra a categoria pelo nome, ou cria.
+ *
+ * Comparacao sem caixa: e o que impede "Viagem" e "viagem" de virarem duas, que
+ * era como o texto livre se degradava. O `DO UPDATE` existe so para o RETURNING
+ * devolver a linha tambem quando ela ja existia — `DO NOTHING` nao devolve nada.
+ */
+export async function acharOuCriarCategoria(
+  db: Db,
+  nome: string,
+  kind: TipoDeCategoria = "despesa",
+): Promise<string | null> {
+  const limpo = nome.trim();
+  if (!limpo) return null;
+
+  const linhas = await db.query<{ id: string }>(
+    `INSERT INTO categories (name, kind) VALUES ($1, $2)
+     ON CONFLICT (lower(name)) DO UPDATE SET name = categories.name
+     RETURNING id`,
+    [limpo, kind],
+  );
+  return linhas[0].id;
+}
+
+export async function acharOuCriarCentroDeCusto(
+  db: Db,
+  categoriaId: string,
+  nome: string,
+): Promise<string | null> {
+  const limpo = nome.trim();
+  if (!limpo) return null;
+
+  const linhas = await db.query<{ id: string }>(
+    `INSERT INTO cost_centers (category_id, name) VALUES ($1, $2)
+     ON CONFLICT (category_id, lower(name)) DO UPDATE SET name = cost_centers.name
+     RETURNING id`,
+    [categoriaId, limpo],
+  );
+  return linhas[0].id;
+}
+
+export async function salvarCategoria(
+  db: Db,
+  id: string,
+  valores: { name?: string; kind?: TipoDeCategoria; position?: number },
+): Promise<void> {
+  if (!UUID.test(id)) return;
+
+  await db.query(
+    `UPDATE categories
+        SET name = COALESCE(NULLIF(trim($2), ''), name),
+            kind = COALESCE($3, kind),
+            position = COALESCE($4, position)
+      WHERE id = $1`,
+    [id, valores.name ?? "", valores.kind ?? null, valores.position ?? null],
+  );
+}
+
+export async function salvarCentroDeCusto(
+  db: Db,
+  id: string,
+  valores: {
+    name?: string;
+    note?: string | null;
+    startsOn?: string | null;
+    endsOn?: string | null;
+    budget?: number | null;
+  },
+): Promise<void> {
+  if (!UUID.test(id)) return;
+
+  await db.query(
+    `UPDATE cost_centers
+        SET name = COALESCE(NULLIF(trim($2), ''), name),
+            note = $3,
+            starts_on = $4,
+            ends_on = $5,
+            budget = $6
+      WHERE id = $1`,
+    [
+      id,
+      valores.name ?? "",
+      valores.note?.trim() || null,
+      valores.startsOn || null,
+      valores.endsOn || null,
+      valores.budget ?? null,
+    ],
+  );
+}
+
+/**
+ * Arquiva em vez de apagar.
+ *
+ * Apagar levaria junto a classificacao de todas as contrapartes ligadas ao
+ * centro — trabalho que o usuario fez a mao. Arquivado, ele some das listas de
+ * escolha mas o historico continua somando onde sempre somou.
+ */
+export async function arquivarCategoria(db: Db, id: string, arquivar = true): Promise<void> {
+  if (!UUID.test(id)) return;
+  await db.query(
+    `UPDATE categories SET archived_at = ${arquivar ? "now()" : "NULL"} WHERE id = $1`,
+    [id],
+  );
+}
+
+export async function arquivarCentroDeCusto(
+  db: Db,
+  id: string,
+  arquivar = true,
+): Promise<void> {
+  if (!UUID.test(id)) return;
+  await db.query(
+    `UPDATE cost_centers SET archived_at = ${arquivar ? "now()" : "NULL"} WHERE id = $1`,
+    [id],
+  );
+}
+
+export async function criarCentroDeCusto(
+  db: Db,
+  categoriaId: string,
+  nome: string,
+): Promise<string | null> {
+  if (!UUID.test(categoriaId)) return null;
+  return acharOuCriarCentroDeCusto(db, categoriaId, nome);
+}
+
+/**
+ * Liga a contraparte ao centro de custo.
+ *
+ * Chamada depois de `setLabel`: os campos de texto continuam sendo a interface
+ * de quem classifica (digitar e mais rapido que escolher em lista longa), e
+ * esta funcao resolve o texto para a taxonomia. Sem isso as duas telas
+ * divergiriam — a aba de categorias nunca veria um rotulo criado na mao.
+ */
+export async function vincularCentroDeCusto(
+  db: Db,
+  fingerprint: string,
+  centroId: string | null,
+): Promise<void> {
+  await db.query(`UPDATE counterparty_labels SET cost_center_id = $2 WHERE fingerprint = $1`, [
+    fingerprint,
+    centroId,
+  ]);
+}

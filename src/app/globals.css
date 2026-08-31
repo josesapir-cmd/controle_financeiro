@@ -1862,3 +1862,113 @@ td input.numerico {
     order: 2;
   }
 }
+
+/* --- Categorias e centros de custo --- */
+.categoria {
+  margin-top: 16px;
+}
+
+.categoria-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--stroke-soft);
+}
+
+.categoria-total {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
+ul.centros {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.centro {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--stroke-soft);
+}
+
+.centro:last-child {
+  border-bottom: none;
+}
+
+/* Centro sem movimento no periodo continua visivel, so mais apagado: ele
+   precisa existir na tela antes do primeiro gasto para servir de plano. */
+.centro.vazio .description {
+  color: var(--text-sub);
+}
+
+.centro-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.centro-identidade .description {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+.centro-valores {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.centro-valores .amount {
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
+.orcamento {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.orcamento .bar-track {
+  flex: 1;
+  max-width: 240px;
+}
+
+/* Orcamento estourado: a barra enche e troca de cor, e o texto ao lado diz
+   "estourou" — a cor sozinha nao carrega o aviso. */
+.bar-fill.estourado {
+  background: var(--error);
+}
+
+.sem-centro {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-sub);
+  background: var(--bg-weak);
+  border-radius: var(--radius-sm);
+}
+
+.sem-centro strong {
+  color: var(--text-strong);
+}
+
+.centro details > summary,
+.categoria > details > summary {
+  padding-left: 14px;
+  font-size: 12px;
+}

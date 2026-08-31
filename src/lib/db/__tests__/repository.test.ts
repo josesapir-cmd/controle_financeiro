@@ -5,7 +5,14 @@ import type { Db } from "../adapter";
 import { migrate } from "../migrate.mjs";
 import {
   accountFingerprint,
+  acharOuCriarCategoria,
+  acharOuCriarCentroDeCusto,
   anexarImportacao,
+  arquivarCentroDeCusto,
+  listCategorias,
+  listCentrosDeCusto,
+  salvarCategoria,
+  salvarCentroDeCusto,
   clearCounterpartyLink,
   listCounterpartyLinks,
   setCounterpartyLink,
@@ -559,5 +566,85 @@ describe("decisoes de identidade entre contrapartes", () => {
     await clearCounterpartyLink(db, "curta");
 
     expect(await listCounterpartyLinks(db)).toEqual({});
+  });
+});
+
+describe("taxonomia de centros de custo", () => {
+  it("nasce com as categorias do Poupa.ai", async () => {
+    const nomes = (await listCategorias(db)).map((c) => c.name);
+
+    expect(nomes).toContain("Casa");
+    expect(nomes).toContain("Familia");
+    expect(nomes).toContain("Viagem");
+  });
+
+  // Duas grafias da mesma categoria era exatamente como o texto livre se
+  // degradava; o indice unico sem caixa impede.
+  it("nao cria categoria duplicada por diferenca de caixa", async () => {
+    const a = await acharOuCriarCategoria(db, "Obras");
+    const b = await acharOuCriarCategoria(db, "obras");
+
+    expect(a).toBe(b);
+    expect((await listCategorias(db)).filter((c) => /obras/i.test(c.name))).toHaveLength(1);
+  });
+
+  it("o mesmo nome de centro pode existir em categorias diferentes", async () => {
+    // "Pai" faz sentido em Familia e em Saude ao mesmo tempo.
+    const familia = (await acharOuCriarCategoria(db, "Familia"))!;
+    const saude = (await acharOuCriarCategoria(db, "Saude"))!;
+
+    const a = await acharOuCriarCentroDeCusto(db, familia, "Pai");
+    const b = await acharOuCriarCentroDeCusto(db, saude, "Pai");
+
+    expect(a).not.toBe(b);
+  });
+
+  it("guarda orcamento e periodo do centro", async () => {
+    const viagem = (await acharOuCriarCategoria(db, "Viagem"))!;
+    const id = (await acharOuCriarCentroDeCusto(db, viagem, "Bariloche"))!;
+
+    await salvarCentroDeCusto(db, id, {
+      name: "Bariloche 2026",
+      note: "ferias de julho",
+      startsOn: "2026-07-10",
+      endsOn: "2026-07-20",
+      budget: 25000,
+    });
+
+    const centro = (await listCentrosDeCusto(db)).find((c) => c.id === id);
+    expect(centro?.name).toBe("Bariloche 2026");
+    expect(centro?.budget).toBe(25000);
+    expect(centro?.startsOn).toBe("2026-07-10");
+    expect(centro?.endsOn).toBe("2026-07-20");
+  });
+
+  it("renomear a categoria vale para todo o historico de uma vez", async () => {
+    const id = (await acharOuCriarCategoria(db, "Lazer"))!;
+    await salvarCategoria(db, id, { name: "Lazer e cultura" });
+
+    const nomes = (await listCategorias(db)).map((c) => c.name);
+    expect(nomes).toContain("Lazer e cultura");
+    expect(nomes).not.toContain("Lazer");
+  });
+
+  it("nome vazio nao apaga o nome existente", async () => {
+    const id = (await acharOuCriarCategoria(db, "Pet"))!;
+    await salvarCategoria(db, id, { name: "   " });
+
+    expect((await listCategorias(db)).map((c) => c.name)).toContain("Pet");
+  });
+
+  // Apagar levaria junto a classificacao feita a mao; arquivar so tira da lista.
+  it("centro arquivado some da listagem mas continua no banco", async () => {
+    const viagem = (await acharOuCriarCategoria(db, "Viagem"))!;
+    const id = (await acharOuCriarCentroDeCusto(db, viagem, "Campos do Jordao"))!;
+
+    await arquivarCentroDeCusto(db, id);
+    expect((await listCentrosDeCusto(db)).map((c) => c.id)).not.toContain(id);
+    expect((await listCentrosDeCusto(db, true)).map((c) => c.id)).toContain(id);
+  });
+
+  it("ignora id que nem uuid e, em vez de estourar", async () => {
+    await expect(salvarCategoria(db, "../etc/passwd", { name: "x" })).resolves.toBeUndefined();
   });
 });

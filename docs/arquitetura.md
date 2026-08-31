@@ -220,7 +220,42 @@ Finance (`normalizeName`), entao nome identico pelas duas vias ja vira uma
 contraparte so, sem depender de conciliacao. A conciliacao cobre so o caso do
 nome cortado.
 
-### 7. Sistema visual
+### 7. Categorias e centros de custo
+
+Ate aqui categoria e subcategoria eram texto livre digitado por contraparte.
+Rotular funcionava; planejar, nao. Texto livre nao tem identidade: renomear
+"Viagem" exigiria reescrever cada linha, uma grafia diferente criava uma
+categoria nova em silencio, e um centro de custo so passava a existir depois do
+primeiro gasto — inutil para orcar a viagem do mes que vem.
+
+Agora sao duas tabelas. **Categoria** e o nivel largo ("Viagem", "Familia");
+**centro de custo** e a coisa concreta dentro dela ("Bariloche 2026", "Pai"),
+com observacao, periodo e orcamento opcionais.
+
+A semente sao as categorias do **Poupa.ai**, onde a assistente ja classifica os
+gastos do saldo compartilhado: usar a mesma taxonomia dos dois lados evita
+traduzir na hora de importar o arquivo dela. Duas correcoes em relacao ao
+arquivo — "aulas / educacao" e "educacao" viram uma so, e "familia do jose" vira
+"Familia". "Viagem" nao existe la e entra porque e o caso que motivou o recurso.
+
+Decisoes que valem registro:
+
+- **A taxonomia manda na tela.** Categoria e centro sem movimento no periodo
+  aparecem zerados, nao somem. Orcamento que so aparece depois do primeiro gasto
+  nao serve para planejar.
+- **Digitar continua sendo a forma de classificar.** Os campos em Contrapartes
+  seguem sendo texto com sugestao; ao salvar, o texto e resolvido para a
+  taxonomia (acha ou cria, sem distinguir caixa). Trocar por uma lista de
+  escolha seria mais lento e nao resolveria nada.
+- **Arquivar, nunca apagar.** Apagar um centro levaria junto a classificacao de
+  todas as contrapartes ligadas a ele — trabalho feito a mao. Arquivado, ele sai
+  das listas e o historico continua somando onde sempre somou.
+- **Gasto com categoria mas sem centro aparece a parte**, com o valor. E
+  trabalho pela metade, e somar em silencio esconderia isso.
+- O backfill da migracao transforma o que ja estava classificado em taxonomia,
+  entao nada do que foi classificado a mao se perde.
+
+### 8. Sistema visual
 
 A referencia e a pagina de transacoes do template financeiro do AlignUI, conferida
 contra o HTML dela. Tudo vive em `globals.css`, em tokens — nao ha CSS por

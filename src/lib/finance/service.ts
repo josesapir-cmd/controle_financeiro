@@ -4,6 +4,8 @@ import { fromPostgres, type Db } from "@/lib/db/adapter";
 import { getSql } from "@/lib/db/client";
 import {
   listAccounts,
+  listCategorias,
+  listCentrosDeCusto,
   listCounterpartyLinks,
   listLabels,
   listTransactions,
@@ -16,6 +18,11 @@ import { classificarParaConferencia } from "@/lib/importacao/linhas";
 import { mockAccounts, mockItems, mockTransactions } from "@/lib/pluggy/mock";
 import type { AccountWithConnector, Transaction } from "@/lib/pluggy/types";
 import { classify } from "./categories";
+import {
+  cruzarCentrosDeCusto,
+  totalPorTipo,
+  type CategoriaTotal,
+} from "./centros";
 import {
   chaveEfetiva,
   mapaDeConciliacao,
@@ -506,25 +513,35 @@ export async function loadConnections(): Promise<ConnectionRow[]> {
 }
 
 /**
- * Categorias e subcategorias ja usadas, para sugerir em vez de exigir digitacao
- * — e, com isso, evitar que a mesma categoria vire tres variacoes de grafia.
+ * Sugestoes para os campos de classificacao.
+ *
+ * Vem da taxonomia, nao do que ja foi usado: uma categoria criada na aba de
+ * categorias precisa aparecer aqui antes de ter a primeira contraparte. O que
+ * ja esta gravado nos rotulos entra junto, para nao perder nada que exista so
+ * como texto.
  */
 export async function loadTaxonomy(): Promise<{ categories: string[]; subcategories: string[] }> {
   if (useMock()) return { categories: [], subcategories: [] };
 
-  const rotulos = await listLabels(db());
-  const categorias = new Set<string>();
-  const subcategorias = new Set<string>();
+  const conexao = db();
+  const [rotulos, categorias, centros] = await Promise.all([
+    listLabels(conexao),
+    listCategorias(conexao),
+    listCentrosDeCusto(conexao),
+  ]);
+
+  const nomes = new Set<string>(categorias.map((c) => c.name));
+  const subnomes = new Set<string>(centros.map((c) => c.name));
 
   for (const rotulo of rotulos) {
-    if (rotulo.category) categorias.add(rotulo.category);
-    if (rotulo.subcategory) subcategorias.add(rotulo.subcategory);
+    if (rotulo.category) nomes.add(rotulo.category);
+    if (rotulo.subcategory) subnomes.add(rotulo.subcategory);
   }
 
   const ordenar = (a: string, b: string) => a.localeCompare(b, "pt-BR");
   return {
-    categories: [...categorias].sort(ordenar),
-    subcategories: [...subcategorias].sort(ordenar),
+    categories: [...nomes].sort(ordenar),
+    subcategories: [...subnomes].sort(ordenar),
   };
 }
 
@@ -587,4 +604,87 @@ export async function contarImportacoesPendentes(): Promise<number> {
     // por causa de um aviso e pior do que um painel sem o aviso.
     return 0;
   }
+}
+
+export interface CentrosDeCustoData {
+  categorias: CategoriaTotal[];
+  semCategoria: { sent: number; received: number; count: number; counterparties: number };
+  period: Period;
+  /** Total de saida das categorias de despesa, para o numero do topo. */
+  despesas: number;
+  receitas: number;
+  accountOptions: AccountOption[];
+  selectedAccountIds: string[];
+  isMock: boolean;
+}
+
+/**
+ * Centros de custo no periodo.
+ *
+ * Reaproveita a agregacao por contraparte — e a mesma classificacao, vista por
+ * outro eixo. Transferencia entre contas proprias e movimentacao ficam de fora
+ * pelo mesmo motivo da aba de contrapartes: o dinheiro mudou de bolso, nao foi
+ * consumido.
+ */
+export async function loadCentrosDeCusto(
+  period: Period,
+  options: { accountIds?: string[] } = {},
+): Promise<CentrosDeCustoData> {
+  const accountIds = options.accountIds ?? [];
+
+  if (useMock()) {
+    return {
+      categorias: [],
+      semCategoria: { sent: 0, received: 0, count: 0, counterparties: 0 },
+      period,
+      despesas: 0,
+      receitas: 0,
+      accountOptions: [],
+      selectedAccountIds: accountIds,
+      isMock: true,
+    };
+  }
+
+  const conexao = db();
+  const [{ todasAsContas, transacoes, registry, decisoes }, categorias, centros] =
+    await Promise.all([
+      carregar(period, accountIds),
+      listCategorias(conexao),
+      listCentrosDeCusto(conexao),
+    ]);
+
+  const conciliado = conciliar(transacoes, decisoes);
+  const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
+  const relevantes = conciliado.transacoes.filter(
+    (t) => !t.counterparty?.self && classify(t) !== "transfer",
+  );
+
+  const { categorias: totais, semCategoria } = cruzarCentrosDeCusto(
+    categorias,
+    centros,
+    aggregateCounterparties(relevantes, cadastro),
+  );
+
+  return {
+    categorias: totais,
+    semCategoria,
+    period,
+    despesas: totalPorTipo(totais, "despesa").sent,
+    receitas: totalPorTipo(totais, "receita").received,
+    accountOptions: opcoes(todasAsContas),
+    selectedAccountIds: accountIds,
+    isMock: false,
+  };
+}
+
+/** Taxonomia crua, para os formularios de cadastro. */
+export async function loadTaxonomiaDeCentros() {
+  if (useMock()) return { categorias: [], centros: [] };
+
+  const conexao = db();
+  const [categorias, centros] = await Promise.all([
+    listCategorias(conexao),
+    listCentrosDeCusto(conexao),
+  ]);
+  return { categorias, centros };
 }
