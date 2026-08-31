@@ -46,6 +46,7 @@ describe("migracoes", () => {
       "credentials",
       "schema_migrations",
       "sessions",
+      "shared_imports",
       "sync_runs",
       "transactions",
     ]);

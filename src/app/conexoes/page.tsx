@@ -1,9 +1,18 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guard";
-import { loadConnections, type ConnectionRow } from "@/lib/finance/service";
+import {
+  loadConnections,
+  loadImportacoes,
+  type ConnectionRow,
+  type ImportacaoResumo,
+} from "@/lib/finance/service";
 import { AddDeviceButton } from "@/components/AddDeviceButton";
+import { Nav } from "@/components/Nav";
+import { formatBRL } from "@/lib/finance/money";
+import { MAXIMO_DE_IMAGENS } from "@/lib/importacao/limites";
 import { ConnectionForm } from "./ConnectionForm";
 import { SyncButton } from "./SyncButton";
+import { UploadPrints } from "./UploadPrints";
 import { removerConexao } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -15,10 +24,16 @@ const quando = new Intl.DateTimeFormat("pt-BR", {
   minute: "2-digit",
 });
 
-export default async function Conexoes() {
+export default async function Conexoes({
+  searchParams,
+}: {
+  searchParams: Promise<{ importado?: string }>;
+}) {
   await requireSession();
 
+  const importado = Number((await searchParams).importado ?? "");
   let linhas: ConnectionRow[] = [];
+  let lotes: ImportacaoResumo[] = [];
   let erroGeral: string | undefined;
 
   try {
@@ -27,15 +42,78 @@ export default async function Conexoes() {
     erroGeral = error instanceof Error ? error.message : "Erro ao carregar conexoes.";
   }
 
+  // Em chamada separada de proposito: um problema nos lotes de importacao — a
+  // migracao ainda nao aplicada, por exemplo — nao pode esconder as conexoes.
+  try {
+    lotes = await loadImportacoes();
+  } catch {
+    lotes = [];
+  }
+
+  const pendentes = lotes.filter((lote) => lote.status === "pendente");
+
   return (
     <main className="page">
       <div className="masthead">
         <h1>Conexoes</h1>
-        <span className="period">
-          <Link href="/">Painel</Link> · <Link href="/dia">Dia</Link> ·{" "}
-          <Link href="/contrapartes">Contrapartes</Link>
-        </span>
       </div>
+
+      <Nav atual="/conexoes" />
+
+      {Number.isFinite(importado) && importado > 0 ? (
+        <p className="banner">
+          <strong>
+            {importado} {importado === 1 ? "lancamento gravado" : "lancamentos gravados"}
+          </strong>{" "}
+          no saldo compartilhado. Eles ja aparecem no <Link href="/">painel</Link> e em{" "}
+          <Link href="/contrapartes">contrapartes</Link>.
+        </p>
+      ) : null}
+
+      {pendentes.length > 0 ? (
+        <p className="banner">
+          <strong>
+            {pendentes.length}{" "}
+            {pendentes.length === 1 ? "leitura aguarda" : "leituras aguardam"} conferencia.
+          </strong>{" "}
+          Enquanto nao forem confirmadas, esses gastos continuam fora do controle:{" "}
+          <Link href={`/importar/${pendentes[0].id}`}>conferir agora</Link>.
+        </p>
+      ) : null}
+
+      <section className="card">
+        <h2>Saldo compartilhado do Nubank</h2>
+        <p className="empty" style={{ marginTop: 0 }}>
+          Esses gastos nao chegam pelo Open Finance: a conta corrente mostra so a transferencia
+          mensal, e o que foi comprado acontece do outro lado. Envie prints da tela de extrato do
+          saldo compartilhado no app do Nubank — ate {MAXIMO_DE_IMAGENS} de uma vez — e as despesas sao lidas e
+          apresentadas para conferencia antes de virar lancamento.
+          <br />
+          <br />
+          E uma ponte, nao a fonte definitiva: quando o arquivo categorizado do Poupa.ai for
+          carregado, ele substitui esta leitura com a classificacao ja feita.
+        </p>
+        <UploadPrints />
+
+        {lotes.length > 0 ? (
+          <ul className="resultado-sync" style={{ marginTop: 16 }}>
+            {lotes.map((lote) => (
+              <li key={lote.id}>
+                <span className="description">
+                  <Link href={`/importar/${lote.id}`}>
+                    {quando.format(lote.createdAt)} · {lote.images}{" "}
+                    {lote.images === 1 ? "imagem" : "imagens"}
+                  </Link>
+                </span>
+                <span className="account-meta">
+                  {lote.linhas} {lote.linhas === 1 ? "linha" : "linhas"} ·{" "}
+                  {formatBRL(-lote.saidas)} · {lote.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
 
       <section className="card">
         <h2>Adicionar conexao</h2>

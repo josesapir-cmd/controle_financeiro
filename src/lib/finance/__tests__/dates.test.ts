@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { localDay, localMonth, localTime, minutesOfDay, shiftDay } from "../dates";
+import { localDay, localMonth, localTime, minutesOfDay, noonAt, shiftDay } from "../dates";
 
 describe("localDay", () => {
   // Brasilia e UTC-3: 01h UTC ainda e o dia anterior por la.
@@ -50,5 +50,23 @@ describe("shiftDay", () => {
 
   it("atravessa a virada do ano", () => {
     expect(shiftDay("2026-12-31", 1)).toBe("2027-01-01");
+  });
+});
+
+describe("noonAt", () => {
+  it("cai no mesmo dia local que foi pedido", () => {
+    expect(localDay(noonAt("2026-05-12"))).toBe("2026-05-12");
+  });
+
+  // O horario e inventado por falta de dado; o que nao pode variar e o dia.
+  it("fica longe das duas viradas do dia", () => {
+    const hora = Number(localTime(noonAt("2026-05-12")).slice(0, 2));
+
+    expect(hora).toBeGreaterThanOrEqual(6);
+    expect(hora).toBeLessThanOrEqual(18);
+  });
+
+  it("devolve data invalida para entrada invalida, sem lancar", () => {
+    expect(Number.isNaN(noonAt("nao e data").getTime())).toBe(true);
   });
 });

@@ -6,6 +6,7 @@ import {
   listAccounts,
   listLabels,
   listTransactions,
+  listarImportacoes,
   syncStatus,
   type AccountRow,
   type SyncStatus,
@@ -67,7 +68,20 @@ function paraContaExibivel(conta: AccountRow): AccountWithConnector {
     balance: conta.balance,
     currencyCode: conta.currency,
     connectorName: conta.connectorName,
+    origin: conta.origin === "manual" ? "manual" : "pluggy",
   };
+}
+
+/**
+ * Contas com saldo apurado.
+ *
+ * A conta virtual do saldo compartilhado registra gastos, nao saldo: ninguem
+ * nos informa quanto sobrou la. Ela precisa aparecer no filtro e nos
+ * lancamentos, mas somar seu zero ao patrimonio seria afirmar um saldo que nao
+ * medimos — entao os totais de saldo a ignoram.
+ */
+function comSaldo(contas: AccountWithConnector[]): AccountWithConnector[] {
+  return contas.filter((conta) => conta.origin !== "manual");
 }
 
 /** Converte a linha do banco para a forma que os agregadores ja consomem. */
@@ -197,13 +211,15 @@ export async function loadDashboard(
   const accountIds = options.accountIds ?? [];
   const { contas, todasAsContas, transacoes, status } = await carregar(period, accountIds);
 
+  const saldos = comSaldo(contas);
+
   return {
-    accounts: contas,
+    accounts: saldos,
     transactions: transacoes,
     categories: totalsByCategory(transacoes),
-    netWorth: netWorth(contas),
-    cashBalance: sumBy(contas, "BANK"),
-    creditBalance: sumBy(contas, "CREDIT"),
+    netWorth: netWorth(saldos),
+    cashBalance: sumBy(saldos, "BANK"),
+    creditBalance: sumBy(saldos, "CREDIT"),
     income: totalIncome(transacoes),
     expenses: totalExpenses(transacoes),
     transfers: totalTransfers(transacoes),
@@ -360,4 +376,34 @@ export async function loadTaxonomy(): Promise<{ categories: string[]; subcategor
     categories: [...categorias].sort(ordenar),
     subcategories: [...subcategorias].sort(ordenar),
   };
+}
+
+export interface ImportacaoResumo {
+  id: string;
+  createdAt: Date;
+  status: string;
+  images: number;
+  linhas: number;
+  /** Soma das saidas do lote, como numero positivo. */
+  saidas: number;
+}
+
+/**
+ * Ultimos lotes lidos de prints do saldo compartilhado.
+ *
+ * A tela de conexoes mostra isso para que um lote pendente nao seja esquecido:
+ * leitura que ninguem confirmou e dinheiro que continua fora do controle.
+ */
+export async function loadImportacoes(limite = 5): Promise<ImportacaoResumo[]> {
+  if (useMock()) return [];
+
+  const lotes = await listarImportacoes(db(), limite);
+  return lotes.map((lote) => ({
+    id: lote.id,
+    createdAt: lote.createdAt,
+    status: lote.status,
+    images: lote.images,
+    linhas: lote.linhas.length,
+    saidas: lote.linhas.reduce((total, l) => (l.valor < 0 ? total - l.valor : total), 0),
+  }));
 }

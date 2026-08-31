@@ -29,6 +29,8 @@ export interface AccountRow {
   number: string | null;
   balance: number;
   currency: string;
+  /** 'pluggy' quando veio do Open Finance, 'manual' quando foi cadastrada aqui. */
+  origin: string;
   updatedAt: Date;
 }
 
@@ -187,6 +189,8 @@ export interface TransactionInput {
   counterpartyDocument?: string | null;
   counterpartySelf?: boolean;
   details?: { label: string; value: string }[] | null;
+  /** 'pluggy' (padrao) ou 'manual', para o que entrou por print ou planilha. */
+  origin?: string;
 }
 
 /**
@@ -208,8 +212,8 @@ export async function upsertTransactions(
       `INSERT INTO transactions
          (id, account_id, posted_at, local_day, amount, currency, category, category_id,
           description_enc, counterparty_fingerprint, counterparty_name_enc,
-          counterparty_doc_enc, counterparty_self, details_enc, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now())
+          counterparty_doc_enc, counterparty_self, details_enc, origin, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now())
        ON CONFLICT (id) DO UPDATE
          SET account_id = EXCLUDED.account_id,
              posted_at = EXCLUDED.posted_at,
@@ -223,6 +227,7 @@ export async function upsertTransactions(
              counterparty_doc_enc = EXCLUDED.counterparty_doc_enc,
              counterparty_self = EXCLUDED.counterparty_self,
              details_enc = EXCLUDED.details_enc,
+             origin = EXCLUDED.origin,
              updated_at = now()`,
       [
         t.id,
@@ -239,6 +244,7 @@ export async function upsertTransactions(
         encryptOptional(t.counterpartyDocument),
         t.counterpartySelf ?? false,
         t.details && t.details.length ? encryptOptional(JSON.stringify(t.details)) : null,
+        t.origin ?? "pluggy",
       ],
     );
     gravadas += 1;
@@ -250,7 +256,7 @@ export async function upsertTransactions(
 export async function listAccounts(db: Db): Promise<AccountRow[]> {
   const linhas = await db.query<Record<string, unknown>>(
     `SELECT id, fingerprint, item_id, connector_name, type, subtype,
-            name_enc, number_enc, balance, currency, updated_at
+            name_enc, number_enc, balance, currency, origin, updated_at
        FROM accounts
       WHERE archived_at IS NULL
       ORDER BY connector_name, type`,
@@ -267,6 +273,7 @@ export async function listAccounts(db: Db): Promise<AccountRow[]> {
     number: decryptOptional(linha.number_enc as string | null),
     balance: numero(linha.balance),
     currency: String(linha.currency),
+    origin: linha.origin ? String(linha.origin) : "pluggy",
     updatedAt: new Date(linha.updated_at as string),
   }));
 }
@@ -415,4 +422,144 @@ export async function syncStatus(db: Db): Promise<SyncStatus[]> {
     lastSyncedAt: linha.last_synced_at ? new Date(linha.last_synced_at as string) : null,
     lastSyncError: linha.last_sync_error ? String(linha.last_sync_error) : null,
   }));
+}
+
+/**
+ * Conta virtual do saldo compartilhado do Nubank.
+ *
+ * Nao existe no Open Finance — a conta corrente so mostra a transferencia
+ * mensal com o valor cheio, e os gastos acontecem do outro lado. Sem um lugar
+ * para eles, ou o dinheiro some do controle, ou a transferencia e contada como
+ * despesa e o detalhe do que foi comprado se perde. A conta virtual resolve as
+ * duas coisas: a transferencia continua sendo movimentacao e os gastos entram
+ * aqui, um a um.
+ *
+ * Fica com `origin = 'manual'` e saldo zero: nao ha saldo apurado para ela, e
+ * somar zero ao patrimonio seria menos errado do que somar um numero inventado
+ * — por isso as telas de saldo a ignoram (ver finance/service.ts).
+ */
+export const CONTA_SALDO_COMPARTILHADO = {
+  connectorName: "Saldo compartilhado (Nubank)",
+  name: "Saldo compartilhado",
+  subtype: "SHARED_BALANCE",
+} as const;
+
+/** Cria a conta virtual se ainda nao existir e devolve o id interno. */
+export async function ensureSharedBalanceAccount(db: Db): Promise<string> {
+  const fp = accountFingerprint(
+    CONTA_SALDO_COMPARTILHADO.name,
+    null,
+    CONTA_SALDO_COMPARTILHADO.subtype,
+  );
+
+  const linhas = await db.query<{ id: string }>(
+    `INSERT INTO accounts
+       (fingerprint, item_id, pluggy_account_id, connector_name, type, subtype,
+        name_enc, number_enc, balance, currency, origin, updated_at)
+     VALUES ($1, NULL, NULL, $2, 'BANK', $3, $4, NULL, 0, 'BRL', 'manual', now())
+     ON CONFLICT (fingerprint) DO UPDATE
+       SET connector_name = EXCLUDED.connector_name,
+           name_enc = EXCLUDED.name_enc,
+           origin = 'manual',
+           archived_at = NULL,
+           updated_at = now()
+     RETURNING id`,
+    [
+      fp,
+      CONTA_SALDO_COMPARTILHADO.connectorName,
+      CONTA_SALDO_COMPARTILHADO.subtype,
+      encryptOptional(CONTA_SALDO_COMPARTILHADO.name),
+    ],
+  );
+
+  return linhas[0].id;
+}
+
+export type StatusDaImportacao = "pendente" | "confirmado" | "descartado";
+
+export interface ImportacaoLinha {
+  id: string;
+  dia: string;
+  descricao: string;
+  valor: number;
+  confianca: string;
+}
+
+export interface Importacao {
+  id: string;
+  createdAt: Date;
+  status: StatusDaImportacao;
+  images: number;
+  note: string | null;
+  linhas: ImportacaoLinha[];
+}
+
+/**
+ * Guarda um lote lido de prints, aguardando conferencia.
+ *
+ * O lote e cifrado inteiro: sao descricoes de gasto, o mesmo tipo de dado que
+ * ja vai cifrado em `transactions`. Nada disso vira lancamento antes de o
+ * usuario confirmar — valor lido de imagem erra, e gasto errado no painel e
+ * pior do que gasto ausente.
+ */
+export async function criarImportacao(
+  db: Db,
+  dados: { linhas: ImportacaoLinha[]; images: number; note?: string | null },
+): Promise<string> {
+  const linhas = await db.query<{ id: string }>(
+    `INSERT INTO shared_imports (images, lines_enc, note)
+     VALUES ($1, $2, $3) RETURNING id`,
+    [dados.images, encryptOptional(JSON.stringify(dados.linhas)), dados.note?.trim() || null],
+  );
+  return linhas[0].id;
+}
+
+function paraImportacao(linha: Record<string, unknown>): Importacao {
+  const conteudo = decryptOptional(linha.lines_enc as string | null);
+  return {
+    id: String(linha.id),
+    createdAt: new Date(linha.created_at as string),
+    status: String(linha.status) as StatusDaImportacao,
+    images: Number(linha.images ?? 0),
+    note: linha.note ? String(linha.note) : null,
+    linhas: conteudo ? (JSON.parse(conteudo) as ImportacaoLinha[]) : [],
+  };
+}
+
+/**
+ * O id vem da URL, e `id = $1` contra uma coluna uuid estoura com texto que nao
+ * seja uuid — erro de servidor onde o certo e "nao encontrado".
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function lerImportacao(db: Db, id: string): Promise<Importacao | null> {
+  if (!UUID.test(id)) return null;
+
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, created_at, status, images, lines_enc, note FROM shared_imports WHERE id = $1`,
+    [id],
+  );
+  return linhas.length ? paraImportacao(linhas[0]) : null;
+}
+
+export async function listarImportacoes(db: Db, limite = 10): Promise<Importacao[]> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, created_at, status, images, lines_enc, note
+       FROM shared_imports ORDER BY created_at DESC LIMIT $1`,
+    [limite],
+  );
+  return linhas.map(paraImportacao);
+}
+
+export async function encerrarImportacao(
+  db: Db,
+  id: string,
+  status: Exclude<StatusDaImportacao, "pendente">,
+): Promise<void> {
+  if (!UUID.test(id)) return;
+
+  await db.query(
+    `UPDATE shared_imports SET status = $2, settled_at = now() WHERE id = $1 AND status = 'pendente'`,
+    [id, status],
+  );
 }

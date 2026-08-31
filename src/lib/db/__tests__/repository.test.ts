@@ -5,7 +5,12 @@ import type { Db } from "../adapter";
 import { migrate } from "../migrate.mjs";
 import {
   accountFingerprint,
+  criarImportacao,
+  encerrarImportacao,
+  ensureSharedBalanceAccount,
+  lerImportacao,
   listAccounts,
+  listarImportacoes,
   listLabels,
   listTransactions,
   markSync,
@@ -393,5 +398,71 @@ describe("identidade nao depende do nome de exibicao", () => {
 
     expect(segundo).toBe(primeiro);
     expect(await listAccounts(db)).toHaveLength(1);
+  });
+});
+
+describe("conta virtual do saldo compartilhado", () => {
+  it("e idempotente: chamar duas vezes devolve a mesma conta", async () => {
+    const primeira = await ensureSharedBalanceAccount(db);
+    const segunda = await ensureSharedBalanceAccount(db);
+
+    expect(primeira).toBe(segunda);
+  });
+
+  it("nasce sem conexao e marcada como manual, para ficar fora do patrimonio", async () => {
+    await ensureSharedBalanceAccount(db);
+    const [conta] = await listAccounts(db);
+
+    expect(conta.itemId).toBeNull();
+    expect(conta.origin).toBe("manual");
+    expect(conta.balance).toBe(0);
+  });
+});
+
+describe("lotes lidos de print", () => {
+  const linhas = [
+    { id: "print:a", dia: "2026-05-12", descricao: "Mercado", valor: -100, confianca: "alta" },
+  ];
+
+  it("guarda e recupera as linhas, com o conteudo cifrado no banco", async () => {
+    const id = await criarImportacao(db, { linhas, images: 2, note: "borrado" });
+    const lote = await lerImportacao(db, id);
+
+    expect(lote?.status).toBe("pendente");
+    expect(lote?.images).toBe(2);
+    expect(lote?.note).toBe("borrado");
+    expect(lote?.linhas).toEqual(linhas);
+
+    const cru = await db.query<{ lines_enc: string }>("SELECT lines_enc FROM shared_imports");
+    expect(cru[0].lines_enc).not.toContain("Mercado");
+  });
+
+  it("devolve null para lote inexistente", async () => {
+    expect(await lerImportacao(db, "00000000-0000-4000-8000-000000000000")).toBeNull();
+  });
+
+  // O id vem da URL: texto qualquer tem que virar "nao encontrado", nao erro.
+  it("devolve null para id que nem uuid e", async () => {
+    expect(await lerImportacao(db, "../etc/passwd")).toBeNull();
+  });
+
+  // Confirmar duas vezes nao pode lancar o mesmo lote de novo.
+  it("so encerra um lote pendente", async () => {
+    const id = await criarImportacao(db, { linhas, images: 1 });
+
+    await encerrarImportacao(db, id, "confirmado");
+    await encerrarImportacao(db, id, "descartado");
+
+    expect((await lerImportacao(db, id))?.status).toBe("confirmado");
+  });
+
+  it("lista do mais recente para o mais antigo", async () => {
+    const antigo = await criarImportacao(db, { linhas, images: 1 });
+    await db.query("UPDATE shared_imports SET created_at = now() - interval '1 hour' WHERE id = $1", [
+      antigo,
+    ]);
+    const novo = await criarImportacao(db, { linhas, images: 1 });
+
+    expect((await listarImportacoes(db)).map((l) => l.id)).toEqual([novo, antigo]);
   });
 });

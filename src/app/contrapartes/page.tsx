@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guard";
+import { Nav } from "@/components/Nav";
 import { AccountFilter } from "@/components/AccountFilter";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import { translateCategory } from "@/lib/finance/categories";
@@ -247,12 +248,9 @@ export default async function Contrapartes({
     <main className="page">
       <div className="masthead">
         <h1>Contrapartes</h1>
-        <span className="period">
-          <Link href={`/?${contasQuery}`}>Painel</Link> ·{" "}
-          <Link href={`/dia?${contasQuery}`}>Dia</Link> ·{" "}
-          <Link href="/conexoes">Conexoes</Link>
-        </span>
       </div>
+
+      <Nav atual="/contrapartes" contasQuery={contasQuery} />
 
       <PeriodForm from={periodo.from} to={periodo.to} accountIds={accountIds} />
 

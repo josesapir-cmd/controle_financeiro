@@ -34,6 +34,10 @@ todas:
 | `CRON_SECRET` | gere um novo: `openssl rand -hex 32` |
 | `APP_DOMAIN` | o dominio da Vercel, sem protocolo (ex.: `controle-financeiro.vercel.app`) |
 | `APP_ORIGIN` | a URL completa (ex.: `https://controle-financeiro.vercel.app`) |
+| `ANTHROPIC_API_KEY` | do console.anthropic.com — so para ler prints do saldo compartilhado |
+
+`ANTHROPIC_API_KEY` e opcional: sem ela todo o resto funciona e apenas o envio
+de prints do saldo compartilhado responde erro, dizendo o que falta.
 
 > **A chave de criptografia precisa ser a mesma.** Gerar outra nao da erro: o
 > app sobe normalmente e devolve lixo ao tentar decifrar descricoes e

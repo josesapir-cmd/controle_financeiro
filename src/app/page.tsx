@@ -4,6 +4,7 @@ import { StatTile } from "@/components/StatTile";
 import { TransactionsTable } from "@/components/TransactionsTable";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guard";
+import { Nav } from "@/components/Nav";
 import { SairButton } from "@/components/SairButton";
 import { AccountFilter } from "@/components/AccountFilter";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
@@ -82,12 +83,12 @@ export default async function Home({
         <h1>Controle Financeiro</h1>
         <span className="period">
           {dados.syncedAt ? `Atualizado em ${sincronizacao.format(dados.syncedAt)} · ` : ""}
-          {formatarPeriodo(dados.period)} · <Link href={`/dia?${contasQuery}`}>Dia</Link> ·{" "}
-          <Link href={`/contrapartes?${contasQuery}`}>Contrapartes</Link> ·{" "}
-          <Link href="/conexoes">Conexoes</Link>
+          {formatarPeriodo(dados.period)}
           <SairButton />
         </span>
       </div>
+
+      <Nav atual="/" contasQuery={contasQuery} />
 
       <div className="filtros">
         <AccountFilter

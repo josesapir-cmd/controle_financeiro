@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guard";
+import { Nav } from "@/components/Nav";
 import { AccountFilter } from "@/components/AccountFilter";
 import { DayStrip } from "@/components/DayStrip";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
@@ -61,12 +62,9 @@ export default async function Dia({
     <main className="page">
       <div className="masthead">
         <h1>Linha do tempo</h1>
-        <span className="period">
-          <Link href={`/?${contasQuery}`}>Painel</Link> ·{" "}
-          <Link href={`/contrapartes?${contasQuery}`}>Contrapartes</Link> ·{" "}
-          <Link href="/conexoes">Conexoes</Link>
-        </span>
       </div>
+
+      <Nav atual="/dia" contasQuery={contasQuery} />
 
       <div className="period-controls">
         <div className="presets">

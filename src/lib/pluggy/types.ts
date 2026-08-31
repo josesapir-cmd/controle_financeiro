@@ -124,4 +124,10 @@ export interface AccountWithConnector extends Account {
   connectorName: string;
   connectorImageUrl?: string;
   connectorPrimaryColor?: string;
+  /**
+   * 'pluggy' para o que vem do Open Finance, 'manual' para conta cadastrada
+   * aqui — hoje so o saldo compartilhado do Nubank. Conta manual nao tem saldo
+   * apurado, entao fica fora do patrimonio (ver finance/service.ts).
+   */
+  origin?: "pluggy" | "manual";
 }

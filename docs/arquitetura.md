@@ -98,9 +98,47 @@ Consequencia de projeto: a identidade de uma conta deixa de ser o `itemId`.
 Reconectar um banco gera item novo, e amarrar o historico a ele o orfanaria.
 A chave passa a ser instituicao + numero da conta.
 
+### 5. Saldo compartilhado: print lido por modelo, conferido antes de gravar
+
+O saldo compartilhado do Nubank nao existe no Open Finance. A conta corrente
+mostra so a transferencia mensal com o valor cheio — no periodo levantado,
+R$ 1,08 milhao em `Transfer - Internal` — e cada compra acontece do outro lado,
+invisivel para a API. Conectar a conta da assistente nao resolveu: os gastos nao
+aparecem no Open Finance dela tambem.
+
+Esse dinheiro e do usuario. As saidas nao podem sumir do controle so porque a
+API nao as entrega, nem podem ser substituidas pela transferencia — que diz
+quanto saiu, mas nao o que foi comprado. Entao ha um caminho de entrada por
+foto da tela: as imagens vao para a API da Anthropic (`claude-opus-5`), que
+devolve as linhas em JSON.
+
+Tres travas, porque leitura de imagem erra:
+
+1. **Nada e gravado direto.** O lote fica em `shared_imports`, cifrado, com
+   status `pendente`. Uma tela de conferencia mostra cada linha editavel; so
+   confirmar grava. Numero errado no painel e pior do que numero ausente: uma
+   vez gravado, ele se mistura ao extrato do banco e ninguem mais distingue.
+2. **Identidade deterministica.** O id do lancamento e o HMAC de
+   (dia, valor, descricao, n-esima ocorrencia identica). Prints que se sobrepoem
+   atualizam em vez de duplicar.
+3. **Origem marcada.** `origin = 'manual'` em conta e lancamento, separando o
+   que foi lido de imagem do que veio do Open Finance.
+
+Os gastos entram numa conta virtual, "Saldo compartilhado (Nubank)". Ela nao
+tem saldo apurado — ninguem nos informa quanto sobrou la — entao fica fora do
+patrimonio liquido; participa dos lancamentos, do filtro e das contrapartes.
+Com isso a transferencia mensal continua sendo movimentacao (nao despesa) e o
+gasto real aparece uma vez so, com o nome do estabelecimento.
+
+E uma ponte, nao a fonte definitiva: o arquivo do Poupa.ai preenchido pela
+assistente traz as mesmas despesas ja categorizadas, e substitui a leitura por
+foto quando for carregado.
+
 ## O que nao muda
 
-- Nenhum dado financeiro trafega para terceiros. Sem analytics, sem scripts
-  externos, sem CDN de fonte.
+- Nenhum dado financeiro trafega para terceiros **exceto** os prints do saldo
+  compartilhado, que o usuario envia deliberadamente para a API da Anthropic
+  para serem lidos. Nao ha analytics, scripts externos nem CDN de fonte, e a
+  imagem nao e guardada: cumprido o papel, so as linhas extraidas permanecem.
 - O CPF do proprio usuario continua descartado na fronteira do servico, antes de
   chegar ao banco.

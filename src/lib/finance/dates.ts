@@ -74,3 +74,21 @@ export function shiftDay(day: string, delta: number): string {
   base.setUTCDate(base.getUTCDate() + delta);
   return base.toISOString().slice(0, 10);
 }
+
+/**
+ * Instante que cai no meio-dia do fuso local do dia informado.
+ *
+ * Serve para lancamentos que chegam sem horario — hoje, os lidos de print do
+ * saldo compartilhado. Meio-dia porque e o ponto do dia mais distante das duas
+ * viradas: qualquer conversao de fuso posterior continua caindo no mesmo dia.
+ */
+export function noonAt(day: string): Date {
+  const candidato = new Date(`${day}T12:00:00Z`);
+  if (Number.isNaN(candidato.getTime())) return candidato;
+
+  // Meio-dia UTC nao e o mesmo dia local em fusos muito a leste ou a oeste;
+  // corrigimos pela diferenca entre o dia que caiu e o que foi pedido.
+  const desvio =
+    Date.parse(`${localDay(candidato)}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`);
+  return desvio === 0 ? candidato : new Date(candidato.getTime() - desvio);
+}
