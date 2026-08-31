@@ -1972,3 +1972,176 @@ ul.centros {
   padding-left: 14px;
   font-size: 12px;
 }
+
+/* --- Treemap de categorias ---
+   Area proporcional ao gasto. A cor carrega magnitude, nao identidade: o nome
+   fica escrito dentro do bloco, e a tabela abaixo repete tudo com precisao. */
+.treemap-figura {
+  margin: 20px 0 0;
+}
+
+.treemap {
+  position: relative;
+  width: 100%;
+  /* Proporcao larga: o algoritmo trabalha melhor com area horizontal, e blocos
+     ficam mais proximos do quadrado. */
+  aspect-ratio: 16 / 9;
+  background: var(--bg-white);
+}
+
+.treemap-categoria {
+  position: absolute;
+}
+
+.treemap-bloco {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  overflow: hidden;
+  padding: 6px 8px;
+  border-radius: 6px;
+  /* O bloco mede a si mesmo: o que cabe dentro dele e decidido em pixels
+     reais, nao nas unidades abstratas da caixa — a mesma fracao vira 90px no
+     computador e 45px no celular. */
+  container-type: size;
+}
+
+.treemap-filho {
+  inset: auto;
+  border-radius: 4px;
+}
+
+.treemap-rotulo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.treemap-nome {
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treemap-valor,
+.treemap-fatia {
+  font-variant-numeric: tabular-nums;
+  /* Sem isto o valor quebra no sinal de menos e vira duas linhas. */
+  white-space: nowrap;
+}
+
+.treemap-valor {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.treemap-fatia {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* Bloco pequeno mostra so o nome; menor ainda, nada — o valor continua no
+   title do bloco e, exato, na tabela abaixo. Numero em cima de cada retangulo
+   transformaria o mapa em parede de texto. */
+.treemap-valor,
+.treemap-fatia {
+  display: none;
+}
+
+@container (min-width: 108px) and (min-height: 44px) {
+  .treemap-valor {
+    display: block;
+  }
+}
+
+@container (min-width: 108px) and (min-height: 62px) {
+  .treemap-fatia {
+    display: block;
+  }
+}
+
+/* Duas regras em vez de uma com virgula: a forma `@container (a), (b)` e valida
+   no navegador mas o compilador de CSS do build a recusa. */
+@container (max-width: 46px) {
+  .treemap-rotulo {
+    display: none;
+  }
+}
+
+@container (max-height: 24px) {
+  .treemap-rotulo {
+    display: none;
+  }
+}
+
+/* Nome da categoria em faixa dentro do grupo. Fora dele, flutuando acima, o
+   rotulo caia por cima do bloco vizinho de cima — o mapa nao tem margem
+   sobrando para pendurar texto. */
+.treemap-cabecalho {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.treemap-grupo-nome {
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.treemap-grupo-valor {
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Os centros ocupam o que sobra abaixo da faixa. As proporcoes entre eles se
+   mantem: todos encolhem pelo mesmo fator. */
+.treemap-grupo {
+  position: absolute;
+  inset: 18px 0 0 0;
+}
+
+.treemap-figura figcaption {
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  /* Bem mais alto que largo: em 390px, a faixa 16/9 achata tudo em tiras
+     ilegiveis. Mesmo assim o mapa e denso no celular — a tabela abaixo e que
+     carrega a leitura fina ali. */
+  .treemap {
+    aspect-ratio: 2 / 3;
+  }
+
+  .treemap-nome,
+  .treemap-valor {
+    font-size: 11px;
+  }
+
+  .treemap-bloco {
+    padding: 4px 6px;
+  }
+
+  /* O total da categoria sai da faixa: em tela estreita ele comia o nome. */
+  .treemap-grupo-valor {
+    display: none;
+  }
+}

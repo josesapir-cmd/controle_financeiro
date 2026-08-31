@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/guard";
 import { AccountFilter } from "@/components/AccountFilter";
 import { Nav } from "@/components/Nav";
+import { TreemapCategorias } from "@/components/TreemapCategorias";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import type { CategoriaTotal, CentroTotal } from "@/lib/finance/centros";
 import { currentMonthRange } from "@/lib/finance/dates";
@@ -295,6 +296,13 @@ export default async function Categorias({
           </div>
         </div>
       </div>
+
+      <section>
+        <h2>Mapa do gasto</h2>
+        <div className="card">
+          <TreemapCategorias categorias={dados.categorias} total={dados.despesas} />
+        </div>
+      </section>
 
       {comMovimento.map((categoria) => (
         <Categoria key={categoria.id} categoria={categoria} />

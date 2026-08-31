@@ -255,7 +255,42 @@ Decisoes que valem registro:
 - O backfill da migracao transforma o que ja estava classificado em taxonomia,
   entao nada do que foi classificado a mao se perde.
 
-### 8. Sistema visual
+### 8. O mapa do gasto e por que ele nao e colorido por categoria
+
+A aba de categorias abre com um treemap: area proporcional ao gasto, categorias
+subdivididas nos seus centros de custo.
+
+**A cor carrega magnitude, nao identidade.** Um matiz por categoria pareceria
+mais bonito e seria pior: sao 16 categorias, e nenhuma paleta separa 16 matizes
+de forma confiavel para quem nao distingue cores. Num treemap o problema e maior
+que numa barra empilhada — ali so os vizinhos se tocam, aqui qualquer bloco pode
+encostar em qualquer outro, entao todos os pares precisariam passar. A paleta de
+referencia valida no maximo tres nesse regime. Com um tom so, a identidade fica
+onde e exata: escrita dentro do bloco e na tabela logo abaixo.
+
+A rampa e um azul de quatro degraus, validada pelo verificador (monotonica,
+degraus visiveis, ponta clara acima de 2:1 sobre branco). Cada degrau foi
+escolhido para ter tinta de rotulo com contraste minimo de 6,2:1 — os degraus
+intermediarios do azul nao alcancam 4,5:1 com branco nem com tinta escura, e
+ficaram de fora por isso.
+
+Outras decisoes:
+
+- **O degrau vem da fatia do total, nao da posicao na lista.** Por posicao, o
+  quinto maior gasto ficaria claro mesmo valendo quase tanto quanto o quarto, e
+  a cor passaria a codificar ranking em vez do dado.
+- **Receita e movimentacao nao entram no mapa.** Nao dividem o mesmo bolo que a
+  despesa, e dar-lhes area no mesmo retangulo afirmaria que dividem.
+- **O que cabe em cada bloco e decidido em pixels, pelo CSS**, com consulta de
+  container. A primeira versao decidia em JavaScript comparando as unidades
+  abstratas da caixa: os mesmos 12% viram 90px no computador e 45px no celular,
+  entao o rotulo cabia num lugar e vazava no outro.
+- **O nome da categoria e uma faixa dentro do grupo.** Solto acima dele, caia por
+  cima do bloco vizinho — o mapa nao tem margem sobrando para pendurar texto.
+- A tabela detalhada abaixo do mapa e a visao acessivel: todo valor esta la, com
+  precisao, para quem nao le area.
+
+### 9. Sistema visual
 
 A referencia e a pagina de transacoes do template financeiro do AlignUI, conferida
 contra o HTML dela. Tudo vive em `globals.css`, em tokens — nao ha CSS por
