@@ -9,7 +9,6 @@ import {
 import { AddDeviceButton } from "@/components/AddDeviceButton";
 import { Nav } from "@/components/Nav";
 import { formatBRL } from "@/lib/finance/money";
-import { MAXIMO_DE_IMAGENS } from "@/lib/importacao/limites";
 import { ConnectionForm } from "./ConnectionForm";
 import { SyncButton } from "./SyncButton";
 import { UploadPrints } from "./UploadPrints";
@@ -85,9 +84,14 @@ export default async function Conexoes({
         <h2>Saldo compartilhado do Nubank</h2>
         <p className="empty" style={{ marginTop: 0 }}>
           Esses gastos nao chegam pelo Open Finance: a conta corrente mostra so a transferencia
-          mensal, e o que foi comprado acontece do outro lado. Envie prints da tela de extrato do
-          saldo compartilhado no app do Nubank — ate {MAXIMO_DE_IMAGENS} de uma vez — e as despesas sao lidas e
-          apresentadas para conferencia antes de virar lancamento.
+          mensal, e o que foi comprado acontece do outro lado. Selecione quantos prints da tela de
+          extrato do saldo compartilhado quiser — eles sao lidos em fila, alguns por vez, e as
+          despesas aparecem para conferencia antes de virar lancamento.
+          <br />
+          <br />
+          Linha que se repete entre prints diferentes (mesma data, valor e contraparte) vem marcada
+          como possivel repeticao e desmarcada, para voce decidir: pode ser a mesma compra
+          fotografada duas vezes, ou duas compras iguais de verdade.
           <br />
           <br />
           E uma ponte, nao a fonte definitiva: quando o arquivo categorizado do Poupa.ai for

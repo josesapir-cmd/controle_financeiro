@@ -5,6 +5,7 @@ import type { Db } from "../adapter";
 import { migrate } from "../migrate.mjs";
 import {
   accountFingerprint,
+  anexarImportacao,
   criarImportacao,
   encerrarImportacao,
   ensureSharedBalanceAccount,
@@ -421,7 +422,17 @@ describe("conta virtual do saldo compartilhado", () => {
 
 describe("lotes lidos de print", () => {
   const linhas = [
-    { id: "print:a", dia: "2026-05-12", descricao: "Mercado", valor: -100, confianca: "alta" },
+    {
+      id: "print:a",
+      dia: "2026-05-12",
+      descricao: "Mercado",
+      valor: -100,
+      confianca: "alta",
+      ocorrencia: 1,
+      envio: 1,
+      arquivos: ["IMG_01.png"],
+      duplicada: false,
+    },
   ];
 
   it("guarda e recupera as linhas, com o conteudo cifrado no banco", async () => {
@@ -454,6 +465,30 @@ describe("lotes lidos de print", () => {
     await encerrarImportacao(db, id, "descartado");
 
     expect((await lerImportacao(db, id))?.status).toBe("confirmado");
+  });
+
+  it("acrescenta um envio ao lote pendente, somando imagens e envios", async () => {
+    const id = await criarImportacao(db, { linhas, images: 2, note: "primeiro" });
+    const mais = [...linhas, { ...linhas[0], id: "print:b", envio: 2, arquivos: ["IMG_02.png"] }];
+
+    expect(await anexarImportacao(db, id, { linhas: mais, imagens: 3, note: "segundo" })).toBe(true);
+
+    const lote = await lerImportacao(db, id);
+    expect(lote?.images).toBe(5);
+    expect(lote?.envios).toBe(2);
+    expect(lote?.linhas).toHaveLength(2);
+    // As observacoes se somam: cada uma fala de imagens diferentes.
+    expect(lote?.note).toBe("primeiro\nsegundo");
+  });
+
+  // Um envio atrasado da fila nao pode cair num lote ja confirmado: somaria
+  // linhas nunca conferidas a algo que o usuario deu por fechado.
+  it("recusa acrescentar a lote ja encerrado", async () => {
+    const id = await criarImportacao(db, { linhas, images: 1 });
+    await encerrarImportacao(db, id, "confirmado");
+
+    expect(await anexarImportacao(db, id, { linhas, imagens: 1 })).toBe(false);
+    expect((await lerImportacao(db, id))?.images).toBe(1);
   });
 
   it("lista do mais recente para o mais antigo", async () => {

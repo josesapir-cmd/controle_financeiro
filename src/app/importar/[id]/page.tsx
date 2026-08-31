@@ -30,9 +30,13 @@ export default async function Conferir({ params }: { params: Promise<{ id: strin
   const lote = await lerImportacao(fromPostgres(getSql()), id);
   if (!lote) notFound();
 
-  const saidas = lote.linhas.reduce((total, l) => (l.valor < 0 ? total - l.valor : total), 0);
-  const entradas = lote.linhas.reduce((total, l) => (l.valor > 0 ? total + l.valor : total), 0);
-  const duvidosas = lote.linhas.filter((l) => l.confianca !== "alta").length;
+  // As repetidas nao entram nos totais: elas comecam desmarcadas, entao somar
+  // seus valores aqui mostraria um total que o botao de confirmar nao vai gravar.
+  const valendo = lote.linhas.filter((l) => !l.duplicada);
+  const saidas = valendo.reduce((total, l) => (l.valor < 0 ? total - l.valor : total), 0);
+  const entradas = valendo.reduce((total, l) => (l.valor > 0 ? total + l.valor : total), 0);
+  const duvidosas = valendo.filter((l) => l.confianca !== "alta").length;
+  const repetidas = lote.linhas.filter((l) => l.duplicada);
   const indices = lote.linhas.map((_, i) => String(i)).join(",");
 
   return (
@@ -40,8 +44,8 @@ export default async function Conferir({ params }: { params: Promise<{ id: strin
       <div className="masthead">
         <h1>Conferir leitura</h1>
         <span className="period">
-          {lote.images} {lote.images === 1 ? "imagem" : "imagens"} ·{" "}
-          {quando.format(lote.createdAt)}
+          {lote.images} {lote.images === 1 ? "imagem" : "imagens"} em {lote.envios}{" "}
+          {lote.envios === 1 ? "envio" : "envios"} · {quando.format(lote.createdAt)}
         </span>
       </div>
 
@@ -59,6 +63,18 @@ export default async function Conferir({ params }: { params: Promise<{ id: strin
           o que nao deve entrar. So depois de confirmar eles viram lancamentos.
         </p>
       )}
+
+      {repetidas.length > 0 ? (
+        <p className="banner">
+          <strong>
+            {repetidas.length}{" "}
+            {repetidas.length === 1 ? "linha aparece" : "linhas aparecem"} em mais de um envio
+          </strong>{" "}
+          com a mesma data, o mesmo valor e a mesma contraparte. Vieram desmarcadas porque a
+          leitura nao consegue distinguir a mesma compra fotografada duas vezes de duas compras
+          iguais de verdade — so quem viu as telas sabe. Marque as que forem gastos separados.
+        </p>
+      ) : null}
 
       {lote.note ? (
         <p className="banner">
@@ -83,6 +99,13 @@ export default async function Conferir({ params }: { params: Promise<{ id: strin
           <div className={`tile-value ${duvidosas > 0 ? "negative" : ""}`}>{duvidosas}</div>
           <div className="tile-note">Linhas que o modelo nao leu com confianca alta</div>
         </div>
+        <div className="card">
+          <div className="tile-label">Possiveis repeticoes</div>
+          <div className={`tile-value ${repetidas.length > 0 ? "negative" : ""}`}>
+            {repetidas.length}
+          </div>
+          <div className="tile-note">Mesma data, valor e contraparte em envios diferentes</div>
+        </div>
       </div>
 
       {lote.linhas.length === 0 ? (
@@ -106,25 +129,34 @@ export default async function Conferir({ params }: { params: Promise<{ id: strin
                     <th>Incluir</th>
                     <th>Data</th>
                     <th>Descricao</th>
+                    <th>Origem</th>
                     <th>Tipo</th>
                     <th className="num">Valor</th>
                   </tr>
                 </thead>
                 <tbody>
                   {lote.linhas.map((linha, i) => (
-                    <tr key={linha.id} className={linha.confianca !== "alta" ? "duvidosa" : ""}>
+                    <tr
+                      key={linha.id}
+                      className={[
+                        linha.duplicada ? "repetida" : "",
+                        linha.confianca !== "alta" ? "duvidosa" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
                       <td>
+                        {/* Repetida entre envios comeca desmarcada: incluir por
+                            engano soma um gasto que nao existe, e deixar de fora
+                            por engano aparece na conferencia seguinte. */}
                         <input
                           type="checkbox"
                           name={`incluir_${i}`}
-                          defaultChecked
+                          defaultChecked={!linha.duplicada}
                           aria-label={`Incluir ${linha.descricao}`}
                         />
-                        <input
-                          type="hidden"
-                          name={`confianca_${i}`}
-                          value={linha.confianca}
-                        />
+                        <input type="hidden" name={`confianca_${i}`} value={linha.confianca} />
+                        <input type="hidden" name={`ocorrencia_${i}`} value={linha.ocorrencia} />
                       </td>
                       <td>
                         <input
@@ -145,6 +177,14 @@ export default async function Conferir({ params }: { params: Promise<{ id: strin
                         {linha.confianca !== "alta" ? (
                           <span className="tag">leitura {linha.confianca}</span>
                         ) : null}
+                        {linha.duplicada ? <span className="tag">possivel repeticao</span> : null}
+                      </td>
+                      <td>
+                        <span className="account-meta" title={linha.arquivos.join(", ")}>
+                          envio {linha.envio}
+                          {linha.arquivos.length ? ` · ${linha.arquivos[0]}` : ""}
+                          {linha.arquivos.length > 1 ? ` +${linha.arquivos.length - 1}` : ""}
+                        </span>
                       </td>
                       <td>
                         <select name={`tipo_${i}`} defaultValue={linha.valor > 0 ? "entrada" : "despesa"}>

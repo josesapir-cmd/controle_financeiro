@@ -7,7 +7,7 @@ import { fromPostgres } from "@/lib/db/adapter";
 import { getSql } from "@/lib/db/client";
 import { encerrarImportacao, lerImportacao } from "@/lib/db/repository";
 import { gravarLinhas } from "@/lib/importacao/gravar";
-import { normalizar, type LinhaBruta } from "@/lib/importacao/linhas";
+import { doFormulario, type Linha } from "@/lib/importacao/linhas";
 
 /**
  * Conferencia de um lote lido de prints.
@@ -37,21 +37,27 @@ export async function confirmarImportacao(formData: FormData): Promise<void> {
     .map((valor) => valor.trim())
     .filter(Boolean);
 
-  const escolhidas: LinhaBruta[] = [];
+  const escolhidas: Linha[] = [];
   for (const indice of indices) {
     if (!formData.get(`incluir_${indice}`)) continue;
 
-    escolhidas.push({
-      data: String(formData.get(`data_${indice}`) ?? ""),
+    const linha = doFormulario({
+      dia: String(formData.get(`data_${indice}`) ?? ""),
       descricao: String(formData.get(`descricao_${indice}`) ?? ""),
       // O campo de valor aceita virgula porque e assim que se digita em pt-BR.
       valor: Number(String(formData.get(`valor_${indice}`) ?? "").replace(",", ".")),
       tipo: String(formData.get(`tipo_${indice}`) ?? "despesa"),
       confianca: String(formData.get(`confianca_${indice}`) ?? "baixa"),
+      // A ocorrencia vem do formulario, nao e recontada aqui: ela foi fixada
+      // quando a linha foi lida e faz parte da identidade do lancamento.
+      // Reconta-la mudaria o id de uma linha so porque a irma foi desmarcada.
+      ocorrencia: Number(formData.get(`ocorrencia_${indice}`) ?? 1),
     });
+
+    if (linha) escolhidas.push(linha);
   }
 
-  const { linhas } = normalizar(escolhidas);
+  const linhas = escolhidas;
   await gravarLinhas(db, linhas);
   await encerrarImportacao(db, id, "confirmado");
 

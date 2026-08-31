@@ -477,19 +477,37 @@ export async function ensureSharedBalanceAccount(db: Db): Promise<string> {
 
 export type StatusDaImportacao = "pendente" | "confirmado" | "descartado";
 
+/**
+ * O id vem da URL, e `id = $1` contra uma coluna uuid estoura com texto que nao
+ * seja uuid — erro de servidor onde o certo e "nao encontrado".
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Linha guardada no lote. Mesma forma de `importacao/linhas.ts`, repetida aqui
+ * para o repositorio nao depender da camada de importacao — o que ele guarda e
+ * JSON cifrado, nao um tipo daquele modulo.
+ */
 export interface ImportacaoLinha {
   id: string;
   dia: string;
   descricao: string;
   valor: number;
   confianca: string;
+  ocorrencia: number;
+  envio: number;
+  arquivos: string[];
+  duplicada: boolean;
 }
 
 export interface Importacao {
   id: string;
   createdAt: Date;
   status: StatusDaImportacao;
+  /** Quantas imagens ja foram lidas para este lote, somando todos os envios. */
   images: number;
+  /** Quantos envios da fila ja entraram. */
+  envios: number;
   note: string | null;
   linhas: ImportacaoLinha[];
 }
@@ -507,11 +525,45 @@ export async function criarImportacao(
   dados: { linhas: ImportacaoLinha[]; images: number; note?: string | null },
 ): Promise<string> {
   const linhas = await db.query<{ id: string }>(
-    `INSERT INTO shared_imports (images, lines_enc, note)
-     VALUES ($1, $2, $3) RETURNING id`,
+    `INSERT INTO shared_imports (images, envios, lines_enc, note)
+     VALUES ($1, 1, $2, $3) RETURNING id`,
     [dados.images, encryptOptional(JSON.stringify(dados.linhas)), dados.note?.trim() || null],
   );
   return linhas[0].id;
+}
+
+/**
+ * Acrescenta um envio da fila a um lote que ainda esta pendente.
+ *
+ * As linhas ja vem mescladas por quem chamou: a deteccao de repeticao entre
+ * envios precisa ver o lote inteiro, e isso e trabalho da camada de
+ * importacao, nao do banco. Aqui so persiste o resultado.
+ *
+ * A condicao `status = 'pendente'` impede que um envio atrasado da fila caia
+ * num lote que o usuario ja confirmou — o que somaria linhas nunca conferidas a
+ * algo dado por fechado.
+ */
+export async function anexarImportacao(
+  db: Db,
+  id: string,
+  dados: { linhas: ImportacaoLinha[]; imagens: number; note?: string | null },
+): Promise<boolean> {
+  if (!UUID.test(id)) return false;
+
+  const linhas = await db.query<{ id: string }>(
+    `UPDATE shared_imports
+        SET images = images + $2,
+            envios = envios + 1,
+            lines_enc = $3,
+            -- As observacoes de cada envio se somam: cada uma fala de imagens
+            -- diferentes, e ficar so com a ultima esconderia as anteriores.
+            note = NULLIF(trim(both E'\n' from coalesce(note, '') || E'\n' || coalesce($4, '')), '')
+      WHERE id = $1 AND status = 'pendente'
+      RETURNING id`,
+    [id, dados.imagens, encryptOptional(JSON.stringify(dados.linhas)), dados.note?.trim() || null],
+  );
+
+  return linhas.length > 0;
 }
 
 function paraImportacao(linha: Record<string, unknown>): Importacao {
@@ -521,22 +573,18 @@ function paraImportacao(linha: Record<string, unknown>): Importacao {
     createdAt: new Date(linha.created_at as string),
     status: String(linha.status) as StatusDaImportacao,
     images: Number(linha.images ?? 0),
+    envios: Number(linha.envios ?? 1),
     note: linha.note ? String(linha.note) : null,
     linhas: conteudo ? (JSON.parse(conteudo) as ImportacaoLinha[]) : [],
   };
 }
 
-/**
- * O id vem da URL, e `id = $1` contra uma coluna uuid estoura com texto que nao
- * seja uuid — erro de servidor onde o certo e "nao encontrado".
- */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function lerImportacao(db: Db, id: string): Promise<Importacao | null> {
   if (!UUID.test(id)) return null;
 
   const linhas = await db.query<Record<string, unknown>>(
-    `SELECT id, created_at, status, images, lines_enc, note FROM shared_imports WHERE id = $1`,
+    `SELECT id, created_at, status, images, envios, lines_enc, note
+       FROM shared_imports WHERE id = $1`,
     [id],
   );
   return linhas.length ? paraImportacao(linhas[0]) : null;
@@ -544,7 +592,7 @@ export async function lerImportacao(db: Db, id: string): Promise<Importacao | nu
 
 export async function listarImportacoes(db: Db, limite = 10): Promise<Importacao[]> {
   const linhas = await db.query<Record<string, unknown>>(
-    `SELECT id, created_at, status, images, lines_enc, note
+    `SELECT id, created_at, status, images, envios, lines_enc, note
        FROM shared_imports ORDER BY created_at DESC LIMIT $1`,
     [limite],
   );

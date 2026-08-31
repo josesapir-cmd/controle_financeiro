@@ -6,7 +6,7 @@ import { migrate } from "@/lib/db/migrate.mjs";
 import { listAccounts, listTransactions } from "@/lib/db/repository";
 import { localDay } from "@/lib/finance/dates";
 import { gravarLinhas, paraLancamento } from "../gravar";
-import { normalizar, type Linha } from "../linhas";
+import { mesclar, validar, type Linha } from "../linhas";
 
 let pg: PGlite;
 let db: Db;
@@ -34,8 +34,15 @@ afterEach(async () => {
   await pg.close();
 });
 
-function linhas(brutas: { data: string; descricao: string; valor: number; tipo?: string }[]): Linha[] {
-  return normalizar(brutas.map((b) => ({ confianca: "alta", tipo: "despesa", ...b }))).linhas;
+function linhas(
+  brutas: { data: string; descricao: string; valor: number; tipo?: string }[],
+  envio = 1,
+): Linha[] {
+  const { linhas: validadas } = validar(
+    brutas.map((b) => ({ confianca: "alta", tipo: "despesa", ...b })),
+    { envio, arquivos: [`IMG_0${envio}.png`] },
+  );
+  return mesclar([], validadas);
 }
 
 describe("paraLancamento", () => {

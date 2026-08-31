@@ -1,8 +1,7 @@
 import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
-import { MAXIMO_DE_IMAGENS } from "./limites";
-import { normalizar, type LinhaBruta, type Normalizacao } from "./linhas";
+import { validar, type LinhaBruta, type Procedencia, type Validacao } from "./linhas";
 
 /**
  * Leitura de prints da tela de saldo compartilhado do Nubank.
@@ -92,7 +91,7 @@ function instrucoes(hoje: string): string {
   ].join("\n");
 }
 
-export interface Leitura extends Normalizacao {
+export interface Leitura extends Validacao {
   observacao: string;
 }
 
@@ -166,16 +165,15 @@ export function clienteAnthropic(apiKey = process.env.ANTHROPIC_API_KEY): Client
   };
 }
 
+/** Le um bloco da fila. Quem controla a fila e a tela; aqui e uma chamada so. */
 export async function lerPrints(
   imagens: Imagem[],
   hoje: string,
+  procedencia: Procedencia,
   cliente: ClienteDeLeitura = clienteAnthropic(),
 ): Promise<Leitura> {
   if (imagens.length === 0) throw new Error("Nenhuma imagem enviada.");
-  if (imagens.length > MAXIMO_DE_IMAGENS) {
-    throw new Error(`Envie no maximo ${MAXIMO_DE_IMAGENS} imagens por vez.`);
-  }
 
   const bruto = await cliente.ler(imagens, hoje);
-  return { ...normalizar(bruto.linhas), observacao: bruto.observacao };
+  return { ...validar(bruto.linhas, procedencia), observacao: bruto.observacao };
 }

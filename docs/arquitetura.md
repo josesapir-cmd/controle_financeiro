@@ -112,7 +112,7 @@ quanto saiu, mas nao o que foi comprado. Entao ha um caminho de entrada por
 foto da tela: as imagens vao para a API da Anthropic (`claude-opus-5`), que
 devolve as linhas em JSON.
 
-Tres travas, porque leitura de imagem erra:
+Quatro travas, porque leitura de imagem erra:
 
 1. **Nada e gravado direto.** O lote fica em `shared_imports`, cifrado, com
    status `pendente`. Uma tela de conferencia mostra cada linha editavel; so
@@ -120,9 +120,36 @@ Tres travas, porque leitura de imagem erra:
    vez gravado, ele se mistura ao extrato do banco e ninguem mais distingue.
 2. **Identidade deterministica.** O id do lancamento e o HMAC de
    (dia, valor, descricao, n-esima ocorrencia identica). Prints que se sobrepoem
-   atualizam em vez de duplicar.
-3. **Origem marcada.** `origin = 'manual'` em conta e lancamento, separando o
+   atualizam em vez de duplicar. A ocorrencia e fixada na leitura e viaja pelo
+   formulario de conferencia: reconta-la ali mudaria o id de uma linha so
+   porque a identica ao lado foi desmarcada, orfanando o que ja foi gravado.
+3. **Repeticao entre envios e apontada, nunca apagada.** Ver abaixo.
+4. **Origem marcada.** `origin = 'manual'` em conta e lancamento, separando o
    que foi lido de imagem do que veio do Open Finance.
+
+### Fila de envio, e o que ela obriga a decidir
+
+Nao ha teto de imagens por vez. A tela quebra a selecao em blocos de quatro e
+chama a rota uma vez por bloco, sempre para o mesmo lote. Duas razoes: uma
+chamada com dezenas de imagens demora mais do que o limite de tempo da funcao, e
+uma falha no fim perderia tudo que ja tinha sido lido — como o servidor guarda o
+acumulado a cada bloco, uma queda no meio nao descarta nada e a fila retoma.
+
+O bloco tem um efeito colateral util: dentro dele o modelo enxerga as telas
+juntas e nao repete a linha que aparece em duas que se sobrepoem. Prints de
+rolagem sao consecutivos, entao vizinhos caem no mesmo bloco e a maior parte das
+sobreposicoes se resolve sozinha.
+
+O que atravessa a fronteira entre blocos e detectado aqui: linha com **mesmo
+dia, mesmo valor e mesma contraparte** vinda de **outro envio** e marcada como
+possivel repeticao e chega desmarcada na conferencia, fora dos totais.
+
+Ela nao e descartada, e a distincao importa. "Mesma data, mesmo valor, mesma
+contraparte" tanto pode ser a mesma compra fotografada duas vezes quanto dois
+cafes iguais na mesma padaria. Apagar o segundo caso em silencio tira dinheiro
+do controle sem ninguem perceber — exatamente o que este recurso existe para
+impedir. Repeticao dentro do mesmo envio nao e marcada: ali o modelo viu as duas
+imagens de uma vez e ja teria unido o que fosse a mesma linha.
 
 Os gastos entram numa conta virtual, "Saldo compartilhado (Nubank)". Ela nao
 tem saldo apurado — ninguem nos informa quanto sobrou la — entao fica fora do

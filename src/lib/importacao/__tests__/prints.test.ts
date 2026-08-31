@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetKeyCache } from "@/lib/crypto";
-import { MAXIMO_DE_IMAGENS, tipoAceito } from "../limites";
+import { TAMANHO_DO_ENVIO, emBlocos, tipoAceito } from "../limites";
 import { lerPrints, type ClienteDeLeitura } from "../prints";
 
 beforeEach(() => {
@@ -20,30 +20,19 @@ function cliente(resposta: Awaited<ReturnType<ClienteDeLeitura["ler"]>>): Client
 }
 
 describe("lerPrints", () => {
+  const PROCEDENCIA = { envio: 1, arquivos: ["IMG_01.png"] };
+
   it("recusa envio vazio", async () => {
-    await expect(lerPrints([], "2026-05-12", cliente({ linhas: [], observacao: "" }))).rejects.toThrow(
-      /Nenhuma imagem/,
-    );
+    await expect(
+      lerPrints([], "2026-05-12", PROCEDENCIA, cliente({ linhas: [], observacao: "" })),
+    ).rejects.toThrow(/Nenhuma imagem/);
   });
 
-  it("recusa mais imagens do que o limite, antes de gastar uma chamada", async () => {
-    const demais = Array.from({ length: MAXIMO_DE_IMAGENS + 1 }, () => IMAGEM);
-    let chamou = false;
-    const espiao: ClienteDeLeitura = {
-      async ler() {
-        chamou = true;
-        return { linhas: [], observacao: "" };
-      },
-    };
-
-    await expect(lerPrints(demais, "2026-05-12", espiao)).rejects.toThrow(/no maximo/);
-    expect(chamou).toBe(false);
-  });
-
-  it("normaliza o que o modelo devolve e separa o que nao passou", async () => {
+  it("valida o que o modelo devolve e separa o que nao passou", async () => {
     const leitura = await lerPrints(
       [IMAGEM],
       "2026-05-12",
+      PROCEDENCIA,
       cliente({
         linhas: [
           { data: "2026-05-12", descricao: "Mercado", valor: 100, tipo: "despesa", confianca: "alta" },
@@ -57,6 +46,23 @@ describe("lerPrints", () => {
     expect(leitura.rejeitadas).toHaveLength(1);
     expect(leitura.observacao).toBe("a ultima linha estava cortada");
   });
+
+  it("carimba a procedencia em cada linha, para a tela dizer de que print veio", async () => {
+    const leitura = await lerPrints(
+      [IMAGEM],
+      "2026-05-12",
+      { envio: 4, arquivos: ["IMG_09.png"] },
+      cliente({
+        linhas: [
+          { data: "2026-05-12", descricao: "Mercado", valor: 100, tipo: "despesa", confianca: "alta" },
+        ],
+        observacao: "",
+      }),
+    );
+
+    expect(leitura.linhas[0].envio).toBe(4);
+    expect(leitura.linhas[0].arquivos).toEqual(["IMG_09.png"]);
+  });
 });
 
 describe("tipoAceito", () => {
@@ -67,5 +73,24 @@ describe("tipoAceito", () => {
   it("recusa o que nao e imagem", () => {
     expect(tipoAceito("application/pdf")).toBe(false);
     expect(tipoAceito("text/csv")).toBe(false);
+  });
+});
+
+describe("emBlocos", () => {
+  it("quebra a selecao em blocos do tamanho de envio, preservando a ordem", () => {
+    const blocos = emBlocos([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+
+    expect(blocos.map((b) => b.length)).toEqual([TAMANHO_DO_ENVIO, TAMANHO_DO_ENVIO, 1]);
+    expect(blocos.flat()).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  it("nao produz bloco vazio para selecao vazia", () => {
+    expect(emBlocos([])).toEqual([]);
+  });
+
+  // Prints de rolagem sao consecutivos: manter vizinhos no mesmo bloco faz o
+  // proprio modelo unir a sobreposicao, sem depender da deteccao posterior.
+  it("mantem imagens vizinhas no mesmo bloco", () => {
+    expect(emBlocos(["a", "b", "c"], 4)).toEqual([["a", "b", "c"]]);
   });
 });
