@@ -296,9 +296,15 @@ function LinhasDeLancamentos({
 function Valores({ c }: { c: CounterpartyTotal }) {
   return (
     <>
-      <td className="amount">{c.sent > 0 ? formatBRL(-c.sent) : "—"}</td>
-      <td className="amount">{c.received > 0 ? formatBRL(c.received) : "—"}</td>
-      <td className={`amount ${c.net < 0 ? "negative" : "positive"}`}>{formatBRL(c.net)}</td>
+      <td className="amount" data-rotulo="Enviado">
+        {c.sent > 0 ? formatBRL(-c.sent) : "—"}
+      </td>
+      <td className="amount" data-rotulo="Recebido">
+        {c.received > 0 ? formatBRL(c.received) : "—"}
+      </td>
+      <td className={`amount ${c.net < 0 ? "negative" : "positive"}`} data-rotulo="Liquido">
+        {formatBRL(c.net)}
+      </td>
     </>
   );
 }
@@ -549,7 +555,7 @@ export default async function Contrapartes({
           </div>
         ) : (
           <div className="card table-scroll">
-            <table>
+            <table className="empilha">
               <thead>
                 <tr>
                   <th scope="col">Contraparte</th>
@@ -590,7 +596,7 @@ export default async function Contrapartes({
         <section>
           <h2>Classificadas ({classificadas.length})</h2>
           <div className="card table-scroll">
-            <table>
+            <table className="empilha">
               <thead>
                 <tr>
                   <th scope="col">Contraparte</th>
@@ -629,8 +635,8 @@ export default async function Contrapartes({
                           />
                         </td>
                         <Valores c={c} />
-                        <td>{c.category}</td>
-                        <td>{c.subcategory ?? "—"}</td>
+                        <td data-rotulo="Categoria">{c.category}</td>
+                        <td data-rotulo="Subcategoria">{c.subcategory ?? "—"}</td>
                         <td>
                           <Link
                             className="editar"

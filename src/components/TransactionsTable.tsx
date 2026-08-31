@@ -15,7 +15,7 @@ export function TransactionsTable({ transactions }: { transactions: Transaction[
 
   return (
     <div className="table-scroll">
-      <table>
+      <table className="empilha">
         <thead>
           <tr>
             <th scope="col">Data</th>
@@ -29,10 +29,15 @@ export function TransactionsTable({ transactions }: { transactions: Transaction[
         <tbody>
           {transactions.map((transaction) => (
             <tr key={transaction.id}>
-              <td>{data.format(new Date(transaction.date))}</td>
+              <td data-rotulo="Data">{data.format(new Date(transaction.date))}</td>
               <td className="description">{transaction.description}</td>
-              <td>{transaction.category ? translateCategory(transaction.category) : "—"}</td>
-              <td className={`amount ${transaction.amount < 0 ? "negative" : "positive"}`}>
+              <td data-rotulo="Categoria">
+                {transaction.category ? translateCategory(transaction.category) : "—"}
+              </td>
+              <td
+                data-rotulo="Valor"
+                className={`amount ${transaction.amount < 0 ? "negative" : "positive"}`}
+              >
                 {formatBRL(transaction.amount)}
               </td>
             </tr>

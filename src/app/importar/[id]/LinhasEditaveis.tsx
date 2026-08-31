@@ -24,7 +24,7 @@ export function LinhasEditaveis({
 }) {
   return (
     <div className="table-scroll">
-      <table>
+      <table className="empilha">
         <thead>
           <tr>
             <th>Incluir</th>
@@ -38,7 +38,7 @@ export function LinhasEditaveis({
         <tbody>
           {itens.map(({ linha, indice }) => (
             <tr key={linha.id}>
-              <td>
+              <td data-rotulo="Incluir">
                 <input
                   type="checkbox"
                   name={`incluir_${indice}`}
@@ -48,7 +48,7 @@ export function LinhasEditaveis({
                 <input type="hidden" name={`confianca_${indice}`} value={linha.confianca} />
                 <input type="hidden" name={`ocorrencia_${indice}`} value={linha.ocorrencia} />
               </td>
-              <td>
+              <td data-rotulo="Data">
                 <input
                   type="date"
                   name={`data_${indice}`}
@@ -56,7 +56,7 @@ export function LinhasEditaveis({
                   aria-label="Data"
                 />
               </td>
-              <td className="description">
+              <td className="description" data-rotulo="Descricao">
                 <input
                   type="text"
                   name={`descricao_${indice}`}
@@ -69,7 +69,7 @@ export function LinhasEditaveis({
                 ) : null}
               </td>
               {mostrarOrigem ? (
-                <td>
+                <td data-rotulo="Origem">
                   <span className="account-meta" title={linha.arquivos.join(", ")}>
                     envio {linha.envio}
                     {linha.arquivos.length ? ` · ${linha.arquivos[0]}` : ""}
@@ -77,7 +77,7 @@ export function LinhasEditaveis({
                   </span>
                 </td>
               ) : null}
-              <td>
+              <td data-rotulo="Tipo">
                 <select
                   name={`tipo_${indice}`}
                   defaultValue={linha.valor > 0 ? "entrada" : "despesa"}
@@ -86,7 +86,7 @@ export function LinhasEditaveis({
                   <option value="entrada">Entrada</option>
                 </select>
               </td>
-              <td className="amount">
+              <td className="amount" data-rotulo="Valor">
                 <input
                   type="text"
                   inputMode="decimal"

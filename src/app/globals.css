@@ -391,6 +391,87 @@ code,
   }
 }
 
+
+/* --- Tabelas que viram cartoes no celular ---
+   Sete colunas nao cabem em 390px, e rolagem horizontal esconde justamente as
+   colunas de valor. Cada linha vira um cartao com rotulo a esquerda e dado a
+   direita; o rotulo sai do proprio `data-rotulo` da celula, entao o cabecalho
+   pode ser escondido sem que a leitura perca sentido. */
+@media (max-width: 720px) {
+  table.empilha,
+  table.empilha tbody,
+  table.empilha tr,
+  table.empilha td {
+    display: block;
+    width: 100%;
+  }
+
+  table.empilha thead {
+    display: none;
+  }
+
+  table.empilha tbody tr {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--stroke-soft);
+  }
+
+  table.empilha tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  table.empilha td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 4px 0;
+    border: none;
+    text-align: left;
+  }
+
+  table.empilha td[data-rotulo]::before {
+    content: attr(data-rotulo);
+    flex: none;
+    font-size: 12px;
+    color: var(--text-soft);
+  }
+
+  /* A celula de identidade e o titulo do cartao: largura inteira, sem rotulo. */
+  table.empilha td.description:not([data-rotulo]) {
+    display: block;
+    padding-bottom: 8px;
+  }
+
+  table.empilha td.amount {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Campos editaveis ocupam o espaco que sobra depois do rotulo. */
+  table.empilha td input[type="text"],
+  table.empilha td input[type="date"],
+  table.empilha td select {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  table.empilha td input.largo,
+  table.empilha td input.numerico {
+    width: auto;
+    min-width: 0;
+  }
+
+  /* A sub-linha de detalhe ja e um bloco proprio: so recua e destaca. */
+  table.empilha tr.linha-detalhe > td {
+    display: block;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+  }
+
+  table.empilha tr.linha-detalhe > td:first-child {
+    padding-left: 12px;
+  }
+}
+
 /* ==========================================================================
    Numeros em destaque
    ========================================================================== */
@@ -1588,4 +1669,113 @@ td input.numerico {
   align-items: center;
   gap: 12px;
   margin-top: 28px;
+}
+
+/* --- Ajustes de celular ---
+   Fica no fim do arquivo de proposito: estas regras concorrem com as bases na
+   mesma especificidade, e e a ordem de origem que decide. Mais acima, no bloco
+   de navegacao, elas perdiam em silencio. */
+@media (max-width: 720px) {
+  h2 {
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+
+  .masthead {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 14px;
+    margin-bottom: 16px;
+  }
+
+  .card {
+    padding: 16px;
+    border-radius: var(--radius);
+  }
+
+  section {
+    margin-top: 22px;
+  }
+
+  /* Dois por linha: quatro cartoes de largura inteira viram quatro telas de
+     rolagem antes de o painel comecar. */
+  .tiles {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .tiles > .card {
+    padding: 14px;
+  }
+
+  .tile-label {
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .tile-value {
+    font-size: 20px;
+    letter-spacing: -0.02em;
+  }
+
+  .tile-note {
+    font-size: 11px;
+    margin-top: 6px;
+  }
+
+  .accounts {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .period-controls {
+    gap: 10px;
+  }
+
+  .presets,
+  .range-form,
+  .filtros {
+    width: 100%;
+  }
+
+  /* Menu de contas ocupando a largura util: 280px fixos vazavam a tela. */
+  .filtro-contas,
+  .filtro-contas > summary {
+    width: 100%;
+  }
+
+  .filtro-contas > summary {
+    justify-content: space-between;
+  }
+
+  .filtro-contas-menu {
+    left: 0;
+    right: 0;
+    min-width: 0;
+  }
+
+  /* Formulario de classificacao: tres campos lado a lado nao cabem. */
+  .inline-form {
+    width: 100%;
+  }
+
+  .inline-form input {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .bar-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .bar-value {
+    order: 3;
+    font-size: 12px;
+  }
+
+  .bar-track {
+    order: 2;
+  }
 }

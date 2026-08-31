@@ -245,6 +245,19 @@ A Inter e servida pelo proprio app: `next/font` a baixa no build e a hospeda no
 nosso dominio. Um `<link>` para o Google Fonts entregaria o IP e o horario de
 cada acesso a um terceiro, o que a secao seguinte proibe.
 
+**O celular tem layout proprio, nao o desktop espremido.** Tabela de sete
+colunas nao cabe em 390px, e rolagem horizontal esconde justamente as colunas de
+valor. Abaixo de 720px cada linha vira um cartao com rotulo a esquerda e dado a
+direita; o rotulo sai do `data-rotulo` da propria celula, entao o cabecalho pode
+sumir sem que a leitura perca sentido. Os numeros do topo vao a dois por linha —
+quatro cartoes de largura inteira viravam quatro telas de rolagem antes de o
+painel comecar.
+
+Cuidado que custou uma rodada: as regras de celular concorrem com as bases na
+**mesma especificidade**, entao e a ordem de origem que decide. Escritas no meio
+do arquivo, perdiam em silencio. Elas ficam no fim de `globals.css`, e e por
+isso.
+
 ## O que nao muda
 
 - Nenhum dado financeiro trafega para terceiros **exceto** os prints do saldo
