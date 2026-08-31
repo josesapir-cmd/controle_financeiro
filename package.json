@@ -16,7 +16,8 @@
     "conexao": "node scripts/conexao.mjs",
     "diagnostico": "node scripts/diagnostico.mjs",
     "corrigir-contas": "node scripts/corrigir-contas.mjs",
-    "conta": "node scripts/conta.mjs"
+    "conta": "node scripts/conta.mjs",
+    "apagar-conta": "node scripts/apagar-conta.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.3.0",
