@@ -13,7 +13,8 @@
     "importar": "node scripts/importar-local.mjs",
     "sync": "node scripts/sincronizar.mjs",
     "sync:local": "bash scripts/sync-local.sh",
-    "conexao": "node scripts/conexao.mjs"
+    "conexao": "node scripts/conexao.mjs",
+    "diagnostico": "node scripts/diagnostico.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.3.0",
