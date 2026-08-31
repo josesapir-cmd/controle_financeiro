@@ -64,6 +64,10 @@ export interface TransactionRow {
  *
  * O subtipo e o nome entram porque numero sozinho colide: no BTG, "BTG Pactual
  * WM" e "BTG Banking" sao contas correntes distintas com o mesmo numero.
+ *
+ * O nome aqui e o CRU da conta. O marketingName nao serve: e campo de
+ * exibicao, aparece e some entre sincronizacoes, e usa-lo criava uma conta nova
+ * a cada mudanca, partindo o historico.
  */
 export function accountFingerprint(
   name: string | null | undefined,
@@ -110,6 +114,14 @@ export interface AccountInput {
   connectorName: string;
   type: "BANK" | "CREDIT";
   subtype?: string | null;
+  /**
+   * Nome usado na identidade. Precisa ser o nome cru da conta, nunca o
+   * marketingName: este ultimo e campo de exibicao, pode estar ausente numa
+   * sincronizacao e presente noutra, e usa-lo na identidade parte o historico
+   * em duas contas — foi o que aconteceu com o Nubank ao ser reconectado.
+   */
+  identityName?: string | null;
+  /** Nome para exibicao. Pode mudar sem consequencia. */
   name?: string | null;
   number?: string | null;
   balance: number;
@@ -118,7 +130,11 @@ export interface AccountInput {
 
 /** Devolve o id interno da conta, criando ou atualizando pelo fingerprint. */
 export async function upsertAccount(db: Db, conta: AccountInput): Promise<string> {
-  const fp = accountFingerprint(conta.name, conta.number, conta.subtype);
+  const fp = accountFingerprint(
+    conta.identityName ?? conta.name,
+    conta.number,
+    conta.subtype,
+  );
 
   const linhas = await db.query<{ id: string }>(
     `INSERT INTO accounts

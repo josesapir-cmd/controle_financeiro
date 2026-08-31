@@ -88,6 +88,8 @@ export async function syncConnection(
         connectorName,
         type: conta.type,
         subtype: conta.subtype,
+        // Identidade pelo nome cru; exibicao pelo marketingName quando houver.
+        identityName: conta.name,
         name: conta.marketingName || conta.name,
         number: conta.number,
         balance: conta.balance,

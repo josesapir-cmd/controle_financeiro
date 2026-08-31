@@ -14,7 +14,8 @@
     "sync": "node scripts/sincronizar.mjs",
     "sync:local": "bash scripts/sync-local.sh",
     "conexao": "node scripts/conexao.mjs",
-    "diagnostico": "node scripts/diagnostico.mjs"
+    "diagnostico": "node scripts/diagnostico.mjs",
+    "corrigir-contas": "node scripts/corrigir-contas.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.3.0",

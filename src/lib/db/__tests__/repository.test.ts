@@ -358,3 +358,40 @@ describe("remocao de conexao", () => {
     expect(conta.balance).toBe(4000);
   });
 });
+
+describe("identidade nao depende do nome de exibicao", () => {
+  /**
+   * O marketingName aparece e some entre sincronizacoes. Quando ele entrava na
+   * identidade, reconectar um banco criava uma conta nova e partia o historico
+   * — foi o que aconteceu com a conta corrente do Nubank.
+   */
+  it("mantem a mesma conta quando so o nome de exibicao muda", async () => {
+    const primeiro = await upsertAccount(db, {
+      itemId: ITEM,
+      pluggyAccountId: "66666666-6666-4666-8666-666666666666",
+      connectorName: "Nubank",
+      type: "BANK",
+      subtype: "CHECKING_ACCOUNT",
+      identityName: "Nu Pagamentos S.A.",
+      name: "Nu Pagamentos S.A.",
+      number: "09693994-9",
+      balance: 100,
+    });
+
+    const segundo = await upsertAccount(db, {
+      itemId: ITEM,
+      pluggyAccountId: "66666666-6666-4666-8666-666666666666",
+      connectorName: "Nubank",
+      type: "BANK",
+      subtype: "CHECKING_ACCOUNT",
+      identityName: "Nu Pagamentos S.A.",
+      // Nome de exibicao diferente, vindo do marketingName.
+      name: "Conta do Nu",
+      number: "09693994-9",
+      balance: 150,
+    });
+
+    expect(segundo).toBe(primeiro);
+    expect(await listAccounts(db)).toHaveLength(1);
+  });
+});
