@@ -222,10 +222,26 @@ nome cortado.
 
 ### 7. Sistema visual
 
-A referencia e o template financeiro do AlignUI: fundo cinza-claro frio, cartoes
-brancos de canto generoso, Inter, azul unico como cor de acao. Tudo vive em
-`globals.css`, em tokens — nao ha CSS por componente, e trocar a paleta e trocar
-o bloco `:root`.
+A referencia e a pagina de transacoes do template financeiro do AlignUI, conferida
+contra o HTML dela. Tudo vive em `globals.css`, em tokens — nao ha CSS por
+componente, e trocar a paleta e trocar o bloco `:root`.
+
+O que a leitura da referencia corrigiu, depois de uma primeira versao feita de
+memoria:
+
+- **A pagina e branca.** O cinza (`--bg-weak`) aparece so onde marca alguma
+  coisa: cabecalho de tabela, linha sob o cursor, aba ativa, trilho do
+  segmentado. Fundo cinza com cartao branco por cima inverte a relacao e engorda
+  a tela inteira.
+- **Tabela sem grade.** O cabecalho e um bloco cinza de cantos arredondados nas
+  pontas; as linhas nao tem borda, tem 48px de altura e acendem inteiras sob o
+  cursor, tambem com as pontas arredondadas.
+- **Cabecalho da tela e titulo pequeno sobre subtitulo** (18px medium), nao um
+  titulo grande sozinho. O contexto — periodo, ultima sincronizacao — vira o
+  subtitulo.
+- **Item ativo da barra lateral e cinza com uma barrinha azul colada na borda
+  esquerda**, e o rotulo continua na cor normal. Tingir o texto de azul, como na
+  primeira versao, era invencao minha.
 
 Duas regras que a paleta impoe:
 

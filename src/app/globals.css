@@ -14,17 +14,20 @@
 :root {
   color-scheme: light;
 
-  /* Superficies. O fundo e frio e o cartao e branco puro: o contraste entre os
-     dois e o que desenha a hierarquia, sem precisar de sombra pesada. */
-  --bg-weak: #f5f7fa;
+  /* Superficies. A pagina e BRANCA; o cinza aparece so onde marca alguma coisa:
+     cabecalho de tabela, linha sob o cursor, aba ativa, trilho de segmentado.
+     Foi o erro da primeira versao — fundo cinza com cartao branco em cima
+     inverte a relacao e engorda a tela inteira. */
   --bg-white: #ffffff;
-  --bg-soft: #f2f5f8;
-  --bg-sunken: #eceff3;
+  --bg-weak: #f5f7fa;
+  --bg-soft: #e1e4ea;
+  --bg-sub: #cdd0d5;
+  --bg-sunken: #f5f7fa;
 
   /* Texto em quatro pesos de leitura, do titulo ao rotulo apagado. */
   --text-strong: #0e121b;
   --text-sub: #525866;
-  --text-soft: #868c98;
+  --text-soft: #99a0ae;
   --text-disabled: #cdd0d5;
 
   --stroke-soft: #e1e4ea;
@@ -50,7 +53,7 @@
   --away: #f17b2c;
 
   /* Compatibilidade com nomes antigos ainda usados em pontos do app. */
-  --plane: var(--bg-weak);
+  --plane: var(--bg-white);
   --surface: var(--bg-white);
   --text-primary: var(--text-strong);
   --text-secondary: var(--text-sub);
@@ -65,13 +68,14 @@
   --radius: 12px;
   --radius-lg: 16px;
   --radius-sm: 10px;
+  --radius-xs: 8px;
 
   /* Sombras quase invisiveis: elevam sem sujar o fundo claro. */
   --shadow-xs: 0 1px 2px rgba(10, 13, 20, 0.03);
   --shadow-sm: 0 2px 4px rgba(27, 28, 29, 0.04);
   --shadow-md: 0 16px 32px -12px rgba(14, 18, 27, 0.1);
 
-  --sidebar: 264px;
+  --sidebar: 272px;
 
   /* O recuo dentro do var() e obrigatorio: `var(--x)` com --x indefinida
      invalida a declaracao inteira, e a pagina cai em serif. Acontece se o
@@ -86,7 +90,7 @@
 
 body {
   margin: 0;
-  background: var(--bg-weak);
+  background: var(--bg-white);
   color: var(--text-strong);
   font-family: var(--font);
   font-size: 14px;
@@ -122,21 +126,24 @@ a:hover {
 }
 
 /* Cabecalho da tela: titulo a esquerda, contexto e acoes a direita. */
+/* Titulo sobre subtitulo, nao lado a lado: e a forma do cabecalho da
+   referencia, e o subtitulo e onde cabe o contexto (periodo, ultima
+   sincronizacao) sem competir com o titulo. */
 .masthead {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px 20px;
-  padding-bottom: 20px;
-  margin-bottom: 24px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 72px;
+  padding-bottom: 18px;
+  margin-bottom: 20px;
   border-bottom: 1px solid var(--stroke-soft);
 }
 
 h1 {
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   margin: 0;
   color: var(--text-strong);
 }
@@ -170,6 +177,12 @@ section {
   padding: 20px;
 }
 
+/* Cartao que envolve tabela nao leva padding lateral: o cabecalho cinza da
+   tabela ja desenha a propria caixa, e a moldura dupla engorda a tela. */
+.card.table-scroll {
+  padding: 12px;
+}
+
 .empty {
   color: var(--text-sub);
   font-size: 14px;
@@ -182,7 +195,7 @@ code,
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   color: var(--text-sub);
-  background: var(--bg-soft);
+  background: var(--bg-weak);
   border-radius: 6px;
 }
 
@@ -220,13 +233,15 @@ code,
 }
 
 .abas {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   align-items: center;
   gap: 4px;
   margin-bottom: 24px;
   padding: 4px;
-  background: var(--bg-sunken);
-  border-radius: var(--radius);
+  background: var(--bg-weak);
+  border-radius: var(--radius-sm);
   font-size: 14px;
 }
 
@@ -235,12 +250,12 @@ code,
   align-items: center;
   justify-content: center;
   gap: 8px;
-  flex: 1;
-  padding: 8px 12px;
-  color: var(--text-sub);
+  height: 28px;
+  padding: 0 8px;
+  color: var(--text-soft);
   font-weight: 500;
   text-decoration: none;
-  border-radius: 8px;
+  border-radius: 6px;
   white-space: nowrap;
 }
 
@@ -249,11 +264,11 @@ code,
   text-decoration: none;
 }
 
-/* A aba corrente vira uma pastilha branca: elevada, nao apenas colorida. */
+/* A aba corrente vira uma pastilha branca sobre o trilho cinza. */
 .aba.ativa {
   color: var(--text-strong);
   background: var(--bg-white);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-xs);
   cursor: default;
 }
 
@@ -280,16 +295,19 @@ code,
     left: 0;
     bottom: 0;
     z-index: 30;
+    display: flex;
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-    gap: 2px;
+    gap: 4px;
     width: var(--sidebar);
     margin: 0;
     padding: 24px 16px;
     background: var(--bg-white);
     border-right: 1px solid var(--stroke-soft);
     border-radius: 0;
+    /* A barrinha azul do item ativo encosta na borda esquerda. */
+    overflow: visible;
   }
 
   .abas-marca {
@@ -304,21 +322,38 @@ code,
   }
 
   .aba {
-    flex: none;
+    position: relative;
     justify-content: flex-start;
-    gap: 12px;
-    padding: 10px 12px;
-    border-radius: var(--radius-sm);
+    gap: 8px;
+    height: auto;
+    padding: 8px 12px;
+    color: var(--text-sub);
+    border-radius: var(--radius-xs);
   }
 
   .aba:hover {
-    background: var(--bg-soft);
+    background: var(--bg-weak);
   }
 
+  /* Ativo: fundo cinza e uma barrinha azul colada na borda da barra lateral.
+     O azul marca o lugar sem tingir o rotulo — o texto continua legivel como os
+     outros, que e o que a referencia faz. */
   .aba.ativa {
-    background: var(--primary-alpha-10);
-    color: var(--primary);
+    color: var(--text-strong);
+    background: var(--bg-weak);
     box-shadow: none;
+  }
+
+  .aba.ativa::after {
+    content: "";
+    position: absolute;
+    left: -16px;
+    top: 50%;
+    width: 4px;
+    height: 20px;
+    transform: translateY(-50%);
+    background: var(--primary);
+    border-radius: 0 999px 999px 0;
   }
 
   .aba.ativa .aba-icone {
@@ -355,8 +390,10 @@ code,
     right: 0;
     bottom: 0;
     z-index: 30;
+    display: flex;
     gap: 0;
     margin: 0;
+    padding: 6px 4px;
     background: var(--bg-white);
     border-top: 1px solid var(--stroke-soft);
     border-radius: 0;
@@ -370,10 +407,12 @@ code,
     flex-direction: column;
     gap: 3px;
     /* Alvo de toque com altura confortavel para o polegar. */
+    height: auto;
     min-height: 44px;
     padding: 4px 2px;
     font-size: 11px;
     color: var(--text-soft);
+    border-radius: var(--radius-xs);
   }
 
   .aba.ativa {
@@ -424,9 +463,23 @@ code,
     align-items: baseline;
     justify-content: space-between;
     gap: 16px;
+    /* A altura fixa de 48px da tabela larga nao vale aqui: empilhada, a celula
+       de identidade tem varias linhas e transbordava por cima da seguinte. */
+    height: auto;
     padding: 4px 0;
     border: none;
+    /* O separador da tabela larga viraria uma linha sob cada campo. */
+    box-shadow: none;
     text-align: left;
+  }
+
+  table.empilha tbody tr:first-child > td {
+    padding-top: 4px;
+  }
+
+  /* O realce de linha inteira nao faz sentido num cartao empilhado. */
+  table.empilha tbody tr:hover > td {
+    background: transparent;
   }
 
   table.empilha td[data-rotulo]::before {
@@ -543,7 +596,7 @@ code,
 .bar-track {
   position: relative;
   height: 8px;
-  background: var(--bg-sunken);
+  background: var(--bg-weak);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -620,21 +673,52 @@ table {
   font-size: 14px;
 }
 
+/* O cabecalho e um bloco cinza de cantos arredondados nas pontas, nao uma linha
+   sublinhada: e o que separa a tabela do resto sem desenhar uma grade. */
 th {
   text-align: left;
-  font-weight: 500;
-  font-size: 12px;
-  color: var(--text-soft);
-  padding: 0 16px 10px 0;
-  border-bottom: 1px solid var(--stroke-soft);
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--text-sub);
+  padding: 8px 12px;
+  background: var(--bg-weak);
   white-space: nowrap;
 }
 
+th:first-child {
+  border-radius: var(--radius-xs) 0 0 var(--radius-xs);
+}
+
+th:last-child {
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+}
+
+/* Respiro entre o cabecalho e a primeira linha, sem uma linha divisoria. */
+tbody tr:first-child > td {
+  padding-top: 16px;
+}
+
 td {
-  padding: 14px 16px 14px 0;
-  border-bottom: 1px solid var(--stroke-soft);
+  height: 48px;
+  padding: 8px 12px;
   color: var(--text-sub);
   vertical-align: middle;
+  /* Separador tenue no lugar de borda cheia: a grade some e sobra o ritmo. */
+  box-shadow: inset 0 -1px 0 var(--stroke-soft);
+  transition: background 150ms ease;
+}
+
+/* A linha inteira acende sob o cursor, com as pontas arredondadas. */
+tbody tr:hover > td {
+  background: var(--bg-weak);
+}
+
+tbody tr:hover > td:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+tbody tr:hover > td:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
 }
 
 td.description {
@@ -647,7 +731,6 @@ th.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  padding-right: 0;
 }
 
 td.amount {
@@ -655,8 +738,8 @@ td.amount {
   color: var(--text-strong);
 }
 
-tbody tr:last-child td {
-  border-bottom: none;
+tbody tr:last-child > td {
+  box-shadow: none;
 }
 
 /* ==========================================================================
@@ -673,7 +756,7 @@ tbody tr:last-child td {
   font-weight: 500;
   line-height: 18px;
   color: var(--text-sub);
-  background: var(--bg-soft);
+  background: var(--bg-weak);
   border: 1px solid transparent;
   border-radius: 999px;
   vertical-align: middle;
@@ -704,7 +787,8 @@ button {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 16px;
+  height: 40px;
+  padding: 0 16px;
   font-size: 14px;
   font-family: var(--font);
   font-weight: 500;
@@ -748,7 +832,8 @@ input[type="text"],
 input[type="date"],
 input[type="search"],
 select {
-  padding: 9px 12px;
+  height: 40px;
+  padding: 0 12px;
   font-size: 14px;
   color: var(--text-strong);
   background: var(--bg-white);
@@ -827,13 +912,14 @@ input[type="checkbox"] {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
-  font-size: 13px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-sub);
   background: var(--bg-white);
   border: 1px solid var(--stroke-soft);
-  border-radius: 999px;
+  border-radius: var(--radius-xs);
   box-shadow: var(--shadow-xs);
   text-decoration: none;
   white-space: nowrap;
@@ -845,13 +931,9 @@ input[type="checkbox"] {
 }
 
 .preset.ativo {
-  color: #ffffff;
-  background: var(--primary);
-  border-color: var(--primary);
-}
-
-.preset.ativo:hover {
-  background: var(--primary-darker);
+  color: var(--text-strong);
+  background: var(--bg-weak);
+  border-color: transparent;
 }
 
 .range-form {
@@ -957,7 +1039,7 @@ input[type="checkbox"] {
 }
 
 .filtro-contas-menu label:hover {
-  background: var(--bg-soft);
+  background: var(--bg-weak);
 }
 
 .filtro-contas-acoes {
@@ -1036,7 +1118,7 @@ input[type="checkbox"] {
   margin: 23px auto 0;
   border-radius: 50%;
   /* Anel na cor do fundo separa a marca do trilho. */
-  box-shadow: 0 0 0 3px var(--bg-weak);
+  box-shadow: 0 0 0 3px var(--bg-white);
 }
 
 .timeline-marca.saida { background: var(--error); }
@@ -1116,7 +1198,7 @@ input[type="checkbox"] {
   top: 6px;
   bottom: 6px;
   width: 1px;
-  background: var(--bg-sunken);
+  background: var(--bg-weak);
 }
 
 .strip-marca-envelope {
@@ -1333,15 +1415,16 @@ ul.rollup ul {
 
 .caret:hover {
   color: var(--text-strong);
-  background: var(--bg-soft);
+  background: var(--bg-weak);
   text-decoration: none;
 }
 
 .linha-detalhe > td {
-  padding-top: 8px;
-  padding-bottom: 8px;
+  height: auto;
+  padding-top: 10px;
+  padding-bottom: 10px;
   font-size: 13px;
-  background: var(--bg-soft);
+  background: var(--bg-weak);
   border-bottom: 1px solid var(--stroke-soft);
 }
 
@@ -1463,7 +1546,7 @@ ul.conciliacao-lista button {
   letter-spacing: 0.12em;
   text-align: center;
   color: var(--text-strong);
-  background: var(--bg-soft);
+  background: var(--bg-weak);
   border: 1px solid var(--stroke-sub);
   border-radius: var(--radius);
   /* Selecionavel com um clique: o usuario precisa copiar isto agora. */
@@ -1489,7 +1572,7 @@ ul.conciliacao-lista button {
 
 .sair:hover:not(:disabled) {
   color: var(--text-strong);
-  background: var(--bg-soft);
+  background: var(--bg-weak);
 }
 
 /* ==========================================================================
@@ -1531,7 +1614,7 @@ ul.resultado-sync li:last-child {
   font-size: 13px;
   font-family: var(--font);
   color: var(--text-sub);
-  background: var(--bg-soft);
+  background: var(--bg-weak);
   /* Tracejado para ler como area de deposito, nao como campo de texto. */
   border: 1px dashed var(--stroke-sub);
   border-radius: var(--radius);
@@ -1556,7 +1639,7 @@ ul.resultado-sync li:last-child {
 .fila-trilho {
   height: 6px;
   margin-top: 14px;
-  background: var(--bg-sunken);
+  background: var(--bg-weak);
   border-radius: 999px;
   overflow: hidden;
 }
