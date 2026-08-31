@@ -75,14 +75,53 @@ try {
     process.exit(0);
   }
 
-  const [conta] = await sql`
-    SELECT connector_name, type, subtype, name_enc, number_enc, balance
-      FROM accounts WHERE id = ${alvo}
+  /**
+   * Aceita o id, o numero da conta ou parte do nome.
+   *
+   * O numero e o nome estao cifrados, entao a busca acontece em memoria — o que
+   * e viavel porque sao poucas contas, e evita obrigar o usuario a copiar um
+   * UUID quando o que ele tem a mao e o numero da conta.
+   */
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  const todas = await sql`
+    SELECT id, connector_name, type, subtype, name_enc, number_enc, balance
+      FROM accounts
   `;
-  if (!conta) {
-    console.error("conta nao encontrada.");
+
+  const procurado = alvo.trim().toLowerCase();
+  const candidatas = UUID.test(procurado)
+    ? todas.filter((c) => c.id === procurado)
+    : todas.filter((c) => {
+        const numero = (decifrar(c.number_enc) ?? "").toLowerCase();
+        const nome = (decifrar(c.name_enc) ?? "").toLowerCase();
+        // Compara tambem so os digitos: "25548893-7" e "255488937" sao o mesmo.
+        const digitos = numero.replace(/\D/g, "");
+        const procuradoDigitos = procurado.replace(/\D/g, "");
+        return (
+          numero === procurado ||
+          (procuradoDigitos.length > 3 && digitos === procuradoDigitos) ||
+          nome.includes(procurado)
+        );
+      });
+
+  if (candidatas.length === 0) {
+    console.error(`Nenhuma conta corresponde a "${alvo}".`);
+    console.error("Rode sem argumento para ver a lista.");
     process.exit(1);
   }
+
+  if (candidatas.length > 1) {
+    console.error(`"${alvo}" corresponde a mais de uma conta:`);
+    for (const c of candidatas) {
+      console.error(`  ${c.id}  ${c.connector_name} ${decifrar(c.name_enc)} ${decifrar(c.number_enc) ?? ""}`);
+    }
+    console.error("Use o id.");
+    process.exit(1);
+  }
+
+  const conta = candidatas[0];
+  const alvoId = conta.id;
 
   console.log(`${conta.connector_name} · ${decifrar(conta.name_enc)} ${decifrar(conta.number_enc) ?? ""}`);
   console.log(`${conta.type}/${conta.subtype} · saldo ${dinheiro(conta.balance)}\n`);
@@ -92,7 +131,7 @@ try {
     SELECT to_char(local_day, 'YYYY-MM') AS mes, count(*)::int AS total,
            sum(CASE WHEN amount < 0 THEN -amount ELSE 0 END) AS saidas,
            sum(CASE WHEN amount > 0 THEN amount ELSE 0 END) AS entradas
-      FROM transactions WHERE account_id = ${alvo}
+      FROM transactions WHERE account_id = ${alvoId}
      GROUP BY 1 ORDER BY 1
   `;
   for (const m of meses) {
@@ -103,7 +142,7 @@ try {
   const categorias = await sql`
     SELECT coalesce(category, 'sem categoria') AS categoria, count(*)::int AS total,
            sum(CASE WHEN amount < 0 THEN -amount ELSE 0 END) AS saidas
-      FROM transactions WHERE account_id = ${alvo}
+      FROM transactions WHERE account_id = ${alvoId}
      GROUP BY 1 ORDER BY 3 DESC NULLS LAST LIMIT 15
   `;
   for (const c of categorias) {
