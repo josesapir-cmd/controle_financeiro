@@ -9,6 +9,7 @@ import { coresPorConta } from "@/lib/finance/cores-de-conta";
 import { maskDocument } from "@/lib/finance/counterparties";
 import { localDay, localTime } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
+import { rotuloContemNome, rotuloDoLancamento } from "@/lib/finance/rotulo";
 import { loadClassificacaoDoDia, loadDay } from "@/lib/finance/service";
 import { Classificador } from "./Classificador";
 import { SpinnerDeDatas } from "./SpinnerDeDatas";
@@ -71,6 +72,14 @@ export default async function Dia({
     : paraClassificar.lancamentos;
 
   const cores = coresPorConta(dados.accountOptions);
+
+  // Rotulos ja calculados para os cartoes de classificar, reaproveitados na
+  // lista: sao os unicos que conhecem o apelido da contraparte. O que sobra —
+  // entradas e movimentacoes, que nao passam pelo classificador — cai no mesmo
+  // calculo com o nome do extrato.
+  const rotulos = new Map(paraClassificar.lancamentos.map((l) => [l.id, l.descricao]));
+  const rotuloDe = (t: (typeof dados.transactions)[number]) =>
+    rotulos.get(t.id) ?? rotuloDoLancamento(t, t.counterparty?.name);
 
   let blocoAtual = "";
 
@@ -177,6 +186,7 @@ export default async function Dia({
               if (abreBloco) blocoAtual = bloco;
 
               const saida = t.amount < 0;
+              const rotulo = rotuloDe(t);
 
               return (
                 <li key={t.id}>
@@ -197,7 +207,7 @@ export default async function Dia({
                     />
                     <div className="timeline-corpo">
                       <div className="timeline-linha">
-                        <span className="description">{t.description}</span>
+                        <span className="description">{rotulo}</span>
                         <span className={`bar-value ${saida ? "negative" : "positive"}`}>
                           {formatBRL(t.amount)}
                         </span>
@@ -205,7 +215,10 @@ export default async function Dia({
                       <div className="account-meta">
                         {[
                           t.category ? translateCategory(t.category) : null,
-                          t.counterparty?.name,
+                          // O nome so repete aqui se o titulo nao o trouxe.
+                          rotuloContemNome(rotulo, t.counterparty?.name)
+                            ? null
+                            : t.counterparty?.name,
                           t.counterparty?.document
                             ? maskDocument(t.counterparty.document, t.counterparty.documentType)
                             : null,

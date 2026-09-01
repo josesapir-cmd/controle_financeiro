@@ -40,6 +40,7 @@ import { isUserInitiatedExpense } from "./automatic";
 import { normalizeName } from "./counterparties";
 import { currentMonthRange, currentYearRange, localDay, localTime } from "./dates";
 import { netWorth, normalizeAmount, sumBy } from "./money";
+import { rotuloDoLancamento } from "./rotulo";
 import {
   totalExpenses,
   totalIncome,
@@ -843,13 +844,21 @@ export async function loadClassificacaoDoDia(
     return { categoriaId, centroId, comentario: proprio?.note ?? null, herdada: true };
   };
 
+  // Apelido primeiro: e como o usuario chama a contraparte. "PIX para Mae" diz
+  // mais que "PIX para MARIA DA SILVA SANTOS", e o nome do extrato continua
+  // guardado na contraparte, que e quem identifica e concilia.
+  const nomeDaParte = (t: Transaction): string | null => {
+    const chave = t.counterparty?.key;
+    return (chave ? cadastro[chave]?.alias : null) || t.counterparty?.name || null;
+  };
+
   const lancamentos: LancamentoParaClassificar[] = doDia.map((t) => ({
     id: t.id,
     hora: localTime(t.date),
-    descricao: t.description || "Lancamento",
+    descricao: rotuloDoLancamento(t, nomeDaParte(t)),
     valor: t.amount,
     conta: nomeDaConta[t.accountId] ?? "",
-    contraparte: t.counterparty?.name ?? null,
+    contraparte: nomeDaParte(t),
     contraparteKey: t.counterparty?.key ?? null,
     frequencia: t.counterparty?.key ? (frequencia.get(t.counterparty.key) ?? 1) : 1,
     ...resolver(t),

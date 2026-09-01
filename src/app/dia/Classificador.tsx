@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { IconeDeCategoria } from "@/components/IconeDeCategoria";
 import { formatBRL } from "@/lib/finance/money";
+import { rotuloContemNome } from "@/lib/finance/rotulo";
 import type {
   CategoriaParaClassificar,
   LancamentoParaClassificar,
@@ -198,7 +199,11 @@ export function Classificador({ lancamentos, categorias }: Props) {
               <div className="lanc-meta">
                 {[
                   categoria ? null : "Sem categoria",
-                  lancamento.contraparte,
+                  // "PIX para Fulano · Fulano" nao ajuda ninguem: quando o
+                  // titulo ja diz para quem foi, a linha de baixo cala.
+                  rotuloContemNome(lancamento.descricao, lancamento.contraparte)
+                    ? null
+                    : lancamento.contraparte,
                   lancamento.conta,
                   lancamento.frequencia > 1 ? `${lancamento.frequencia} lancamentos` : null,
                 ]
