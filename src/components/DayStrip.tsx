@@ -1,6 +1,7 @@
-import { translateCategory } from "@/lib/finance/categories";
+import { classify, translateCategory } from "@/lib/finance/categories";
 import { localTime, minutesOfDay } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
+import { totalExpenses, totalIncome } from "@/lib/finance/summary";
 import type { Transaction } from "@/lib/pluggy/types";
 
 const MINUTOS_NO_DIA = 24 * 60;
@@ -36,6 +37,16 @@ export function DayStrip({
 }) {
   if (transactions.length === 0) return null;
 
+  // O titulo diz quanto saiu, nao so quantos pontos ha. Usa as mesmas funcoes
+  // dos cartoes de total logo abaixo, entao os dois numeros batem — dois
+  // valores diferentes para "gasto no dia" na mesma tela seria pior que nao
+  // mostrar nenhum.
+  const gasto = totalExpenses(transactions);
+  const recebido = totalIncome(transactions);
+  const saidas = transactions.filter((t) => classify(t) === "expense").length;
+  const entradas = transactions.filter((t) => classify(t) === "income").length;
+  const movimentacoes = transactions.length - saidas - entradas;
+
   const maior = Math.max(...transactions.map((t) => Math.abs(t.amount)));
 
   // Rotulo direto apenas no maior lancamento: serve de ancora de escala sem
@@ -45,8 +56,12 @@ export function DayStrip({
   return (
     <figure className="strip">
       <figcaption className="strip-titulo">
-        Ao longo do dia · {transactions.length}{" "}
-        {transactions.length === 1 ? "lancamento" : "lancamentos"}
+        Ao longo do dia · <strong>{formatBRL(gasto)}</strong> em {saidas}{" "}
+        {saidas === 1 ? "lancamento" : "lancamentos"}
+        {recebido > 0 ? ` · ${formatBRL(recebido)} recebidos em ${entradas}` : ""}
+        {movimentacoes > 0
+          ? ` · ${movimentacoes} ${movimentacoes === 1 ? "movimentacao" : "movimentacoes"}`
+          : ""}
       </figcaption>
 
       <div className="strip-plot">

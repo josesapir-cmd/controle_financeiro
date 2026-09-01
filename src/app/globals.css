@@ -1264,6 +1264,14 @@ input[type="checkbox"] {
   color: var(--text-sub);
 }
 
+/* O quanto saiu e a informacao principal do titulo: ganha o tom forte e o
+   alinhamento de digitos, o resto da frase fica em volta. */
+.strip-titulo strong {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
 .strip-plot {
   position: relative;
   height: 40px;
