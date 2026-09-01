@@ -2476,6 +2476,9 @@ ul.cat-linhas {
 
 .lanc-pendente {
   cursor: grab;
+  /* O cartao pendente e o gesto: sem isto o navegador leva o toque para a
+     rolagem e o arraste so comecaria depois de segurar o dedo parado. */
+  touch-action: none;
 }
 
 .lanc-pendente:active {
@@ -2488,6 +2491,11 @@ ul.cat-linhas {
   background: var(--cat-tint);
   border-color: var(--cat-border);
   border-left: 3px solid var(--cat-base);
+}
+
+/* O original apaga enquanto o fantasma esta no ar: fica claro de onde saiu. */
+.lanc-saindo {
+  opacity: 0.35;
 }
 
 .lanc-topo {
@@ -2832,14 +2840,133 @@ ul.cat-linhas {
   }
 }
 
+/* --- Dock do celular ---
+   Numa tela de 390px nao cabe coluna de categorias. Os mesmos blocos viram
+   ladrilhos no rodape, ao alcance do polegar, e a lista fica com a largura
+   toda. E o mesmo DOM: um segundo conjunto de alvos significaria duas fontes
+   de verdade para o mesmo destino. */
 @media (max-width: 720px) {
   .blocos {
-    grid-template-columns: 1fr 1fr;
+    position: sticky;
+    /* `top` vem da regra base, onde a coluna gruda no alto; aqui o dock gruda
+       embaixo, e as duas ancoras juntas anulam o grude. */
+    top: auto;
+    bottom: 42px;
+    z-index: 20;
+    display: flex;
+    /* Tambem da base: sem isto os ladrilhos continuam empilhados em coluna. */
+    flex-direction: row;
+    gap: 6px;
+    order: 2;
+    margin: 18px 0 42px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(18px);
+    border: 1px solid var(--stroke-soft);
+    border-radius: 22px;
+    box-shadow: 0 16px 32px -12px rgba(14, 18, 27, 0.18);
   }
 
   .bloco {
-    height: 92px;
-    padding: 12px;
+    flex: 1;
+    height: 46px;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 15px;
+    box-shadow: none;
+    /* Cresce a partir da base, entao o ladrilho sobe em vez de invadir o
+       rodape da tela. */
+    transform-origin: 50% 100%;
+    transition: transform 260ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+
+  /* Arrastando, a ampliacao acompanha o dedo sem amortecimento. */
+  .blocos-mirando .bloco {
+    transition: transform 90ms linear;
+  }
+
+  .bloco-vazio {
+    color: var(--cat-fg);
+    background: var(--cat-tint);
+    border: 1px solid var(--cat-border);
+  }
+
+  .bloco-topo {
+    gap: 0;
+  }
+
+  /* No ladrilho so cabe o icone: o nome aparece na pilula do alvo durante o
+     arraste, e o valor esta na aba de categorias. */
+  .bloco-nome,
+  .bloco-rodape,
+  .bloco-solte,
+  .bloco-bolha {
+    display: none;
+  }
+
+  .bloco-badge {
+    position: absolute;
+    top: -6px;
+    right: -4px;
+    min-width: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+    line-height: 16px;
+    text-align: center;
+    color: var(--cat-fg);
+    background: var(--bg-white);
+    border: 1px solid var(--cat-border);
+  }
+
+  .bloco-sobre {
+    outline: none;
+    transform: none;
+  }
+
+  .blocos-mirando .bloco-sobre {
+    color: #ffffff;
+    background: var(--cat-base);
+  }
+}
+
+/* --- Arraste por ponteiro (celular) --- */
+.fantasma {
+  position: absolute;
+  z-index: 40;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 250px;
+  padding: 13px 14px;
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-sub);
+  border-radius: 14px;
+  box-shadow: 0 18px 34px -12px rgba(14, 18, 27, 0.4);
+  transform: translate(-50%, -50%) rotate(-2.5deg);
+  pointer-events: none;
+}
+
+.mira {
+  position: sticky;
+  bottom: 108px;
+  z-index: 30;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #ffffff;
+  background: var(--text-strong);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bloco,
+  .blocos-mirando .bloco {
+    transition: none;
   }
 }
 
@@ -2866,6 +2993,20 @@ ul.cat-linhas {
   overflow: hidden;
   background: var(--bg-weak);
   border-radius: var(--radius-lg);
+  /* O dedo arrasta a fita na horizontal; a pagina continua rolando na
+     vertical. Sem isto o navegador fica com o gesto e a fita nao se move. */
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+.spinner-trilho.puxando {
+  cursor: grabbing;
+}
+
+/* Enquanto o dedo esta na tela a fita segue 1:1, sem amortecimento — a
+   transicao so volta no encaixe. */
+.spinner-trilho.puxando .spinner-fita {
+  transition: none;
 }
 
 /* Mascaras nas bordas: a fita some no gradiente em vez de ser cortada em seco. */
@@ -2934,6 +3075,7 @@ ul.cat-linhas {
 /* Dia que ainda nao aconteceu: alcancavel, mas sem promessa de conteudo. */
 .spinner-dia-futuro {
   color: var(--text-disabled);
+  cursor: default;
 }
 
 .spinner-data {
@@ -2970,6 +3112,12 @@ ul.cat-linhas {
   background: var(--bg-weak);
 }
 
+.spinner-seta:disabled {
+  color: var(--text-disabled);
+  opacity: 1;
+  cursor: default;
+}
+
 .spinner-hoje {
   flex: none;
   height: 32px;
@@ -3002,6 +3150,12 @@ ul.cat-linhas {
      fita mostrar vizinhos. As setas continuam dando o passo de um dia. */
   .spinner-hoje {
     display: none;
+  }
+
+  .spinner-seta {
+    width: 30px;
+    height: 30px;
+    box-shadow: none;
   }
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { IconeDeCategoria } from "@/components/IconeDeCategoria";
 import { formatBRL } from "@/lib/finance/money";
 import type {
@@ -16,10 +16,36 @@ import { classificarLancamento, limparLancamento } from "./actions";
  * lista do dia continua sendo a lista do dia — se os cartoes sumissem ao serem
  * classificados, o dia se desmontaria enquanto se olha para ele.
  *
- * O arraste e uma das formas, nao a unica: cada cartao tem um seletor de
- * categoria que faz a mesma coisa. Arrastar nao funciona no celular nem no
- * teclado, e a funcionalidade nao pode depender disso.
+ * Sao dois arrastes diferentes, de proposito:
+ *
+ * - **No computador**, arrastar e soltar do HTML5, com os blocos numa coluna
+ *   grudada a direita.
+ * - **No celular**, eventos de ponteiro e um dock no rodape. O arraste do HTML5
+ *   no toque exige segurar o dedo parado antes de comecar; aqui o cartao sai
+ *   com 4px de movimento, sem espera.
+ *
+ * E o seletor de categoria em cada cartao continua fazendo a mesma coisa sem
+ * arraste nenhum, porque nada disso funciona no teclado.
  */
+
+/** Ampliacao do dock, no formato do dock do macOS. */
+const ALCANCE = 58;
+const ALTURA_DO_PULO = 30;
+/** Acima disto o dedo esta longe demais do dock para mirar numa celula. */
+const MIRA = 90;
+/** Movimento minimo para virar arraste em vez de toque. */
+const LIMIAR = 4;
+
+interface Arraste {
+  id: string;
+  /** Posicao do dedo, relativa ao container. */
+  x: number;
+  y: number;
+  /** Posicao absoluta na tela, para medir a distancia ate as celulas. */
+  telaX: number;
+  telaY: number;
+  alvo: string | null;
+}
 
 const MES = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 2,
@@ -34,13 +60,54 @@ interface Props {
 export function Classificador({ lancamentos, categorias }: Props) {
   /** Bloco sob o cursor durante o arraste. */
   const [sobre, setSobre] = useState<string | null>(null);
+  const [arraste, setArraste] = useState<Arraste | null>(null);
+  const container = useRef<HTMLDivElement>(null);
+  const celulas = useRef(new Map<string, HTMLElement>());
   /** Editor aberto, por lancamento. */
   const [aberto, setAberto] = useState<string | null>(null);
   /** Bloco que acabou de receber um cartao, para o pulo do icone. */
   const [pulou, setPulou] = useState<string | null>(null);
   const [pendente, iniciar] = useTransition();
+  const origem = useRef<{ x: number; y: number; id: string } | null>(null);
 
   const porId = new Map(categorias.map((c) => [c.id, c]));
+  const emArraste = arraste ? lancamentos.find((l) => l.id === arraste.id) : undefined;
+
+  /**
+   * Escala de cada celula pela distancia horizontal do dedo.
+   *
+   * A ampliacao e por `transform`, entao aumentar uma celula nao empurra as
+   * vizinhas — o alvo nao foge de baixo do dedo enquanto ele se aproxima.
+   */
+  function ampliacao(id: string): { transform: string } | undefined {
+    if (!arraste) return undefined;
+
+    const celula = celulas.current.get(id);
+    if (!celula) return undefined;
+
+    const caixa = celula.getBoundingClientRect();
+    const centro = caixa.left + caixa.width / 2;
+    const escala = 1 + 0.8 * Math.exp(-(((arraste.telaX - centro) / ALCANCE) ** 2));
+
+    return {
+      transform: `translateY(${-(escala - 1) * ALTURA_DO_PULO}px) scale(${escala})`,
+    };
+  }
+
+  /** Celula mais proxima do dedo, se ele estiver perto o bastante do dock. */
+  function mirar(telaX: number, telaY: number): string | null {
+    let melhor: { id: string; distancia: number } | null = null;
+
+    for (const [id, celula] of celulas.current) {
+      const caixa = celula.getBoundingClientRect();
+      if (telaY < caixa.top - MIRA) continue;
+
+      const distancia = Math.abs(telaX - (caixa.left + caixa.width / 2));
+      if (!melhor || distancia < melhor.distancia) melhor = { id, distancia };
+    }
+
+    return melhor?.id ?? null;
+  }
 
   function classificar(lancamento: LancamentoParaClassificar, categoriaId: string) {
     const dados = new FormData();
@@ -58,7 +125,7 @@ export function Classificador({ lancamentos, categorias }: Props) {
   }
 
   return (
-    <div className="classificador">
+    <div className="classificador" ref={container}>
       <div className="classificador-lista">
         {lancamentos.length === 0 ? (
           <p className="empty">Nenhuma despesa sua neste dia.</p>
@@ -71,12 +138,54 @@ export function Classificador({ lancamentos, categorias }: Props) {
           return (
             <article
               key={lancamento.id}
-              className={`lanc ${categoria ? "lanc-classificado" : "lanc-pendente"}`}
+              className={[
+                "lanc",
+                categoria ? "lanc-classificado" : "lanc-pendente",
+                arraste?.id === lancamento.id ? "lanc-saindo" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
               style={categoria ? ({ "--cat-h": categoria.hue } as React.CSSProperties) : undefined}
               draggable={!categoria}
               onDragStart={(evento) => {
                 evento.dataTransfer.setData("text/plain", lancamento.id);
                 evento.dataTransfer.effectAllowed = "move";
+              }}
+              onPointerDown={(evento) => {
+                // So toque: no computador quem manda e o arraste do HTML5, e os
+                // dois juntos brigariam pelo mesmo gesto.
+                if (categoria || evento.pointerType === "mouse") return;
+                evento.currentTarget.setPointerCapture(evento.pointerId);
+                origem.current = { x: evento.clientX, y: evento.clientY, id: lancamento.id };
+              }}
+              onPointerMove={(evento) => {
+                const inicio = origem.current;
+                if (!inicio || inicio.id !== lancamento.id) return;
+
+                const distancia = Math.hypot(
+                  evento.clientX - inicio.x,
+                  evento.clientY - inicio.y,
+                );
+                if (!arraste && distancia < LIMIAR) return;
+
+                const caixa = container.current?.getBoundingClientRect();
+                setArraste({
+                  id: lancamento.id,
+                  x: evento.clientX - (caixa?.left ?? 0),
+                  y: evento.clientY - (caixa?.top ?? 0),
+                  telaX: evento.clientX,
+                  telaY: evento.clientY,
+                  alvo: mirar(evento.clientX, evento.clientY),
+                });
+              }}
+              onPointerUp={() => {
+                origem.current = null;
+                if (arraste?.alvo) classificar(lancamento, arraste.alvo);
+                setArraste(null);
+              }}
+              onPointerCancel={() => {
+                origem.current = null;
+                setArraste(null);
               }}
             >
               <div className="lanc-topo">
@@ -142,22 +251,31 @@ export function Classificador({ lancamentos, categorias }: Props) {
         })}
       </div>
 
-      <div className="blocos" aria-label="Categorias">
+      <div className={`blocos ${arraste ? "blocos-mirando" : ""}`} aria-label="Categorias">
         {categorias.map((categoria) => {
           const vazio = categoria.lancamentosNoDia === 0;
 
           return (
             <div
               key={categoria.id}
+              ref={(elemento) => {
+                if (elemento) celulas.current.set(categoria.id, elemento);
+                else celulas.current.delete(categoria.id);
+              }}
               className={[
                 "bloco",
                 vazio ? "bloco-vazio" : "",
-                sobre === categoria.id ? "bloco-sobre" : "",
+                sobre === categoria.id || arraste?.alvo === categoria.id ? "bloco-sobre" : "",
                 pulou === categoria.id ? "bloco-pulou" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
-              style={{ "--cat-h": categoria.hue } as React.CSSProperties}
+              style={
+                {
+                  "--cat-h": categoria.hue,
+                  ...ampliacao(categoria.id),
+                } as React.CSSProperties
+              }
               title={categoria.hint ?? undefined}
               onDragOver={(evento) => {
                 evento.preventDefault();
@@ -192,6 +310,20 @@ export function Classificador({ lancamentos, categorias }: Props) {
           );
         })}
       </div>
+
+      {/* Fantasma do cartao seguindo o dedo. Fica dentro do container, em
+          posicao absoluta: `fixed` sairia do enquadramento em telas com barra
+          de navegacao sobreposta. */}
+      {arraste && emArraste ? (
+        <div className="fantasma" style={{ left: arraste.x, top: arraste.y }} aria-hidden>
+          <span className="lanc-desc">{emArraste.descricao}</span>
+          <span className="lanc-valor">{formatBRL(emArraste.valor)}</span>
+        </div>
+      ) : null}
+
+      {arraste?.alvo ? (
+        <div className="mira">{porId.get(arraste.alvo)?.name}</div>
+      ) : null}
     </div>
   );
 }

@@ -1,23 +1,25 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { localDay, shiftDay } from "@/lib/finance/dates";
 
 /**
- * Seletor de dia em fita deslizante.
+ * Seletor de dia em fita.
  *
- * Substitui os tres botoes de navegacao. A diferenca nao e estetica: com os
- * botoes, so dava para andar um dia por vez e nao se via onde se estava na
- * semana. A fita mostra os vizinhos e deixa pular direto.
+ * Substitui os tres botoes de navegacao. A diferenca nao e estetica: com eles so
+ * dava para andar um dia por vez e nao se via onde se estava na semana.
  *
- * A fita desliza no clique ANTES da navegacao terminar. Sem isso, o movimento
- * so aconteceria depois do servidor responder — e o que se veria seria um salto,
- * nao um deslize.
+ * A fita desliza no clique ANTES de a navegacao terminar. Esperando a resposta
+ * do servidor, o que se veria seria um salto, nao um deslize.
  */
 
-const JANELA = 21;
+/** Ate 20 dias atras; dois dias a frente entram so como contexto. */
+const PASSADO = 20;
+const FUTURO = 2;
 const LARGURA = 70;
+/** Abaixo disso o ponteiro andou de menos para ser arraste: e clique. */
+const LIMIAR = 4;
 
 const DIA_MES = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" });
 const SEMANA = new Intl.DateTimeFormat("pt-BR", { weekday: "short" });
@@ -25,6 +27,10 @@ const SEMANA = new Intl.DateTimeFormat("pt-BR", { weekday: "short" });
 /** Meio-dia UTC: longe das duas viradas, entao o rotulo nunca cai no dia errado. */
 function comoData(dia: string): Date {
   return new Date(`${dia}T12:00:00Z`);
+}
+
+function rotulo(formatador: Intl.DateTimeFormat, data: Date): string {
+  return formatador.format(data).replace(".", "");
 }
 
 export function SpinnerDeDatas({
@@ -37,23 +43,37 @@ export function SpinnerDeDatas({
 }) {
   const router = useRouter();
   const [, iniciar] = useTransition();
+  const trilho = useRef<HTMLDivElement>(null);
 
-  // Indice visual proprio: e ele que desliza na hora do clique. O dia do
-  // servidor volta a mandar assim que a navegacao termina.
   const [selecionado, setSelecionado] = useState(dia);
   useEffect(() => setSelecionado(dia), [dia]);
 
+  /** Deslocamento em pixels enquanto o dedo esta na tela. */
+  const [puxando, setPuxando] = useState<{ inicioX: number; dx: number } | null>(null);
+  const andou = useRef(0);
+
   const hoje = localDay(new Date());
-  const dias = Array.from({ length: JANELA * 2 + 1 }, (_, i) => shiftDay(dia, i - JANELA));
+  // A lista e ancorada em HOJE, nao no dia selecionado: assim o limite direito e
+  // sempre o mesmo lugar e a fita nao se reconstroi a cada navegacao.
+  const dias = Array.from({ length: PASSADO + FUTURO + 1 }, (_, i) =>
+    shiftDay(hoje, i - PASSADO),
+  );
   const indice = Math.max(0, dias.indexOf(selecionado));
+  const noLimitePassado = indice <= 0;
+  const ehHoje = selecionado === hoje;
 
   function irPara(destino: string) {
-    if (destino === selecionado) return;
+    // Nunca adiante de hoje: dia futuro nao tem lancamento para mostrar.
+    if (destino === selecionado || destino > hoje || !dias.includes(destino)) return;
+
     setSelecionado(destino);
     iniciar(() => {
       router.push(`/dia?${[`d=${destino}`, queryExtra].filter(Boolean).join("&")}`);
     });
   }
+
+  /** Deslocamento aplicado a fita, ja somado ao arraste em curso. */
+  const deslocamento = indice * LARGURA + LARGURA / 2 - (puxando?.dx ?? 0);
 
   return (
     <div className="spinner">
@@ -61,16 +81,43 @@ export function SpinnerDeDatas({
         type="button"
         className="spinner-seta"
         onClick={() => irPara(shiftDay(selecionado, -1))}
+        disabled={noLimitePassado}
         aria-label="Dia anterior"
       >
         ‹
       </button>
 
-      <div className="spinner-trilho">
-        <div
-          className="spinner-fita"
-          style={{ transform: `translateX(-${indice * LARGURA + LARGURA / 2}px)` }}
-        >
+      <div
+        ref={trilho}
+        className={`spinner-trilho ${puxando ? "puxando" : ""}`}
+        onPointerDown={(evento) => {
+          evento.currentTarget.setPointerCapture(evento.pointerId);
+          andou.current = 0;
+          setPuxando({ inicioX: evento.clientX, dx: 0 });
+        }}
+        onPointerMove={(evento) => {
+          if (!puxando) return;
+
+          const bruto = evento.clientX - puxando.inicioX;
+          andou.current = Math.max(andou.current, Math.abs(bruto));
+
+          // O arraste e preso ao intervalo disponivel: em hoje so da para puxar
+          // para o passado, e nao passa de 20 dias atras.
+          const minimo = (indice - (dias.length - 1 - FUTURO)) * LARGURA;
+          const maximo = indice * LARGURA;
+          setPuxando({ ...puxando, dx: Math.min(Math.max(bruto, minimo), maximo) });
+        }}
+        onPointerUp={() => {
+          if (!puxando) return;
+
+          // Encaixa no dia mais proximo em vez de parar entre dois.
+          const passos = Math.round(puxando.dx / LARGURA);
+          setPuxando(null);
+          if (andou.current >= LIMIAR) irPara(dias[Math.max(0, indice - passos)] ?? selecionado);
+        }}
+        onPointerCancel={() => setPuxando(null)}
+      >
+        <div className="spinner-fita" style={{ transform: `translateX(-${deslocamento}px)` }}>
           {dias.map((valor, i) => {
             const distancia = Math.abs(i - indice);
             const atual = valor === selecionado;
@@ -81,7 +128,12 @@ export function SpinnerDeDatas({
               <button
                 type="button"
                 key={valor}
-                onClick={() => irPara(valor)}
+                // Dia futuro entra so como contexto: da a sensacao de fita
+                // continua sem prometer conteudo que nao existe.
+                disabled={futuro}
+                onClick={() => {
+                  if (andou.current < LIMIAR) irPara(valor);
+                }}
                 aria-current={atual ? "date" : undefined}
                 className={[
                   "spinner-dia",
@@ -94,10 +146,8 @@ export function SpinnerDeDatas({
                 // precisar de outra marca.
                 style={{ opacity: atual ? 1 : Math.max(0.28, 1 - distancia * 0.16) }}
               >
-                <span className="spinner-data">{DIA_MES.format(data).replace(".", "")}</span>
-                <span className="spinner-semana">
-                  {SEMANA.format(data).replace(".", "").slice(0, 3)}
-                </span>
+                <span className="spinner-data">{rotulo(DIA_MES, data)}</span>
+                <span className="spinner-semana">{rotulo(SEMANA, data).slice(0, 3)}</span>
               </button>
             );
           })}
@@ -108,17 +158,13 @@ export function SpinnerDeDatas({
         type="button"
         className="spinner-seta"
         onClick={() => irPara(shiftDay(selecionado, 1))}
+        disabled={ehHoje}
         aria-label="Proximo dia"
       >
         ›
       </button>
 
-      <button
-        type="button"
-        className="spinner-hoje"
-        onClick={() => irPara(hoje)}
-        disabled={selecionado === hoje}
-      >
+      <button type="button" className="spinner-hoje" onClick={() => irPara(hoje)} disabled={ehHoje}>
         Hoje
       </button>
     </div>

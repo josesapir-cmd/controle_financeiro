@@ -280,12 +280,28 @@ numero nenhum — a pior falha possivel numa tela de classificacao.
 Subcategoria nova digitada no editor vira centro de custo na hora. Exigir uma
 visita a outra tela para criar "Bariloche 2026" mataria o fluxo.
 
+**No celular, as categorias viram um dock no rodape.** Numa tela de 390px nao
+cabe coluna de categorias. E o MESMO conjunto de elementos, so que em ladrilhos
+de 46px ao alcance do polegar — um segundo conjunto de alvos significaria duas
+fontes de verdade para o mesmo destino.
+
+Os dois arrastes sao mecanismos diferentes de proposito. No computador, arrastar
+e soltar do HTML5. No celular, eventos de ponteiro: o arraste do HTML5 no toque
+exige segurar o dedo parado antes de comecar, e aqui o cartao sai com 4px de
+movimento. O ladrilho amplia pela distancia do dedo, no formato do dock do
+macOS, e a ampliacao e por `transform` — aumentar uma celula nao empurra as
+vizinhas, entao o alvo nao foge de baixo do dedo enquanto ele se aproxima.
+
 **O seletor de dia virou fita.** Os tres botoes de antes so andavam um dia por
 vez e nao diziam onde se estava na semana. A fita mostra os vizinhos e deixa
 pular direto. Ela desliza no clique, antes de a navegacao terminar: esperando a
 resposta do servidor o que se veria seria um salto, nao um deslize — por isso o
 indice visual e estado local, e o dia do servidor volta a mandar quando a
-navegacao acaba.
+navegacao acaba. Ela tambem se arrasta na horizontal, com encaixe no dia mais
+proximo ao soltar, e **nunca passa de hoje**: durante o movimento o
+deslocamento e preso ao intervalo disponivel, e os dois dias a frente aparecem
+apagados so como contexto — dar a sensacao de fita continua sem prometer
+conteudo que nao existe.
 
 ### 9. O mapa do gasto e por que ele nao e colorido por categoria
 
