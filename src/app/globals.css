@@ -2738,6 +2738,65 @@ ul.cat-linhas {
   background: #ffffff;
 }
 
+/* Duas frases para o mesmo lugar, escolhidas pelo tipo de ponteiro: no
+   computador basta arrastar, no toque o cartao precisa ser armado antes.
+   Media query em vez de JavaScript porque isto e uma pergunta sobre o
+   dispositivo, e o servidor nao tem como responde-la. */
+.dica-toque {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .dica-mouse {
+    display: none;
+  }
+
+  .dica-toque {
+    display: inline;
+  }
+}
+
+/* Recado de uma classificacao que passou de um lancamento so. Some sozinho: e
+   confirmacao, nao alerta. Fixo na tela porque a acao que ele confirma muda o
+   historico inteiro — precisa ser visto onde quer que a lista esteja rolada. */
+.classificador-aviso {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  /* Acima ate da barra de navegacao (30): e o recado da acao que acabou de
+     acontecer. */
+  z-index: 40;
+  margin: 0;
+  padding: 11px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--bg-white);
+  background: var(--text-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 28px -10px rgba(14, 18, 27, 0.45);
+}
+
+/* Legenda do atalho, no pe da coluna de categorias. */
+.blocos-dica {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.blocos-dica kbd {
+  padding: 1px 5px;
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-sub);
+  background: var(--bg-weak);
+  border: 1px solid var(--stroke-soft);
+  border-radius: 4px;
+}
+
 .lanc-dica {
   padding: 3px 10px;
   font-size: 11px;
@@ -3457,6 +3516,14 @@ ul.cat-linhas {
 
   .conta-chip {
     flex: 0 0 auto;
+  }
+
+  /* O recado sobe acima do dock e da barra inferior, que ja ocupam o rodape. */
+  .classificador-aviso {
+    left: 16px;
+    right: 16px;
+    bottom: calc(var(--nav-mobile) + 76px);
+    transform: none;
   }
 
   /* Alvo de toque: 32px de altura passa no dedo, mas o texto do banco pode ser

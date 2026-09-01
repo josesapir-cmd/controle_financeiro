@@ -77,6 +77,8 @@ export function Classificador({ lancamentos, categorias }: Props) {
   const [armado, setArmado] = useState<string | null>(null);
   /** Ultimo toque, para reconhecer o duplo. */
   const toque = useRef<{ id: string; tempo: number } | null>(null);
+  /** Recado de uma classificacao que passou de um lancamento so. */
+  const [aviso, setAviso] = useState<string | null>(null);
 
   // Sair do modo arrastar sem precisar acertar o cartao de novo: Esc, ou um
   // toque em qualquer outro lugar. Um cartao que fica armado sozinho e um
@@ -139,15 +141,38 @@ export function Classificador({ lancamentos, categorias }: Props) {
     return melhor?.id ?? null;
   }
 
-  function classificar(lancamento: LancamentoParaClassificar, categoriaId: string) {
+  /**
+   * @param aContraparteToda Grava tambem o cadastro da contraparte, entao a
+   * categoria passa a valer para todo lancamento dela — passado e futuro. E o
+   * que o Ctrl faz ao soltar. Sem contraparte identificada nao ha o que
+   * generalizar: cai no comportamento normal, de um lancamento so.
+   */
+  function classificar(
+    lancamento: LancamentoParaClassificar,
+    categoriaId: string,
+    aContraparteToda = false,
+  ) {
     const dados = new FormData();
     dados.set("transactionId", lancamento.id);
     dados.set("categoryId", categoriaId);
     if (lancamento.comentario) dados.set("note", lancamento.comentario);
 
+    const amplo = aContraparteToda && Boolean(lancamento.contraparteKey);
+    if (amplo) {
+      dados.set("aplicarATodos", "sim");
+      dados.set("counterpartyKey", lancamento.contraparteKey ?? "");
+    }
+
     setPulou(categoriaId);
     setTimeout(() => setPulou(null), 620);
-    setAberto(lancamento.id);
+    // Uma regra que muda o historico inteiro nao pode acontecer em silencio.
+    if (amplo) {
+      const nome = lancamento.contraparte ?? "esta contraparte";
+      setAviso(`${porId.get(categoriaId)?.name ?? "Categoria"} vale agora para tudo de ${nome}`);
+      setTimeout(() => setAviso(null), 4000);
+    } else {
+      setAberto(lancamento.id);
+    }
 
     iniciar(() => {
       void classificarLancamento(dados);
@@ -182,13 +207,19 @@ export function Classificador({ lancamentos, categorias }: Props) {
                 .join(" ")}
               style={categoria ? ({ "--cat-h": categoria.hue } as React.CSSProperties) : undefined}
               data-lanc={lancamento.id}
-              draggable={lancamento.classificavel && armado === lancamento.id}
+              // No computador o arraste do HTML5 vale direto; no toque ele nao
+              // acontece, e quem arrasta e o caminho de ponteiro abaixo, que
+              // exige o cartao armado.
+              draggable={lancamento.classificavel}
               onDragStart={(evento) => {
                 evento.dataTransfer.setData("text/plain", lancamento.id);
                 evento.dataTransfer.effectAllowed = "move";
               }}
               onPointerDown={(evento) => {
                 if (!lancamento.classificavel) return;
+                // No computador nao ha modo a armar: arrastar ja arrasta, e o
+                // duplo clique so serviria para atrapalhar quem seleciona texto.
+                if (evento.pointerType === "mouse") return;
 
                 // Toque em controle e do controle: abrir o editor ou escolher no
                 // seletor nao pode armar o arraste por baixo.
@@ -202,19 +233,13 @@ export function Classificador({ lancamentos, categorias }: Props) {
 
                 if (duplo) {
                   toque.current = null;
-                  // O duplo clique seleciona a palavra sob o cursor antes de
-                  // qualquer classe nossa valer; desfazemos na mao.
                   evento.preventDefault();
-                  window.getSelection()?.removeAllRanges();
                   setArmado((atual) => (atual === lancamento.id ? null : lancamento.id));
                   return;
                 }
 
                 toque.current = { id: lancamento.id, tempo: agora };
 
-                // No computador quem arrasta e o HTML5, e os dois juntos
-                // brigariam pelo mesmo gesto.
-                if (evento.pointerType === "mouse") return;
                 // Sem armar, o cartao e so texto: a lista rola normalmente por
                 // cima dele. Era isto que estava travado antes.
                 if (armado !== lancamento.id) return;
@@ -299,9 +324,18 @@ export function Classificador({ lancamentos, categorias }: Props) {
                   ) : (
                     <>
                       <span className="lanc-dica">
-                        {armado === lancamento.id
-                          ? "arraste para um bloco"
-                          : "toque duas vezes para arrastar"}
+                        {armado === lancamento.id ? (
+                          "arraste para um bloco"
+                        ) : (
+                          <>
+                            {/* Duas frases porque o gesto e outro: no
+                                computador basta arrastar; no toque, o cartao
+                                precisa ser armado antes. Quem decide qual
+                                aparece e o CSS, pelo tipo de ponteiro. */}
+                            <span className="dica-mouse">arraste para um bloco</span>
+                            <span className="dica-toque">toque duas vezes para arrastar</span>
+                          </>
+                        )}
                       </span>
 
                       {/* O mesmo destino, sem arrastar: no teclado esta e a
@@ -377,7 +411,11 @@ export function Classificador({ lancamentos, categorias }: Props) {
                 setSobre(null);
                 const id = evento.dataTransfer.getData("text/plain");
                 const lancamento = lancamentos.find((l) => l.id === id);
-                if (lancamento) classificar(lancamento, categoria.id);
+                // Ctrl (ou Cmd, no Mac) ao soltar: a categoria vale para a
+                // contraparte inteira, nao so para este lancamento.
+                if (lancamento) {
+                  classificar(lancamento, categoria.id, evento.ctrlKey || evento.metaKey);
+                }
                 setArmado(null);
               }}
             >
@@ -399,6 +437,13 @@ export function Classificador({ lancamentos, categorias }: Props) {
             </div>
           );
         })}
+
+        {/* Legenda do atalho: uma regra que vale para toda a contraparte tem de
+            ser descobrivel, e nao existe no toque — por isso o CSS a esconde
+            onde nao ha teclado. */}
+        <p className="blocos-dica dica-mouse">
+          Segure <kbd>Ctrl</kbd> ao soltar para valer para toda a contraparte
+        </p>
       </div>
 
       {/* Fantasma do cartao seguindo o dedo. Fica dentro do container, em
@@ -413,6 +458,12 @@ export function Classificador({ lancamentos, categorias }: Props) {
 
       {arraste?.alvo ? (
         <div className="mira">{porId.get(arraste.alvo)?.name}</div>
+      ) : null}
+
+      {aviso ? (
+        <p className="classificador-aviso" role="status">
+          {aviso}
+        </p>
       ) : null}
     </div>
   );
