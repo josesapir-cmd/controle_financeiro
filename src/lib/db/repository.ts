@@ -694,24 +694,44 @@ function paraImportacao(linha: Record<string, unknown>): Importacao {
   };
 }
 
+/**
+ * Le lotes tolerando `orders_enc` ausente.
+ *
+ * A coluna chegou na migracao 009. Entre subir o codigo e rodar a migracao ha
+ * uma janela, e nela a tela de importacoes cairia inteira por causa de uma
+ * coluna que so serve para os prints de pedido. Sem ela, os lotes aparecem sem
+ * pedidos, que e o que eles tinham mesmo antes de a coluna existir.
+ */
+async function lerLotes(
+  db: Db,
+  sufixo: string,
+  parametros: unknown[],
+): Promise<Importacao[]> {
+  const campos = "id, created_at, status, images, envios, lines_enc, note";
+  try {
+    const linhas = await db.query<Record<string, unknown>>(
+      `SELECT ${campos}, orders_enc FROM shared_imports ${sufixo}`,
+      parametros,
+    );
+    return linhas.map(paraImportacao);
+  } catch {
+    const linhas = await db.query<Record<string, unknown>>(
+      `SELECT ${campos} FROM shared_imports ${sufixo}`,
+      parametros,
+    );
+    return linhas.map(paraImportacao);
+  }
+}
+
 export async function lerImportacao(db: Db, id: string): Promise<Importacao | null> {
   if (!UUID.test(id)) return null;
 
-  const linhas = await db.query<Record<string, unknown>>(
-    `SELECT id, created_at, status, images, envios, lines_enc, orders_enc, note
-       FROM shared_imports WHERE id = $1`,
-    [id],
-  );
-  return linhas.length ? paraImportacao(linhas[0]) : null;
+  const lotes = await lerLotes(db, "WHERE id = $1", [id]);
+  return lotes[0] ?? null;
 }
 
 export async function listarImportacoes(db: Db, limite = 10): Promise<Importacao[]> {
-  const linhas = await db.query<Record<string, unknown>>(
-    `SELECT id, created_at, status, images, envios, lines_enc, orders_enc, note
-       FROM shared_imports ORDER BY created_at DESC LIMIT $1`,
-    [limite],
-  );
-  return linhas.map(paraImportacao);
+  return lerLotes(db, "ORDER BY created_at DESC LIMIT $1", [limite]);
 }
 
 export async function encerrarImportacao(

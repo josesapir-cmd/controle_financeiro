@@ -798,7 +798,10 @@ export async function loadClassificacaoDoDia(
       listCategorias(conexao),
       listCentrosDeCusto(conexao),
       listTransactionLabels(conexao),
-      listTransactionProducts(conexao),
+      // A tabela pode nao existir ainda (migracao 009 pendente). A tela do dia
+      // nao pode cair por causa de um nome de produto: sem ela, os cartoes
+      // ficam sem o produto e todo o resto continua funcionando.
+      listTransactionProducts(conexao).catch(() => []),
     ]);
 
   const conciliado = conciliar(transacoes, decisoes);
