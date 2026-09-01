@@ -3,6 +3,7 @@ import "server-only";
 import { fromPostgres, type Db } from "@/lib/db/adapter";
 import { getSql } from "@/lib/db/client";
 import {
+  counterpartyFingerprint,
   listAccounts,
   listCategorias,
   listCentrosDeCusto,
@@ -746,7 +747,13 @@ export interface LancamentoParaClassificar {
   valor: number;
   conta: string;
   contraparte: string | null;
+  /**
+   * Chave que "aplicar a todos" grava. Contraparte quando a Pluggy mandou uma;
+   * a descricao normalizada quando nao — que e o caso de toda compra no cartao.
+   */
   contraparteKey: string | null;
+  /** Como chamar o alvo da regra na tela: o apelido, o nome, ou a descricao. */
+  alvoDaRegra: string | null;
   /**
    * O que foi comprado, quando um print de tela de pedido disse. A fatura traz
    * so "AMAZON BR"; isto e o que ela nao traz.
@@ -828,9 +835,30 @@ export async function loadClassificacaoDoDia(
     centros.map((c) => [`${c.categoryId}|${normalizeName(c.name)}`, c.id] as const),
   );
 
+  /**
+   * Chave que "aplicar a todos" grava, e pela qual o rotulo e herdado.
+   *
+   * Compra no cartao nao tem contraparte: a Pluggy so manda paymentData em
+   * transferencia, entao "99" e "AMAZON BR" chegam sem lado nenhum. Sem
+   * alternativa, a regra ampla ficava indisponivel justamente onde ela mais
+   * serve — o cartao e a maior parte do gasto.
+   *
+   * A alternativa e a descricao normalizada, que e a mesma identidade que a
+   * importacao de print ja usa para contraparte sem documento. Duas cobrancas
+   * escritas igual passam a ser a mesma coisa para efeito de regra, que e o
+   * que se quer dizer ao classificar "99" de uma vez.
+   */
+  const chaveDaRegra = (t: Transaction): string | null => {
+    const contraparte = chaveIdentificada(t.counterparty?.key);
+    if (contraparte) return contraparte;
+
+    const pelaDescricao = normalizeName(t.description ?? "");
+    return pelaDescricao ? counterpartyFingerprint(pelaDescricao) : null;
+  };
+
   const frequencia = new Map<string, number>();
   for (const t of conciliado.transacoes) {
-    const chave = chaveIdentificada(t.counterparty?.key);
+    const chave = chaveDaRegra(t);
     if (chave) frequencia.set(chave, (frequencia.get(chave) ?? 0) + 1);
   }
 
@@ -853,7 +881,7 @@ export async function loadClassificacaoDoDia(
       };
     }
 
-    const chave = chaveIdentificada(t.counterparty?.key);
+    const chave = chaveDaRegra(t);
     const cadastroDaParte = chave ? cadastro[chave] : undefined;
     if (!cadastroDaParte?.category) {
       return {
@@ -891,10 +919,11 @@ export async function loadClassificacaoDoDia(
       valor: t.amount,
       conta: nomeDaConta[t.accountId] ?? "",
       contraparte: nomeDaParte(t),
-      contraparteKey: chaveIdentificada(t.counterparty?.key),
+      contraparteKey: chaveDaRegra(t),
+      alvoDaRegra: nomeDaParte(t) || t.description?.trim() || null,
       produtos: produtosPorTransacao.get(t.id) ?? [],
       classificavel,
-      frequencia: frequencia.get(chaveIdentificada(t.counterparty?.key) ?? "") ?? 1,
+      frequencia: frequencia.get(chaveDaRegra(t) ?? "") ?? 1,
       ...decidido,
       // Uma contraparte com categoria tambem manda dinheiro de volta: sem este
       // corte, um reembolso apareceria etiquetado como despesa dela.

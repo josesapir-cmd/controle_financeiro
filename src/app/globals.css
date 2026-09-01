@@ -2929,8 +2929,11 @@ ul.produtos {
 }
 
 /* So texto, sem caixa: e uma acao de segunda ordem ao lado da etiqueta, e um
-   segundo botao desenhado ali competiria com ela. */
+   segundo botao desenhado ali competiria com ela. Encostado a direita, no pe do
+   cartao — longe da etiqueta, que fica na esquerda, para nao se clicar um
+   querendo o outro. */
 .lanc-todos {
+  margin-left: auto;
   height: auto;
   padding: 3px 4px;
   font-size: 11px;

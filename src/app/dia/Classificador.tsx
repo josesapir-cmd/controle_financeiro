@@ -171,7 +171,7 @@ export function Classificador({ lancamentos, categorias }: Props) {
     // Quem quer subcategoria ou comentario clica na etiqueta.
     if (amplo) {
       // Uma regra que muda o historico inteiro nao pode acontecer em silencio.
-      const nome = lancamento.contraparte ?? "esta contraparte";
+      const nome = lancamento.alvoDaRegra ?? "esta contraparte";
       setAviso(`${porId.get(categoriaId)?.name ?? "Categoria"} vale agora para tudo de ${nome}`);
       setTimeout(() => setAviso(null), 4000);
     }
@@ -333,14 +333,14 @@ export function Classificador({ lancamentos, categorias }: Props) {
                       </button>
 
                       {/* O mesmo que o Ctrl faz ao soltar, para quem nao tem
-                          teclado ou nao conhece o atalho. So aparece com
-                          contraparte identificada: sem ela nao ha o que
-                          generalizar. */}
+                          teclado ou nao conhece o atalho. Some quando a
+                          categoria JA veio da regra: clicar seria um nada. */}
                       {lancamento.contraparteKey && !lancamento.herdada ? (
                         <button
                           type="button"
                           className="lanc-todos"
                           disabled={pendente}
+                          title={`Todo lancamento de ${lancamento.alvoDaRegra ?? "mesma origem"} passa a ser ${categoria.name}`}
                           onClick={() => classificar(lancamento, categoria.id, true)}
                         >
                           aplicar a todos
