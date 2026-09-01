@@ -4,9 +4,11 @@ import { requireSession } from "@/lib/auth/guard";
 import { Nav } from "@/components/Nav";
 import { fromPostgres } from "@/lib/db/adapter";
 import { getSql } from "@/lib/db/client";
-import { lerImportacao } from "@/lib/db/repository";
+import { lerImportacao, listTransactions } from "@/lib/db/repository";
+import { shiftDay } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
 import { classificarParaConferencia } from "@/lib/importacao/linhas";
+import { casarPedidos, type Casamento, type Cobranca, type Pedido } from "@/lib/importacao/pedidos";
 import { confirmarImportacao, descartarImportacao } from "../actions";
 import { LinhasEditaveis, type LinhaComIndice } from "./LinhasEditaveis";
 
@@ -39,12 +41,47 @@ const quando = new Intl.DateTimeFormat("pt-BR", {
  *
  * Os tres estao no mesmo formulario, entao o bloco fechado tambem e enviado.
  */
+/**
+ * Casa os produtos lidos com as cobrancas que ja existem.
+ *
+ * O casamento acontece AQUI, na hora de conferir, e nao na leitura: entre subir
+ * o print e conferir pode ter havido uma sincronizacao, e a cobranca que
+ * faltava passa a existir. Refazer a conta e barato e acha mais.
+ */
+async function casarComOExtrato(
+  db: ReturnType<typeof fromPostgres>,
+  pedidos: Pedido[],
+): Promise<Casamento[]> {
+  if (pedidos.length === 0) return [];
+
+  const dias = pedidos.map((p) => p.dia).sort();
+  const linhas = await listTransactions(db, {
+    from: shiftDay(dias[0], -3),
+    to: shiftDay(dias[dias.length - 1], 11),
+  });
+
+  const cobrancas: Cobranca[] = linhas.map((linha) => ({
+    id: linha.id,
+    dia: linha.localDay,
+    valor: linha.amount,
+    descricao: linha.description ?? "",
+    contraparte: linha.counterpartyName,
+  }));
+
+  return casarPedidos(pedidos, cobrancas);
+}
+
 export default async function Conferir({ params }: { params: Promise<{ id: string }> }) {
   await requireSession();
 
   const { id } = await params;
-  const lote = await lerImportacao(fromPostgres(getSql()), id);
+  const db = fromPostgres(getSql());
+  const lote = await lerImportacao(db, id);
   if (!lote) notFound();
+
+  const casamentos = await casarComOExtrato(db, lote.pedidos as Pedido[]);
+  const casados = casamentos.filter((c) => c.certeza === "exata");
+  const semCobranca = casamentos.filter((c) => c.certeza !== "exata");
 
   const comIndice: LinhaComIndice[] = lote.linhas.map((linha, indice) => ({ linha, indice }));
 
@@ -127,17 +164,22 @@ export default async function Conferir({ params }: { params: Promise<{ id: strin
         </div>
       </div>
 
-      {lote.linhas.length === 0 ? (
+      {lote.linhas.length === 0 && casamentos.length === 0 ? (
         <section className="card">
           <p className="empty">
-            Nenhum lancamento foi reconhecido nas imagens. Verifique se o print e da tela de
-            extrato do saldo compartilhado e tente de novo.
+            Nada foi reconhecido nas imagens. Verifique se o print e da tela do saldo compartilhado
+            do Nubank ou de uma lista de pedidos (Amazon, Mercado Livre, Apple) e tente de novo.
           </p>
         </section>
       ) : (
         <form action={confirmarImportacao}>
           <input type="hidden" name="id" value={lote.id} />
           <input type="hidden" name="indices" value={indices} />
+          <input
+            type="hidden"
+            name="produtos"
+            value={casados.map((c) => c.pedido.id).join(",")}
+          />
 
           {decidir.length > 0 ? (
             <section className="bloco-decidir">
@@ -193,6 +235,115 @@ export default async function Conferir({ params }: { params: Promise<{ id: strin
                   <LinhasEditaveis itens={prontas} incluirPorPadrao mostrarOrigem={false} />
                 </div>
               </details>
+            </section>
+          ) : null}
+
+          {casamentos.length > 0 ? (
+            <section>
+              <h2>
+                {casamentos.length}{" "}
+                {casamentos.length === 1 ? "produto lido" : "produtos lidos"} de telas de pedido
+              </h2>
+              <p className="empty" style={{ marginTop: -6, marginBottom: 14 }}>
+                Estes NAO viram lancamento: a compra ja chegou pelo cartao. O que falta e o nome do
+                produto, que a fatura nao traz — cada linha abaixo se gruda a cobranca que ja
+                existe.
+              </p>
+
+              {casados.length > 0 ? (
+                <div className="card">
+                  <ul className="produtos">
+                    {casados.map((casamento) => {
+                      const cobranca = casamento.candidatas.find(
+                        (c) => c.id === casamento.cobrancaId,
+                      );
+
+                      return (
+                        <li key={casamento.pedido.id} className="produto">
+                          <label className="produto-marca">
+                            <input
+                              type="checkbox"
+                              name={`produto_${casamento.pedido.id}`}
+                              value={casamento.cobrancaId ?? ""}
+                              defaultChecked
+                            />
+                          </label>
+                          <div className="produto-corpo">
+                            <span className="description">{casamento.pedido.produto}</span>
+                            <div className="account-meta">
+                              {casamento.pedido.loja} · {casamento.pedido.dia}
+                              {casamento.pedido.referencia
+                                ? ` · pedido ${casamento.pedido.referencia}`
+                                : ""}
+                              {casamento.pedido.confianca !== "alta"
+                                ? ` · leitura ${casamento.pedido.confianca}`
+                                : ""}
+                            </div>
+                            <div className="account-meta">
+                              gruda em: {cobranca?.descricao} · {cobranca?.dia}
+                            </div>
+                          </div>
+                          <span className="produto-valor">
+                            {formatBRL(-casamento.pedido.valor)}
+                          </span>
+                          <input
+                            type="hidden"
+                            name={`produto_loja_${casamento.pedido.id}`}
+                            value={casamento.pedido.loja}
+                          />
+                          <input
+                            type="hidden"
+                            name={`produto_nome_${casamento.pedido.id}`}
+                            value={casamento.pedido.produto}
+                          />
+                          <input
+                            type="hidden"
+                            name={`produto_ref_${casamento.pedido.id}`}
+                            value={casamento.pedido.referencia ?? ""}
+                          />
+                          <input
+                            type="hidden"
+                            name={`produto_dia_${casamento.pedido.id}`}
+                            value={casamento.pedido.dia}
+                          />
+                          <input
+                            type="hidden"
+                            name={`produto_valor_${casamento.pedido.id}`}
+                            value={casamento.pedido.valor}
+                          />
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : null}
+
+              {semCobranca.length > 0 ? (
+                <div className="card" style={{ marginTop: 12 }}>
+                  <p className="empty" style={{ marginTop: 0 }}>
+                    {semCobranca.length}{" "}
+                    {semCobranca.length === 1 ? "produto ficou" : "produtos ficaram"} sem cobranca
+                    para grudar. Nada se perde: refaca a leitura depois da proxima sincronizacao,
+                    ou confira se a compra caiu numa conta que voce ainda nao conectou.
+                  </p>
+                  <ul className="produtos">
+                    {semCobranca.map((casamento) => (
+                      <li key={casamento.pedido.id} className="produto produto-sem">
+                        <div className="produto-corpo">
+                          <span className="description">{casamento.pedido.produto}</span>
+                          <div className="account-meta">
+                            {casamento.pedido.loja} · {casamento.pedido.dia} ·{" "}
+                            {casamento.certeza === "ambigua"
+                              ? `${casamento.candidatas.length} cobrancas iguais na janela — nao da para escolher sozinho`
+                              : "nenhuma cobranca com este valor, nesta loja, nesta janela"}
+                          </div>
+                        </div>
+                        <span className="produto-valor">{formatBRL(-casamento.pedido.valor)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </section>
           ) : null}
 

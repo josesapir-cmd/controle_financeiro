@@ -8,6 +8,7 @@ import {
   listCentrosDeCusto,
   listCounterpartyLinks,
   listTransactionLabels,
+  listTransactionProducts,
   listLabels,
   listTransactions,
   listarImportacoes,
@@ -747,6 +748,11 @@ export interface LancamentoParaClassificar {
   contraparte: string | null;
   contraparteKey: string | null;
   /**
+   * O que foi comprado, quando um print de tela de pedido disse. A fatura traz
+   * so "AMAZON BR"; isto e o que ela nao traz.
+   */
+  produtos: string[];
+  /**
    * Se pede categoria. Entrada, movimentacao e lancamento automatico do banco
    * aparecem na lista — o dia e o dia inteiro — mas nao se classificam, entao
    * nao arrastam, nao contam como pendencia e nao ganham etiqueta.
@@ -786,17 +792,27 @@ export async function loadClassificacaoDoDia(
   if (useMock()) return { dia, lancamentos: [], categorias: [] };
 
   const conexao = db();
-  const [{ contas, transacoes, registry, decisoes }, categorias, centros, rotulos] =
+  const [{ contas, transacoes, registry, decisoes }, categorias, centros, rotulos, produtos] =
     await Promise.all([
       carregar(janela, accountIds),
       listCategorias(conexao),
       listCentrosDeCusto(conexao),
       listTransactionLabels(conexao),
+      listTransactionProducts(conexao),
     ]);
 
   const conciliado = conciliar(transacoes, decisoes);
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
   const porId = new Map(rotulos.map((r) => [r.transactionId, r]));
+
+  // Produtos lidos de tela de pedido. Um pedido de tres itens cobrado de uma
+  // vez tem tres produtos na mesma cobranca, entao a lista e por transacao.
+  const produtosPorTransacao = new Map<string, string[]>();
+  for (const produto of produtos) {
+    const lista = produtosPorTransacao.get(produto.transactionId) ?? [];
+    lista.push(produto.name);
+    produtosPorTransacao.set(produto.transactionId, lista);
+  }
 
   const nomeDaConta: Record<string, string> = {};
   for (const conta of contas) nomeDaConta[conta.id] = conta.marketingName || conta.name;
@@ -873,6 +889,7 @@ export async function loadClassificacaoDoDia(
       conta: nomeDaConta[t.accountId] ?? "",
       contraparte: nomeDaParte(t),
       contraparteKey: chaveIdentificada(t.counterparty?.key),
+      produtos: produtosPorTransacao.get(t.id) ?? [],
       classificavel,
       frequencia: frequencia.get(chaveIdentificada(t.counterparty?.key) ?? "") ?? 1,
       ...decidido,

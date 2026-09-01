@@ -2784,6 +2784,60 @@ ul.centros {
   color: var(--success-dark);
 }
 
+/* Produto lido de tela de pedido: linha propria, com a cor do texto forte. E a
+   informacao que a fatura nao tem — vira ruido se entrar como mais um "·" na
+   linha cinza de baixo. */
+.lanc-produtos {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.lanc-produtos::before {
+  content: "🛍";
+  margin-right: 6px;
+  opacity: 0.7;
+}
+
+/* --- Produtos na tela de conferencia --- */
+ul.produtos {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.produto {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--stroke-soft);
+}
+
+.produto:last-child {
+  border-bottom: none;
+}
+
+.produto-corpo {
+  flex: 1;
+  min-width: 0;
+}
+
+.produto-valor {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--error-dark);
+  white-space: nowrap;
+}
+
+/* Sem cobranca para grudar: fica em tom mais baixo, porque nao ha acao a tomar
+   nele agora. */
+.produto-sem .description,
+.produto-sem .produto-valor {
+  color: var(--text-soft);
+}
+
 .lanc-meta {
   margin-top: 4px;
   font-size: 12px;
@@ -2872,6 +2926,31 @@ ul.centros {
   background: var(--bg-weak);
   border: 1px solid var(--stroke-soft);
   border-radius: 4px;
+}
+
+/* So texto, sem caixa: e uma acao de segunda ordem ao lado da etiqueta, e um
+   segundo botao desenhado ali competiria com ela. */
+.lanc-todos {
+  height: auto;
+  padding: 3px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--cat-fg);
+  background: none;
+  border: none;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.lanc-todos:hover:not(:disabled) {
+  color: var(--text-strong);
+  background: none;
+}
+
+.lanc-todos:disabled {
+  opacity: 0.5;
 }
 
 .lanc-dica {

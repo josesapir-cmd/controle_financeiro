@@ -165,13 +165,15 @@ export function Classificador({ lancamentos, categorias }: Props) {
 
     setPulou(categoriaId);
     setTimeout(() => setPulou(null), 620);
-    // Uma regra que muda o historico inteiro nao pode acontecer em silencio.
+
+    // Classificar NAO abre o detalhamento. Abrir a cada arraste enchia a tela
+    // de paineis que ninguem pediu, bem no meio de uma sequencia de arrastes.
+    // Quem quer subcategoria ou comentario clica na etiqueta.
     if (amplo) {
+      // Uma regra que muda o historico inteiro nao pode acontecer em silencio.
       const nome = lancamento.contraparte ?? "esta contraparte";
       setAviso(`${porId.get(categoriaId)?.name ?? "Categoria"} vale agora para tudo de ${nome}`);
       setTimeout(() => setAviso(null), 4000);
-    } else {
-      setAberto(lancamento.id);
     }
 
     iniciar(() => {
@@ -293,6 +295,13 @@ export function Classificador({ lancamentos, categorias }: Props) {
                 </span>
               </div>
 
+              {/* O que foi comprado, quando um print de tela de pedido disse.
+                  Linha propria e nao mais um item na meta: e a informacao que
+                  a fatura nao tem, e ela some se virar mais um "·". */}
+              {lancamento.produtos.length > 0 ? (
+                <div className="lanc-produtos">{lancamento.produtos.join(" · ")}</div>
+              ) : null}
+
               <div className="lanc-meta">
                 {[
                   lancamento.classificavel && !categoria ? "Sem categoria" : null,
@@ -311,16 +320,34 @@ export function Classificador({ lancamentos, categorias }: Props) {
               {lancamento.classificavel ? (
                 <div className="lanc-rodape">
                   {categoria ? (
-                    <button
-                      type="button"
-                      className="lanc-etiqueta"
-                      onClick={() => setAberto(aberto === lancamento.id ? null : lancamento.id)}
-                      aria-expanded={aberto === lancamento.id}
-                    >
-                      {categoria.name}
-                      {centro ? ` · ${centro.name}` : ""}
-                      {lancamento.herdada ? " (da contraparte)" : ""}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="lanc-etiqueta"
+                        onClick={() => setAberto(aberto === lancamento.id ? null : lancamento.id)}
+                        aria-expanded={aberto === lancamento.id}
+                      >
+                        {categoria.name}
+                        {centro ? ` · ${centro.name}` : ""}
+                        {lancamento.herdada ? " (da contraparte)" : ""}
+                      </button>
+
+                      {/* O mesmo que o Ctrl faz ao soltar, para quem nao tem
+                          teclado ou nao conhece o atalho. So aparece com
+                          contraparte identificada: sem ela nao ha o que
+                          generalizar. */}
+                      {lancamento.contraparteKey && !lancamento.herdada ? (
+                        <button
+                          type="button"
+                          className="lanc-todos"
+                          disabled={pendente}
+                          onClick={() => classificar(lancamento, categoria.id, true)}
+                        >
+                          aplicar a todos
+                          {lancamento.frequencia > 1 ? ` (${lancamento.frequencia})` : ""}
+                        </button>
+                      ) : null}
+                    </>
                   ) : (
                     <>
                       <span className="lanc-dica">

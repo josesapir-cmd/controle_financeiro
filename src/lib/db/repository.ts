@@ -575,6 +575,21 @@ export interface Importacao {
   envios: number;
   note: string | null;
   linhas: ImportacaoLinha[];
+  /** Produtos lidos de telas de pedido, esperando a mesma conferencia. */
+  pedidos: ImportacaoPedido[];
+}
+
+/** Produto lido de uma tela de pedidos, ainda sem estar ligado a cobranca. */
+export interface ImportacaoPedido {
+  id: string;
+  loja: string;
+  produto: string;
+  dia: string;
+  valor: number;
+  referencia: string | null;
+  confianca: string;
+  envio: number;
+  arquivos: string[];
 }
 
 /**
@@ -587,12 +602,22 @@ export interface Importacao {
  */
 export async function criarImportacao(
   db: Db,
-  dados: { linhas: ImportacaoLinha[]; images: number; note?: string | null },
+  dados: {
+    linhas: ImportacaoLinha[];
+    pedidos?: ImportacaoPedido[];
+    images: number;
+    note?: string | null;
+  },
 ): Promise<string> {
   const linhas = await db.query<{ id: string }>(
-    `INSERT INTO shared_imports (images, envios, lines_enc, note)
-     VALUES ($1, 1, $2, $3) RETURNING id`,
-    [dados.images, encryptOptional(JSON.stringify(dados.linhas)), dados.note?.trim() || null],
+    `INSERT INTO shared_imports (images, envios, lines_enc, orders_enc, note)
+     VALUES ($1, 1, $2, $3, $4) RETURNING id`,
+    [
+      dados.images,
+      encryptOptional(JSON.stringify(dados.linhas)),
+      encryptOptional(JSON.stringify(dados.pedidos ?? [])),
+      dados.note?.trim() || null,
+    ],
   );
   return linhas[0].id;
 }
@@ -611,7 +636,12 @@ export async function criarImportacao(
 export async function anexarImportacao(
   db: Db,
   id: string,
-  dados: { linhas: ImportacaoLinha[]; imagens: number; note?: string | null },
+  dados: {
+    linhas: ImportacaoLinha[];
+    pedidos?: ImportacaoPedido[];
+    imagens: number;
+    note?: string | null;
+  },
 ): Promise<boolean> {
   if (!UUID.test(id)) return false;
 
@@ -620,15 +650,34 @@ export async function anexarImportacao(
         SET images = images + $2,
             envios = envios + 1,
             lines_enc = $3,
+            orders_enc = $5,
             -- As observacoes de cada envio se somam: cada uma fala de imagens
             -- diferentes, e ficar so com a ultima esconderia as anteriores.
             note = NULLIF(trim(both E'\n' from coalesce(note, '') || E'\n' || coalesce($4, '')), '')
       WHERE id = $1 AND status = 'pendente'
       RETURNING id`,
-    [id, dados.imagens, encryptOptional(JSON.stringify(dados.linhas)), dados.note?.trim() || null],
+    [
+      id,
+      dados.imagens,
+      encryptOptional(JSON.stringify(dados.linhas)),
+      dados.note?.trim() || null,
+      encryptOptional(JSON.stringify(dados.pedidos ?? [])),
+    ],
   );
 
   return linhas.length > 0;
+}
+
+/** JSON cifrado que pode nao existir em lote antigo: vazio e a resposta certa. */
+function listaGuardada<T>(cifrado: unknown): T[] {
+  const conteudo = decryptOptional((cifrado as string | null) ?? null);
+  if (!conteudo) return [];
+  try {
+    const dados = JSON.parse(conteudo);
+    return Array.isArray(dados) ? (dados as T[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 function paraImportacao(linha: Record<string, unknown>): Importacao {
@@ -641,6 +690,7 @@ function paraImportacao(linha: Record<string, unknown>): Importacao {
     envios: Number(linha.envios ?? 1),
     note: linha.note ? String(linha.note) : null,
     linhas: conteudo ? (JSON.parse(conteudo) as ImportacaoLinha[]) : [],
+    pedidos: listaGuardada<ImportacaoPedido>(linha.orders_enc),
   };
 }
 
@@ -648,7 +698,7 @@ export async function lerImportacao(db: Db, id: string): Promise<Importacao | nu
   if (!UUID.test(id)) return null;
 
   const linhas = await db.query<Record<string, unknown>>(
-    `SELECT id, created_at, status, images, envios, lines_enc, note
+    `SELECT id, created_at, status, images, envios, lines_enc, orders_enc, note
        FROM shared_imports WHERE id = $1`,
     [id],
   );
@@ -657,7 +707,7 @@ export async function lerImportacao(db: Db, id: string): Promise<Importacao | nu
 
 export async function listarImportacoes(db: Db, limite = 10): Promise<Importacao[]> {
   const linhas = await db.query<Record<string, unknown>>(
-    `SELECT id, created_at, status, images, envios, lines_enc, note
+    `SELECT id, created_at, status, images, envios, lines_enc, orders_enc, note
        FROM shared_imports ORDER BY created_at DESC LIMIT $1`,
     [limite],
   );
@@ -945,6 +995,113 @@ export async function listTransactionLabels(db: Db): Promise<RotuloDeLancamento[
     costCenterId: linha.cost_center_id ? String(linha.cost_center_id) : null,
     note: decryptOptional(linha.note_enc as string | null),
   }));
+}
+
+/**
+ * Produto comprado, ligado a cobranca que ja existe.
+ *
+ * A fatura diz "AMAZON BR" e mais nada; o produto vem do print da tela de
+ * pedidos da loja. Guardar aqui, e nao em `transactions`, mantem separado o que
+ * o banco disse do que a loja disse — e permite mais de um produto na mesma
+ * cobranca, que e o caso de um pedido com varios itens cobrado de uma vez.
+ */
+/** Nome comparavel: sem acento, sem caixa e sem espaco duplo. */
+function chaveDoProduto(nome: string): string {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export interface ProdutoDoPedido {
+  id: string;
+  transactionId: string;
+  store: string;
+  name: string;
+  reference: string | null;
+  amount: number | null;
+  orderedOn: string | null;
+}
+
+export async function listTransactionProducts(
+  db: Db,
+  transactionIds?: string[],
+): Promise<ProdutoDoPedido[]> {
+  const filtrar = Array.isArray(transactionIds);
+  if (filtrar && transactionIds!.length === 0) return [];
+
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, transaction_id, store, name_enc, reference_enc, amount, ordered_on
+       FROM transaction_products
+      ${filtrar ? "WHERE transaction_id = ANY($1)" : ""}
+      ORDER BY created_at`,
+    filtrar ? [transactionIds] : [],
+  );
+
+  return linhas.map((linha) => ({
+    id: String(linha.id),
+    transactionId: String(linha.transaction_id),
+    store: String(linha.store),
+    name: decryptOptional(linha.name_enc as string | null) ?? "",
+    reference: decryptOptional(linha.reference_enc as string | null),
+    amount: linha.amount === null || linha.amount === undefined ? null : Number(linha.amount),
+    orderedOn: linha.ordered_on ? String(linha.ordered_on).slice(0, 10) : null,
+  }));
+}
+
+/**
+ * Grava as associacoes confirmadas. Devolve quantas linhas entraram.
+ *
+ * A impressao digital do nome e o que impede gravar o mesmo produto duas vezes
+ * quando o print e lido de novo: o texto cifrado nao serve, porque o nonce e
+ * aleatorio e o mesmo nome viraria uma linha nova a cada leitura.
+ */
+export async function salvarProdutosDoPedido(
+  db: Db,
+  produtos: {
+    transactionId: string;
+    store: string;
+    name: string;
+    reference?: string | null;
+    amount?: number | null;
+    orderedOn?: string | null;
+  }[],
+): Promise<number> {
+  let gravados = 0;
+
+  for (const produto of produtos) {
+    const nome = produto.name.trim();
+    if (!produto.transactionId || !nome) continue;
+
+    const linhas = await db.query<{ id: string }>(
+      `INSERT INTO transaction_products
+         (transaction_id, store, name_enc, reference_enc, name_fp, amount, ordered_on)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (transaction_id, name_fp) DO NOTHING
+       RETURNING id`,
+      [
+        produto.transactionId,
+        produto.store.trim() || "Loja",
+        encryptOptional(nome),
+        encryptOptional(produto.reference?.trim() || null),
+        fingerprint("order-product", chaveDoProduto(nome)),
+        produto.amount ?? null,
+        produto.orderedOn ?? null,
+      ],
+    );
+
+    gravados += linhas.length;
+  }
+
+  return gravados;
+}
+
+/** Desfaz uma associacao: o produto sai, a cobranca continua. */
+export async function apagarProdutoDoPedido(db: Db, id: string): Promise<void> {
+  if (!UUID.test(id)) return;
+  await db.query(`DELETE FROM transaction_products WHERE id = $1`, [id]);
 }
 
 export async function setTransactionLabel(

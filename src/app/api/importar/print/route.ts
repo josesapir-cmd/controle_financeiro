@@ -6,6 +6,7 @@ import { anexarImportacao, criarImportacao, lerImportacao } from "@/lib/db/repos
 import { localDay } from "@/lib/finance/dates";
 import { TAMANHO_MAXIMO_BYTES, tipoAceito } from "@/lib/importacao/limites";
 import { mesclar, suspeitasDeDuplicata, type Linha } from "@/lib/importacao/linhas";
+import { mesclarPedidos, type Pedido } from "@/lib/importacao/pedidos";
 import { lerPrints, type Imagem } from "@/lib/importacao/prints";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +68,7 @@ export async function POST(request: Request): Promise<Response> {
   const loteExistente = String(formulario.get("lote") ?? "").trim();
 
   let anteriores: Linha[] = [];
+  let pedidosAnteriores: Pedido[] = [];
   if (loteExistente) {
     const lote = await lerImportacao(db, loteExistente);
     if (!lote) {
@@ -79,6 +81,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
     anteriores = lote.linhas as Linha[];
+    pedidosAnteriores = lote.pedidos as Pedido[];
   }
 
   const envio = loteExistente
@@ -92,6 +95,7 @@ export async function POST(request: Request): Promise<Response> {
     });
 
     const linhas = mesclar(anteriores, leitura.linhas);
+    const pedidos = mesclarPedidos(pedidosAnteriores, leitura.pedidos);
 
     // A imagem em si nao e guardada: ja cumpriu o papel, e um print de extrato
     // e mais dado sensivel para armazenar do que as linhas que saem dele.
@@ -99,6 +103,7 @@ export async function POST(request: Request): Promise<Response> {
     if (id) {
       const anexou = await anexarImportacao(db, id, {
         linhas,
+        pedidos,
         imagens: imagens.length,
         note: leitura.observacao,
       });
@@ -111,6 +116,7 @@ export async function POST(request: Request): Promise<Response> {
     } else {
       id = await criarImportacao(db, {
         linhas,
+        pedidos,
         images: imagens.length,
         note: leitura.observacao,
       });
@@ -123,6 +129,7 @@ export async function POST(request: Request): Promise<Response> {
       novas: leitura.linhas.length,
       rejeitadas: leitura.rejeitadas.length,
       duplicadas: suspeitasDeDuplicata(linhas).length,
+      pedidos: pedidos.length,
       observacao: leitura.observacao,
     });
   } catch (error) {
