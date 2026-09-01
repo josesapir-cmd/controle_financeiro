@@ -104,18 +104,44 @@ for (const { item_id, connector_name } of conexoes) {
   }).then((r) => r.json());
 
   for (const conta of contas.results ?? []) {
-    const url = `${API}/v2/transactions?accountId=${conta.id}&from=${desde}&pageSize=200`;
-    const resposta = await fetch(url, { headers: { "X-API-KEY": apiKey } });
-    if (!resposta.ok) {
-      console.log(`\n━━ ${connector_name} · ${conta.name}: HTTP ${resposta.status}`);
+    const transacoes = [];
+    let caminho = `/v2/transactions?accountId=${encodeURIComponent(conta.id)}`;
+    let erro = null;
+
+    // A v2 nao aceita from/to/pageSize — devolve 400 — entao pedimos as paginas
+    // e cortamos o periodo aqui, parando assim que uma pagina passa do inicio
+    // da janela. E o mesmo caminho que o app usa em getTransactions.
+    for (let pagina = 0; pagina < 50; pagina += 1) {
+      const resposta = await fetch(`${API}${caminho}`, { headers: { "X-API-KEY": apiKey } });
+      if (!resposta.ok) {
+        erro = `HTTP ${resposta.status} ${(await resposta.text()).slice(0, 160)}`;
+        break;
+      }
+
+      const corpo = await resposta.json();
+      const lote = corpo.results ?? corpo.data ?? corpo.transactions ?? [];
+      transacoes.push(...lote);
+
+      if (lote.length === 0) break;
+      if (lote.some((t) => String(t.date ?? "").slice(0, 10) < desde)) break;
+      if (typeof corpo.next !== "string" || !corpo.next) break;
+      caminho = `/v2/transactions${corpo.next}`;
+    }
+
+    if (erro) {
+      console.log(`\n━━ ${connector_name} · ${conta.name}: ${erro}`);
       continue;
     }
 
-    const { results = [] } = await resposta.json();
-    const pix = results.filter(ehPix);
-    if (pix.length === 0) continue;
+    const naJanela = transacoes.filter((t) => String(t.date ?? "").slice(0, 10) >= desde);
+    const pix = naJanela.filter(ehPix);
 
-    console.log(`\n━━ ${connector_name} · ${conta.name} · ${pix.length} Pix em ${DIAS} dias`);
+    // A linha sai mesmo com zero Pix: "conta lida, nenhum Pix" e uma resposta,
+    // e silencio nao distingue isso de conta que nem foi lida.
+    console.log(
+      `\n━━ ${connector_name} · ${conta.name} · ${pix.length} Pix de ${naJanela.length} lancamentos em ${DIAS} dias`,
+    );
+    if (pix.length === 0) continue;
 
     for (const t of pix) {
       const saida = t.amount < 0 || conta.type === "CREDIT";
