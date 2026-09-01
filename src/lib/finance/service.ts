@@ -35,7 +35,7 @@ import {
   type CounterpartyRegistry,
   type CounterpartyTotal,
 } from "./counterparties";
-import { currentMonthRange, localDay } from "./dates";
+import { currentMonthRange, currentYearRange, localDay } from "./dates";
 import { netWorth, normalizeAmount, sumBy } from "./money";
 import {
   totalExpenses,
@@ -608,6 +608,11 @@ export async function contarImportacoesPendentes(): Promise<number> {
 
 export interface CentrosDeCustoData {
   categorias: CategoriaTotal[];
+  /**
+   * Os mesmos totais no ano corrente. Os blocos mostram mes e ano lado a lado:
+   * o mes diz o que esta acontecendo, o ano diz o tamanho da categoria.
+   */
+  noAno: CategoriaTotal[];
   semCategoria: { sent: number; received: number; count: number; counterparties: number };
   period: Period;
   /** Total de saida das categorias de despesa, para o numero do topo. */
@@ -635,6 +640,7 @@ export async function loadCentrosDeCusto(
   if (useMock()) {
     return {
       categorias: [],
+      noAno: [],
       semCategoria: { sent: 0, received: 0, count: 0, counterparties: 0 },
       period,
       despesas: 0,
@@ -645,10 +651,18 @@ export async function loadCentrosDeCusto(
     };
   }
 
+  // Uma leitura so cobrindo periodo e ano; os dois recortes saem dela em
+  // memoria. Duas consultas ao banco para o mesmo intervalo seriam desperdicio.
+  const ano = currentYearRange();
+  const amplo = {
+    from: period.from < ano.from ? period.from : ano.from,
+    to: period.to > ano.to ? period.to : ano.to,
+  };
+
   const conexao = db();
   const [{ todasAsContas, transacoes, registry, decisoes }, categorias, centros] =
     await Promise.all([
-      carregar(period, accountIds),
+      carregar(amplo, accountIds),
       listCategorias(conexao),
       listCentrosDeCusto(conexao),
     ]);
@@ -659,14 +673,24 @@ export async function loadCentrosDeCusto(
     (t) => !t.counterparty?.self && classify(t) !== "transfer",
   );
 
-  const { categorias: totais, semCategoria } = cruzarCentrosDeCusto(
-    categorias,
-    centros,
-    aggregateCounterparties(relevantes, cadastro),
-  );
+  const noRecorte = (de: string, ate: string) =>
+    cruzarCentrosDeCusto(
+      categorias,
+      centros,
+      aggregateCounterparties(
+        relevantes.filter((t) => {
+          const dia = localDay(t.date);
+          return dia >= de && dia <= ate;
+        }),
+        cadastro,
+      ),
+    );
+
+  const { categorias: totais, semCategoria } = noRecorte(period.from, period.to);
 
   return {
     categorias: totais,
+    noAno: noRecorte(ano.from, ano.to).categorias,
     semCategoria,
     period,
     despesas: totalPorTipo(totais, "despesa").sent,

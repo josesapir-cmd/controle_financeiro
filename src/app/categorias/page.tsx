@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/guard";
 import { AccountFilter } from "@/components/AccountFilter";
 import { Nav } from "@/components/Nav";
 import { TreemapCategorias } from "@/components/TreemapCategorias";
+import { Indice } from "./Indice";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import type { CategoriaTotal, CentroTotal } from "@/lib/finance/centros";
 import { currentMonthRange } from "@/lib/finance/dates";
@@ -213,7 +214,7 @@ function Categoria({ categoria }: { categoria: CategoriaTotal }) {
 export default async function Categorias({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string; contas?: string | string[] }>;
+  searchParams: Promise<{ from?: string; to?: string; contas?: string | string[]; cat?: string }>;
 }) {
   await requireSession();
 
@@ -297,6 +298,13 @@ export default async function Categorias({
         </div>
       </div>
 
+      <Indice
+        categorias={dados.categorias}
+        noAno={dados.noAno}
+        aberta={params.cat ?? null}
+        queryBase={buildQuery(`from=${periodo.from}&to=${periodo.to}`, contasQuery)}
+      />
+
       <section>
         <h2>Mapa do gasto</h2>
         <div className="card">
@@ -304,18 +312,17 @@ export default async function Categorias({
         </div>
       </section>
 
-      {comMovimento.map((categoria) => (
-        <Categoria key={categoria.id} categoria={categoria} />
-      ))}
-
-      {semMovimento.length > 0 ? (
-        <section>
-          <h2>Sem movimento no periodo ({semMovimento.length})</h2>
-          {semMovimento.map((categoria) => (
-            <Categoria key={categoria.id} categoria={categoria} />
-          ))}
-        </section>
-      ) : null}
+      {/* O cadastro fica embaixo do indice: a leitura vem primeiro, a edicao
+          depois. Quem chega aqui quer ver quanto gastou, nao renomear. */}
+      <section>
+        <h2>Cadastro</h2>
+        {comMovimento.map((categoria) => (
+          <Categoria key={categoria.id} categoria={categoria} />
+        ))}
+        {semMovimento.map((categoria) => (
+          <Categoria key={categoria.id} categoria={categoria} />
+        ))}
+      </section>
 
       <section className="card">
         <h2>Nova categoria</h2>

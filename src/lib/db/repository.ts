@@ -696,6 +696,8 @@ export interface CategoriaRow {
   name: string;
   kind: TipoDeCategoria;
   position: number;
+  /** Matiz OKLCH (0-359) da cor de sinalizacao da categoria. */
+  hue: number;
   archived: boolean;
 }
 
@@ -722,7 +724,7 @@ export async function listCategorias(
   incluirArquivadas = false,
 ): Promise<CategoriaRow[]> {
   const linhas = await db.query<Record<string, unknown>>(
-    `SELECT id, name, kind, position, archived_at FROM categories
+    `SELECT id, name, kind, position, hue, archived_at FROM categories
       ${incluirArquivadas ? "" : "WHERE archived_at IS NULL"}
       ORDER BY position, name`,
   );
@@ -732,6 +734,7 @@ export async function listCategorias(
     name: String(linha.name),
     kind: String(linha.kind) as TipoDeCategoria,
     position: Number(linha.position ?? 100),
+    hue: Number(linha.hue ?? 250),
     archived: Boolean(linha.archived_at),
   }));
 }
@@ -774,8 +777,11 @@ export async function acharOuCriarCategoria(
   const limpo = nome.trim();
   if (!limpo) return null;
 
+  // Matiz nova espalhada a partir das existentes: 47 graus de passo dao a volta
+  // no circulo sem repetir vizinho por muitas categorias.
   const linhas = await db.query<{ id: string }>(
-    `INSERT INTO categories (name, kind) VALUES ($1, $2)
+    `INSERT INTO categories (name, kind, hue)
+     VALUES ($1, $2, ((SELECT count(*) FROM categories) * 47 + 10) % 360)
      ON CONFLICT (lower(name)) DO UPDATE SET name = categories.name
      RETURNING id`,
     [limpo, kind],
@@ -803,17 +809,23 @@ export async function acharOuCriarCentroDeCusto(
 export async function salvarCategoria(
   db: Db,
   id: string,
-  valores: { name?: string; kind?: TipoDeCategoria; position?: number },
+  valores: { name?: string; kind?: TipoDeCategoria; position?: number; hue?: number },
 ): Promise<void> {
   if (!UUID.test(id)) return;
+
+  const hue =
+    valores.hue !== undefined && Number.isFinite(valores.hue)
+      ? ((Math.trunc(valores.hue) % 360) + 360) % 360
+      : null;
 
   await db.query(
     `UPDATE categories
         SET name = COALESCE(NULLIF(trim($2), ''), name),
             kind = COALESCE($3, kind),
-            position = COALESCE($4, position)
+            position = COALESCE($4, position),
+            hue = COALESCE($5, hue)
       WHERE id = $1`,
-    [id, valores.name ?? "", valores.kind ?? null, valores.position ?? null],
+    [id, valores.name ?? "", valores.kind ?? null, valores.position ?? null, hue],
   );
 }
 
@@ -902,4 +914,63 @@ export async function vincularCentroDeCusto(
     fingerprint,
     centroId,
   ]);
+}
+
+/**
+ * Classificacao de UM lancamento.
+ *
+ * O rotulo do lancamento vence o da contraparte na leitura. E o que permite
+ * arrastar um Pix especifico para Viagem sem afirmar que toda transferencia
+ * para aquela pessoa e viagem — o caso que a classificacao so por contraparte
+ * nao cobria.
+ */
+export interface RotuloDeLancamento {
+  transactionId: string;
+  categoryId: string | null;
+  costCenterId: string | null;
+  note: string | null;
+}
+
+export async function listTransactionLabels(db: Db): Promise<RotuloDeLancamento[]> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT transaction_id, category_id, cost_center_id, note_enc FROM transaction_labels`,
+  );
+
+  return linhas.map((linha) => ({
+    transactionId: String(linha.transaction_id),
+    categoryId: linha.category_id ? String(linha.category_id) : null,
+    costCenterId: linha.cost_center_id ? String(linha.cost_center_id) : null,
+    note: decryptOptional(linha.note_enc as string | null),
+  }));
+}
+
+export async function setTransactionLabel(
+  db: Db,
+  transactionId: string,
+  valores: { categoryId?: string | null; costCenterId?: string | null; note?: string | null },
+): Promise<void> {
+  if (!transactionId) return;
+
+  const categoria = valores.categoryId && UUID.test(valores.categoryId) ? valores.categoryId : null;
+  const centro = valores.costCenterId && UUID.test(valores.costCenterId) ? valores.costCenterId : null;
+  const nota = valores.note?.trim() || null;
+
+  // Sem categoria, sem centro e sem comentario nao ha rotulo: a linha sai e o
+  // lancamento volta a herdar a classificacao da contraparte.
+  if (!categoria && !centro && !nota) {
+    await db.query(`DELETE FROM transaction_labels WHERE transaction_id = $1`, [transactionId]);
+    return;
+  }
+
+  await db.query(
+    `INSERT INTO transaction_labels
+       (transaction_id, category_id, cost_center_id, note_enc, updated_at)
+     VALUES ($1, $2, $3, $4, now())
+     ON CONFLICT (transaction_id) DO UPDATE
+       SET category_id = EXCLUDED.category_id,
+           cost_center_id = EXCLUDED.cost_center_id,
+           note_enc = EXCLUDED.note_enc,
+           updated_at = now()`,
+    [transactionId, categoria, centro, encryptOptional(nota)],
+  );
 }

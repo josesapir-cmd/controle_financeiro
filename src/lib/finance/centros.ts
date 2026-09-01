@@ -18,6 +18,8 @@ export interface Categoria {
   name: string;
   kind: "despesa" | "receita" | "movimentacao";
   position: number;
+  /** Matiz OKLCH da cor de sinalizacao. Nao entra em nenhuma conta. */
+  hue: number;
 }
 
 export interface CentroDeCusto {
