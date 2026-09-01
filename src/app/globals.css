@@ -1057,6 +1057,84 @@ input[type="checkbox"] {
   text-decoration: none;
 }
 
+/* --- Filtro de contas em linha ---
+   Sempre aberto, porque tambem e a legenda das cores da fita de pontos logo
+   abaixo. Legenda escondida atras de um clique nao e legenda. */
+.contas-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.conta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-sub);
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-soft);
+  border-radius: 999px;
+  box-shadow: var(--shadow-xs);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.conta-chip:hover {
+  color: var(--text-strong);
+  text-decoration: none;
+}
+
+/* A marca e o mesmo disco da fita: cheia quando a conta esta ligada, so contorno
+   quando esta de fora. O estado nao depende so da cor — o contorno do botao e o
+   peso do texto dizem a mesma coisa. */
+.conta-marca {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--conta-cor, var(--text-soft));
+  background: transparent;
+}
+
+/* Nenhuma marcada quer dizer TODAS: neste estado todas aparecem cheias, senao a
+   tela diria "nenhuma conta" enquanto mostra os lancamentos de todas. */
+.conta-chip.ativo,
+.conta-chip.neutro {
+  color: var(--text-strong);
+  border-color: color-mix(in oklab, var(--conta-cor, var(--primary)) 45%, var(--stroke-soft));
+  background: color-mix(in oklab, var(--conta-cor, var(--primary)) 7%, var(--bg-white));
+}
+
+.conta-chip.ativo .conta-marca,
+.conta-chip.neutro .conta-marca {
+  background: var(--conta-cor, var(--primary));
+}
+
+.conta-chip.limpar {
+  color: var(--text-sub);
+}
+
+/* Contador de pendencias na pastilha de filtro. */
+.preset-conta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--bg-white);
+  background: var(--primary);
+  border-radius: 999px;
+}
+
 /* ==========================================================================
    Linha do tempo do dia
    Trilho vertical com a hora a esquerda. A marca colorida distingue entrada de
@@ -1121,8 +1199,17 @@ input[type="checkbox"] {
   box-shadow: 0 0 0 3px var(--bg-white);
 }
 
-.timeline-marca.saida { background: var(--error); }
-.timeline-marca.entrada { background: var(--success); }
+/* Na lista a marca segue a mesma convencao da fita: cor da instituicao, disco
+   cheio para saida e anel vazado para entrada. O sinal continua legivel no
+   proprio valor, que tem cor e menos. */
+.timeline-marca.saida {
+  background: var(--conta-cor, var(--error));
+}
+
+.timeline-marca.entrada {
+  background: var(--bg-white);
+  border: 2px solid var(--conta-cor, var(--success));
+}
 
 .timeline-corpo {
   margin-left: 12px;
@@ -1213,11 +1300,20 @@ input[type="checkbox"] {
 .strip-marca {
   display: block;
   border-radius: 50%;
-  background: var(--primary);
+  /* Cor da instituicao, a mesma do botao do filtro acima. Sem conta conhecida,
+     cai no azul do tema. */
+  background: var(--conta-cor, var(--primary));
   /* Anel na cor da superficie separa pontos sobrepostos. */
   box-shadow: 0 0 0 2px var(--bg-white);
   cursor: default;
   transition: transform 120ms ease;
+}
+
+/* Entrada e anel vazado. A cor ja esta ocupada pela instituicao, entao o sinal
+   precisa de outra dimensao — forma. */
+.strip-marca.entrada {
+  background: var(--bg-white);
+  border: 2.5px solid var(--conta-cor, var(--primary));
 }
 
 .strip-marca:hover {
@@ -2975,9 +3071,11 @@ ul.cat-linhas {
    faziam: com eles so dava para andar um dia por vez, sem ver onde se estava
    na semana. */
 .spinner {
-  /* Reivindica a largura que sobra em .period-controls. Sem o flex-grow, o
-     container encolhe ate o conteudo e a fita — que e `flex:1` de nada — some. */
-  flex: 1 1 340px;
+  /* Linha inteira: a fita e o controle principal da tela e ganha a largura toda,
+     com o filtro de contas e o campo de data na linha de baixo. Dividindo a
+     barra com eles, cabiam cinco dias — menos contexto do que a fita existe
+     para dar. */
+  flex: 1 1 100%;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3166,4 +3264,40 @@ ul.cat-linhas {
   line-height: 1.5;
   color: var(--cat-fg);
   opacity: 0.85;
+}
+
+/* ==========================================================================
+   Celular — filtro de contas em linha
+   Fica no fim do arquivo de proposito: as regras de celular competem com as de
+   cima na mesma especificidade, e quem decide o empate e a ordem.
+   ========================================================================== */
+@media (max-width: 720px) {
+  .contas-linha {
+    width: 100%;
+    /* Rola na horizontal em vez de quebrar em varias linhas: a fita de datas ja
+       ocupa a altura que havia, e um filtro de quatro linhas empurraria a linha
+       do tempo para fora da tela. */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .contas-linha::-webkit-scrollbar {
+    display: none;
+  }
+
+  .conta-chip {
+    flex: 0 0 auto;
+  }
+
+  /* Alvo de toque: 32px de altura passa no dedo, mas o texto do banco pode ser
+     longo — cortar com reticencias mantem a fita legivel. */
+  .conta-nome {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }

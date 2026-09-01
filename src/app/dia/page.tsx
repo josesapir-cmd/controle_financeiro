@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guard";
 import { Nav } from "@/components/Nav";
-import { AccountFilter } from "@/components/AccountFilter";
 import { DayStrip } from "@/components/DayStrip";
+import { FiltroDeContas } from "@/components/FiltroDeContas";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
-import { isUserInitiatedExpense } from "@/lib/finance/automatic";
 import { translateCategory } from "@/lib/finance/categories";
+import { coresPorConta } from "@/lib/finance/cores-de-conta";
 import { maskDocument } from "@/lib/finance/counterparties";
 import { localDay, localTime } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
@@ -38,13 +38,15 @@ function periodoDoDia(hora: string): string {
 export default async function Dia({
   searchParams,
 }: {
-  searchParams: Promise<{ d?: string; f?: string; contas?: string | string[] }>;
+  searchParams: Promise<{ d?: string; nc?: string; contas?: string | string[] }>;
 }) {
   await requireSession();
 
   const params = await searchParams;
   const dia = params.d && DATA_ISO.test(params.d) ? params.d : localDay(new Date());
-  const verTudo = params.f === "tudo";
+  // Um filtro so: "so os nao classificados". O dia inteiro e o padrao — esconder
+  // lancamento por regra de negocio ja custou confianca aqui antes.
+  const soNaoClassificados = params.nc === "1";
   const accountIds = parseAccountIds(params.contas);
   const contasQuery = accountQuery(accountIds);
 
@@ -53,13 +55,22 @@ export default async function Dia({
     loadClassificacaoDoDia(dia, { accountIds }),
   ]);
 
-  // Por padrao a aba responde "o que eu fiz neste dia": so despesas iniciadas
-  // por voce, sem IOF, rendimento de saldo remunerado nem movimentacoes.
-  const lancamentos = verTudo
-    ? dados.transactions
-    : dados.transactions.filter(isUserInitiatedExpense);
+  // Nao classificado e o que o app nao sabe categorizar, nem por rotulo proprio
+  // nem herdado da contraparte. Entrada e movimentacao nao entram na conta: nao
+  // pedem categoria, entao nunca ficariam "pendentes".
+  const pendentes = new Set(
+    paraClassificar.lancamentos.filter((l) => !l.categoriaId).map((l) => l.id),
+  );
 
-  const escondidos = dados.transactions.length - lancamentos.length;
+  const lancamentos = soNaoClassificados
+    ? dados.transactions.filter((t) => pendentes.has(t.id))
+    : dados.transactions;
+
+  const paraOClassificador = soNaoClassificados
+    ? paraClassificar.lancamentos.filter((l) => pendentes.has(l.id))
+    : paraClassificar.lancamentos;
+
+  const cores = coresPorConta(dados.accountOptions);
 
   let blocoAtual = "";
 
@@ -74,42 +85,37 @@ export default async function Dia({
       <div className="period-controls">
         <SpinnerDeDatas
           dia={dia}
-          queryExtra={buildQuery(verTudo ? "f=tudo" : undefined, contasQuery)}
+          queryExtra={buildQuery(soNaoClassificados ? "nc=1" : undefined, contasQuery)}
         />
 
-        <AccountFilter
+        <FiltroDeContas
           options={dados.accountOptions}
           selected={accountIds}
           action="/dia"
-          hidden={{ d: dia, f: verTudo ? "tudo" : undefined }}
+          extra={{ d: dia, nc: soNaoClassificados ? "1" : undefined }}
         />
 
-        <form className="range-form" method="get">
-          <label>
-            Dia <input type="date" name="d" defaultValue={dia} />
-          </label>
-          <button type="submit">Ver</button>
-        </form>
+        <div className="filtros">
+          <Link
+            className={soNaoClassificados ? "preset ativo" : "preset"}
+            href={
+              soNaoClassificados
+                ? `/dia?${buildQuery(`d=${dia}`, contasQuery)}`
+                : `/dia?${buildQuery(`d=${dia}`, "nc=1", contasQuery)}`
+            }
+            aria-current={soNaoClassificados ? "true" : undefined}
+          >
+            So nao classificados
+            {pendentes.size > 0 ? <span className="preset-conta">{pendentes.size}</span> : null}
+          </Link>
+        </div>
       </div>
 
       <p className="period" style={{ display: "block", marginTop: 16 }}>
         {diaExtenso.format(new Date(`${dia}T12:00:00Z`))}
       </p>
 
-      <div className="filtros">
-        <Link
-          className={verTudo ? "preset" : "preset ativo"}
-          href={`/dia?${buildQuery(`d=${dia}`, contasQuery)}`}
-        >
-          Despesas que eu iniciei
-        </Link>
-        <Link
-          className={verTudo ? "preset ativo" : "preset"}
-          href={`/dia?${buildQuery(`d=${dia}`, "f=tudo", contasQuery)}`}
-        >
-          Todos os lancamentos
-        </Link>
-      </div>
+      <DayStrip transactions={lancamentos} cores={cores} nomes={dados.accountNames} />
 
       {dados.isMock ? (
         <p className="banner">
@@ -117,20 +123,20 @@ export default async function Dia({
         </p>
       ) : null}
 
-      {!verTudo && paraClassificar.categorias.length > 0 ? (
-        <section>
-          <h2>Classificar</h2>
-          <Classificador
-            lancamentos={paraClassificar.lancamentos}
-            categorias={paraClassificar.categorias}
-          />
-        </section>
-      ) : null}
-
       {dados.failures.length > 0 ? (
         <p className="banner">
           <strong>Dados incompletos.</strong> {dados.failures[0].message}
         </p>
+      ) : null}
+
+      {paraOClassificador.length > 0 && paraClassificar.categorias.length > 0 ? (
+        <section>
+          <h2>Classificar</h2>
+          <Classificador
+            lancamentos={paraOClassificador}
+            categorias={paraClassificar.categorias}
+          />
+        </section>
       ) : null}
 
       <div className="tiles">
@@ -153,22 +159,13 @@ export default async function Dia({
         </div>
       </div>
 
-      <DayStrip transactions={lancamentos} />
-
       <section>
-        {!verTudo && escondidos > 0 ? (
-          <p className="period" style={{ display: "block", marginBottom: 12 }}>
-            {escondidos} {escondidos === 1 ? "lancamento oculto" : "lancamentos ocultos"}: entradas,
-            IOF, rendimento de saldo remunerado e movimentacoes.
-          </p>
-        ) : null}
-
         {lancamentos.length === 0 ? (
           <div className="card">
             <p className="empty">
-              {dados.transactions.length === 0
-                ? "Nenhum lancamento neste dia. Use as setas acima para navegar."
-                : "Nenhuma despesa iniciada por voce neste dia. Veja todos os lancamentos acima."}
+              {soNaoClassificados
+                ? "Nada pendente de classificacao neste dia."
+                : "Nenhum lancamento neste dia. Use a fita de datas acima para navegar."}
             </p>
           </div>
         ) : (
@@ -189,7 +186,15 @@ export default async function Dia({
                     <time className="timeline-hora" dateTime={t.date}>
                       {hora}
                     </time>
-                    <span className={`timeline-marca ${saida ? "saida" : "entrada"}`} aria-hidden />
+                    <span
+                      className={`timeline-marca ${saida ? "saida" : "entrada"}`}
+                      style={
+                        cores[t.accountId]
+                          ? ({ "--conta-cor": cores[t.accountId] } as React.CSSProperties)
+                          : undefined
+                      }
+                      aria-hidden
+                    />
                     <div className="timeline-corpo">
                       <div className="timeline-linha">
                         <span className="description">{t.description}</span>

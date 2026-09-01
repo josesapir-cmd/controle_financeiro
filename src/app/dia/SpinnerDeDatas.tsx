@@ -38,7 +38,7 @@ export function SpinnerDeDatas({
   queryExtra,
 }: {
   dia: string;
-  /** `f=tudo`, contas — o que precisa sobreviver a troca de dia. */
+  /** `nc=1`, contas — o que precisa sobreviver a troca de dia. */
   queryExtra: string;
 }) {
   const router = useRouter();
@@ -48,8 +48,10 @@ export function SpinnerDeDatas({
   const [selecionado, setSelecionado] = useState(dia);
   useEffect(() => setSelecionado(dia), [dia]);
 
-  /** Deslocamento em pixels enquanto o dedo esta na tela. */
+  /** Deslocamento em pixels enquanto a fita esta sendo arrastada. */
   const [puxando, setPuxando] = useState<{ inicioX: number; dx: number } | null>(null);
+  /** Onde o ponteiro desceu, antes de sabermos se e clique ou arraste. */
+  const origem = useRef<number | null>(null);
   const andou = useRef(0);
 
   const hoje = localDay(new Date());
@@ -91,31 +93,44 @@ export function SpinnerDeDatas({
         ref={trilho}
         className={`spinner-trilho ${puxando ? "puxando" : ""}`}
         onPointerDown={(evento) => {
-          evento.currentTarget.setPointerCapture(evento.pointerId);
+          // A captura NAO acontece aqui. Com o ponteiro capturado, o `click`
+          // passa a ser entregue ao elemento que capturou — o trilho — e nunca
+          // chega ao botao do dia. Era por isso que clicar numa data nao fazia
+          // nada no navegador. So capturamos quando vira arraste de verdade.
+          origem.current = evento.clientX;
           andou.current = 0;
-          setPuxando({ inicioX: evento.clientX, dx: 0 });
         }}
         onPointerMove={(evento) => {
-          if (!puxando) return;
+          if (origem.current === null) return;
 
-          const bruto = evento.clientX - puxando.inicioX;
+          const bruto = evento.clientX - origem.current;
           andou.current = Math.max(andou.current, Math.abs(bruto));
+          if (!puxando && andou.current < LIMIAR) return;
+
+          if (!puxando) evento.currentTarget.setPointerCapture(evento.pointerId);
 
           // O arraste e preso ao intervalo disponivel: em hoje so da para puxar
           // para o passado, e nao passa de 20 dias atras.
           const minimo = (indice - (dias.length - 1 - FUTURO)) * LARGURA;
           const maximo = indice * LARGURA;
-          setPuxando({ ...puxando, dx: Math.min(Math.max(bruto, minimo), maximo) });
+          setPuxando({
+            inicioX: origem.current,
+            dx: Math.min(Math.max(bruto, minimo), maximo),
+          });
         }}
         onPointerUp={() => {
+          origem.current = null;
           if (!puxando) return;
 
           // Encaixa no dia mais proximo em vez de parar entre dois.
           const passos = Math.round(puxando.dx / LARGURA);
           setPuxando(null);
-          if (andou.current >= LIMIAR) irPara(dias[Math.max(0, indice - passos)] ?? selecionado);
+          irPara(dias[Math.max(0, indice - passos)] ?? selecionado);
         }}
-        onPointerCancel={() => setPuxando(null)}
+        onPointerCancel={() => {
+          origem.current = null;
+          setPuxando(null);
+        }}
       >
         <div className="spinner-fita" style={{ transform: `translateX(-${deslocamento}px)` }}>
           {dias.map((valor, i) => {

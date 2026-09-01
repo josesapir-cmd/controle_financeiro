@@ -11,32 +11,42 @@ const MENOR = 10;
 const MAIOR = 26;
 
 /**
- * Despesas do dia distribuidas ao longo de 24 horas, com a posicao proporcional
- * ao horario real — diferente da lista abaixo, que so preserva a ordem.
+ * Lancamentos do dia distribuidos ao longo de 24 horas, com a posicao
+ * proporcional ao horario real — diferente da lista abaixo, que so preserva a
+ * ordem.
  *
- * Serie unica: a cor nao codifica identidade aqui, a posicao e o tamanho e que
- * carregam a informacao. O tamanho usa raiz quadrada do valor porque o olho le
- * area, nao raio: escalar o raio direto exageraria as diferencas.
+ * A cor de cada ponto e a da instituicao, a mesma dos botoes do filtro logo
+ * acima: e identidade da conta, nao valor. O tamanho, esse sim, codifica o
+ * valor, por raiz quadrada — o olho le area, nao raio, e escalar o raio direto
+ * exageraria as diferencas.
  *
- * A lista logo abaixo e a visao acessivel destes mesmos dados — quem nao alcanca
- * o hover, ou nao distingue os tamanhos, le os valores la.
+ * Entrada e saida nao se separam por cor, que ja esta ocupada: saida e disco
+ * cheio, entrada e anel vazado. Quem nao distingue as duas formas le os valores
+ * na lista logo abaixo, que e a visao acessivel destes mesmos dados.
  */
-export function DayStrip({ transactions }: { transactions: Transaction[] }) {
-  const despesas = transactions.filter((t) => t.amount < 0);
+export function DayStrip({
+  transactions,
+  cores = {},
+  nomes = {},
+}: {
+  transactions: Transaction[];
+  /** Cor por id de conta. Sem entrada, o ponto usa a cor neutra do tema. */
+  cores?: Record<string, string>;
+  nomes?: Record<string, string>;
+}) {
+  if (transactions.length === 0) return null;
 
-  if (despesas.length === 0) return null;
+  const maior = Math.max(...transactions.map((t) => Math.abs(t.amount)));
 
-  const maior = Math.max(...despesas.map((t) => -t.amount));
-
-  // Rotulo direto apenas na maior despesa: serve de ancora de escala sem virar
-  // um numero em cima de cada ponto.
-  const idMaior = despesas.find((t) => -t.amount === maior)?.id;
+  // Rotulo direto apenas no maior lancamento: serve de ancora de escala sem
+  // virar um numero em cima de cada ponto.
+  const idMaior = transactions.find((t) => Math.abs(t.amount) === maior)?.id;
 
   return (
     <figure className="strip">
       <figcaption className="strip-titulo">
-        Despesas ao longo do dia · {despesas.length}{" "}
-        {despesas.length === 1 ? "lancamento" : "lancamentos"}
+        Ao longo do dia · {transactions.length}{" "}
+        {transactions.length === 1 ? "lancamento" : "lancamentos"}
       </figcaption>
 
       <div className="strip-plot">
@@ -51,19 +61,30 @@ export function DayStrip({ transactions }: { transactions: Transaction[] }) {
           />
         ))}
 
-        {despesas.map((t) => {
-          const valor = -t.amount;
+        {transactions.map((t) => {
+          const valor = Math.abs(t.amount);
+          const entrada = t.amount >= 0;
           const posicao = (minutesOfDay(t.date) / MINUTOS_NO_DIA) * 100;
           const tamanho = MENOR + (MAIOR - MENOR) * Math.sqrt(maior > 0 ? valor / maior : 0);
-          const rotulo = `${localTime(t.date)} · ${t.description} · ${formatBRL(t.amount)}${
-            t.category ? ` · ${translateCategory(t.category)}` : ""
-          }`;
+          const rotulo = [
+            localTime(t.date),
+            t.description,
+            formatBRL(t.amount),
+            nomes[t.accountId],
+            t.category ? translateCategory(t.category) : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
 
           return (
             <span key={t.id} className="strip-marca-envelope" style={{ left: `${posicao}%` }}>
               <span
-                className="strip-marca"
-                style={{ width: tamanho, height: tamanho }}
+                className={`strip-marca${entrada ? " entrada" : ""}`}
+                style={{
+                  width: tamanho,
+                  height: tamanho,
+                  ...(cores[t.accountId] ? { "--conta-cor": cores[t.accountId] } : {}),
+                } as React.CSSProperties}
                 title={rotulo}
                 role="img"
                 aria-label={rotulo}
