@@ -7,10 +7,11 @@ import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account
 import { isUserInitiatedExpense } from "@/lib/finance/automatic";
 import { translateCategory } from "@/lib/finance/categories";
 import { maskDocument } from "@/lib/finance/counterparties";
-import { localDay, localTime, shiftDay } from "@/lib/finance/dates";
+import { localDay, localTime } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
 import { loadClassificacaoDoDia, loadDay } from "@/lib/finance/service";
 import { Classificador } from "./Classificador";
+import { SpinnerDeDatas } from "./SpinnerDeDatas";
 
 export const dynamic = "force-dynamic";
 
@@ -71,17 +72,10 @@ export default async function Dia({
       <Nav atual="/dia" contasQuery={contasQuery} />
 
       <div className="period-controls">
-        <div className="presets">
-          <Link className="preset" href={`/dia?${buildQuery(`d=${shiftDay(dia, -1)}`, contasQuery)}`}>
-            ← Dia anterior
-          </Link>
-          <Link className="preset" href={`/dia?${buildQuery(`d=${localDay(new Date())}`, contasQuery)}`}>
-            Hoje
-          </Link>
-          <Link className="preset" href={`/dia?${buildQuery(`d=${shiftDay(dia, 1)}`, contasQuery)}`}>
-            Proximo dia →
-          </Link>
-        </div>
+        <SpinnerDeDatas
+          dia={dia}
+          queryExtra={buildQuery(verTudo ? "f=tudo" : undefined, contasQuery)}
+        />
 
         <AccountFilter
           options={dados.accountOptions}

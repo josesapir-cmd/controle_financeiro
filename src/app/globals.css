@@ -2842,3 +2842,165 @@ ul.cat-linhas {
     padding: 12px;
   }
 }
+
+/* --- Seletor de dia em fita ---
+   Mostra os vizinhos e deixa pular direto, o que os tres botoes de antes nao
+   faziam: com eles so dava para andar um dia por vez, sem ver onde se estava
+   na semana. */
+.spinner {
+  /* Reivindica a largura que sobra em .period-controls. Sem o flex-grow, o
+     container encolhe ate o conteudo e a fita — que e `flex:1` de nada — some. */
+  flex: 1 1 340px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.spinner-trilho {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 68px;
+  padding: 6px 0;
+  overflow: hidden;
+  background: var(--bg-weak);
+  border-radius: var(--radius-lg);
+}
+
+/* Mascaras nas bordas: a fita some no gradiente em vez de ser cortada em seco. */
+.spinner-trilho::before,
+.spinner-trilho::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 56px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.spinner-trilho::before {
+  left: 0;
+  background: linear-gradient(to right, var(--bg-weak), transparent);
+}
+
+.spinner-trilho::after {
+  right: 0;
+  background: linear-gradient(to left, var(--bg-weak), transparent);
+}
+
+.spinner-fita {
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  display: flex;
+  transition: transform 520ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.spinner-dia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex: none;
+  width: 70px;
+  height: 56px;
+  padding: 0;
+  color: var(--text-sub);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  box-shadow: none;
+  transition: opacity 220ms ease;
+}
+
+.spinner-dia:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.spinner-dia-atual {
+  color: var(--text-strong);
+  background: var(--bg-white);
+  border-color: var(--stroke-sub);
+  box-shadow: var(--shadow-md);
+}
+
+.spinner-dia-atual:hover:not(:disabled) {
+  background: var(--bg-white);
+}
+
+/* Dia que ainda nao aconteceu: alcancavel, mas sem promessa de conteudo. */
+.spinner-dia-futuro {
+  color: var(--text-disabled);
+}
+
+.spinner-data {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.spinner-dia-atual .spinner-data {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.spinner-semana {
+  font-size: 10.5px;
+  color: var(--text-soft);
+}
+
+.spinner-seta {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-sub);
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-soft);
+  border-radius: 50%;
+  box-shadow: var(--shadow-xs);
+}
+
+.spinner-seta:hover:not(:disabled) {
+  color: var(--text-strong);
+  background: var(--bg-weak);
+}
+
+.spinner-hoje {
+  flex: none;
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+  color: var(--text-sub);
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-soft);
+  border-radius: 999px;
+  box-shadow: var(--shadow-xs);
+}
+
+.spinner-hoje:hover:not(:disabled) {
+  color: var(--text-strong);
+  background: var(--bg-weak);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner-fita {
+    transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .spinner {
+    width: 100%;
+  }
+
+  /* O botao Hoje sai da linha: com ele, sobrava largura demais pouca para a
+     fita mostrar vizinhos. As setas continuam dando o passo de um dia. */
+  .spinner-hoje {
+    display: none;
+  }
+}

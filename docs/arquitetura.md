@@ -280,6 +280,13 @@ numero nenhum — a pior falha possivel numa tela de classificacao.
 Subcategoria nova digitada no editor vira centro de custo na hora. Exigir uma
 visita a outra tela para criar "Bariloche 2026" mataria o fluxo.
 
+**O seletor de dia virou fita.** Os tres botoes de antes so andavam um dia por
+vez e nao diziam onde se estava na semana. A fita mostra os vizinhos e deixa
+pular direto. Ela desliza no clique, antes de a navegacao terminar: esperando a
+resposta do servidor o que se veria seria um salto, nao um deslize — por isso o
+indice visual e estado local, e o dia do servidor volta a mandar quando a
+navegacao acaba.
+
 ### 9. O mapa do gasto e por que ele nao e colorido por categoria
 
 A aba de categorias abre com um treemap: area proporcional ao gasto, categorias
