@@ -7,6 +7,7 @@ import {
   listCategorias,
   listCentrosDeCusto,
   listCounterpartyLinks,
+  listTransactionLabels,
   listLabels,
   listTransactions,
   listarImportacoes,
@@ -35,7 +36,9 @@ import {
   type CounterpartyRegistry,
   type CounterpartyTotal,
 } from "./counterparties";
-import { currentMonthRange, currentYearRange, localDay } from "./dates";
+import { isUserInitiatedExpense } from "./automatic";
+import { normalizeName } from "./counterparties";
+import { currentMonthRange, currentYearRange, localDay, localTime } from "./dates";
 import { netWorth, normalizeAmount, sumBy } from "./money";
 import {
   totalExpenses,
@@ -667,6 +670,13 @@ export async function loadCentrosDeCusto(
       listCentrosDeCusto(conexao),
     ]);
 
+  const rotulos = Object.fromEntries(
+    (await listTransactionLabels(conexao)).map((r) => [
+      r.transactionId,
+      { categoryId: r.categoryId, costCenterId: r.costCenterId },
+    ]),
+  );
+
   const conciliado = conciliar(transacoes, decisoes);
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
   const relevantes = conciliado.transacoes.filter(
@@ -684,6 +694,7 @@ export async function loadCentrosDeCusto(
         }),
         cadastro,
       ),
+      rotulos,
     );
 
   const { categorias: totais, semCategoria } = noRecorte(period.from, period.to);
@@ -711,4 +722,173 @@ export async function loadTaxonomiaDeCentros() {
     listCentrosDeCusto(conexao),
   ]);
   return { categorias, centros };
+}
+
+export interface CategoriaParaClassificar {
+  id: string;
+  name: string;
+  hue: number;
+  /** Total ja classificado nesta categoria no dia e no mes. */
+  noDia: number;
+  noMes: number;
+  lancamentosNoDia: number;
+  centros: { id: string; name: string }[];
+}
+
+export interface LancamentoParaClassificar {
+  id: string;
+  hora: string;
+  descricao: string;
+  valor: number;
+  conta: string;
+  contraparte: string | null;
+  contraparteKey: string | null;
+  /** Quantos lancamentos a mesma contraparte tem no periodo carregado. */
+  frequencia: number;
+  /** Classificacao atual: do proprio lancamento, ou herdada da contraparte. */
+  categoriaId: string | null;
+  centroId: string | null;
+  comentario: string | null;
+  /** true quando veio da contraparte, nao de uma decisao sobre este lancamento. */
+  herdada: boolean;
+}
+
+export interface ClassificacaoDoDia {
+  dia: string;
+  lancamentos: LancamentoParaClassificar[];
+  categorias: CategoriaParaClassificar[];
+}
+
+/**
+ * Dados da tela de classificar arrastando.
+ *
+ * Traz o dia inteiro e o mes corrente: os blocos mostram o que ja caiu neles no
+ * dia e no mes, entao arrastar um cartao move um numero visivel na mesma tela —
+ * sem isso a acao nao teria retorno.
+ */
+export async function loadClassificacaoDoDia(
+  dia: string,
+  options: { accountIds?: string[] } = {},
+): Promise<ClassificacaoDoDia> {
+  const accountIds = options.accountIds ?? [];
+  const mes = { from: `${dia.slice(0, 7)}-01`, to: dia };
+  const janela = { from: mes.from < dia ? mes.from : dia, to: dia };
+
+  if (useMock()) return { dia, lancamentos: [], categorias: [] };
+
+  const conexao = db();
+  const [{ contas, transacoes, registry, decisoes }, categorias, centros, rotulos] =
+    await Promise.all([
+      carregar(janela, accountIds),
+      listCategorias(conexao),
+      listCentrosDeCusto(conexao),
+      listTransactionLabels(conexao),
+    ]);
+
+  const conciliado = conciliar(transacoes, decisoes);
+  const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
+  const porId = new Map(rotulos.map((r) => [r.transactionId, r]));
+
+  const nomeDaConta: Record<string, string> = {};
+  for (const conta of contas) nomeDaConta[conta.id] = conta.marketingName || conta.name;
+
+  const centroPorId = new Map(centros.map((c) => [c.id, c]));
+  const categoriaPorRotulo = new Map(
+    categorias.map((c) => [normalizeName(c.name), c.id] as const),
+  );
+  const centroPorRotulo = new Map(
+    centros.map((c) => [`${c.categoryId}|${normalizeName(c.name)}`, c.id] as const),
+  );
+
+  const frequencia = new Map<string, number>();
+  for (const t of conciliado.transacoes) {
+    const chave = t.counterparty?.key;
+    if (chave) frequencia.set(chave, (frequencia.get(chave) ?? 0) + 1);
+  }
+
+  // Saidas do dia iniciadas pelo usuario: e o que se classifica. Entrada,
+  // movimentacao e lancamento automatico do banco nao pedem categoria.
+  const doDia = conciliado.transacoes
+    .filter((t) => localDay(t.date) === dia && isUserInitiatedExpense(t))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const resolver = (t: Transaction) => {
+    const proprio = porId.get(t.id);
+    if (proprio && (proprio.categoryId || proprio.costCenterId)) {
+      const centro = proprio.costCenterId ? centroPorId.get(proprio.costCenterId) : undefined;
+      return {
+        categoriaId: centro?.categoryId ?? proprio.categoryId,
+        centroId: proprio.costCenterId,
+        comentario: proprio.note,
+        herdada: false,
+      };
+    }
+
+    const cadastroDaParte = t.counterparty?.key ? cadastro[t.counterparty.key] : undefined;
+    if (!cadastroDaParte?.category) {
+      return {
+        categoriaId: null,
+        centroId: null,
+        comentario: proprio?.note ?? null,
+        herdada: false,
+      };
+    }
+
+    const categoriaId = categoriaPorRotulo.get(normalizeName(cadastroDaParte.category)) ?? null;
+    const centroId = cadastroDaParte.subcategory && categoriaId
+      ? centroPorRotulo.get(`${categoriaId}|${normalizeName(cadastroDaParte.subcategory)}`) ?? null
+      : null;
+
+    return { categoriaId, centroId, comentario: proprio?.note ?? null, herdada: true };
+  };
+
+  const lancamentos: LancamentoParaClassificar[] = doDia.map((t) => ({
+    id: t.id,
+    hora: localTime(t.date),
+    descricao: t.description || "Lancamento",
+    valor: t.amount,
+    conta: nomeDaConta[t.accountId] ?? "",
+    contraparte: t.counterparty?.name ?? null,
+    contraparteKey: t.counterparty?.key ?? null,
+    frequencia: t.counterparty?.key ? (frequencia.get(t.counterparty.key) ?? 1) : 1,
+    ...resolver(t),
+  }));
+
+  // Totais dos blocos: o que ja esta classificado naquela categoria, no dia e
+  // no mes. Usa a mesma resolucao dos cartoes, entao os numeros batem com o que
+  // a tela mostra.
+  const totais = new Map<string, { dia: number; mes: number; contagem: number }>();
+  for (const t of conciliado.transacoes) {
+    if (!isUserInitiatedExpense(t)) continue;
+
+    const { categoriaId } = resolver(t);
+    if (!categoriaId) continue;
+
+    const atual = totais.get(categoriaId) ?? { dia: 0, mes: 0, contagem: 0 };
+    const valor = -t.amount;
+    atual.mes += valor;
+    if (localDay(t.date) === dia) {
+      atual.dia += valor;
+      atual.contagem += 1;
+    }
+    totais.set(categoriaId, atual);
+  }
+
+  return {
+    dia,
+    lancamentos,
+    categorias: categorias
+      .filter((c) => c.kind === "despesa")
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        hue: c.hue,
+        noDia: totais.get(c.id)?.dia ?? 0,
+        noMes: totais.get(c.id)?.mes ?? 0,
+        lancamentosNoDia: totais.get(c.id)?.contagem ?? 0,
+        centros: centros
+          .filter((centro) => centro.categoryId === c.id)
+          .map((centro) => ({ id: centro.id, name: centro.name })),
+      })),
+  };
 }

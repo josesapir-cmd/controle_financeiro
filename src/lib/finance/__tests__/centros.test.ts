@@ -177,3 +177,74 @@ describe("totalPorTipo", () => {
     expect(totalPorTipo(categorias, "receita").received).toBe(9000);
   });
 });
+
+describe("rotulo do lancamento vence o da contraparte", () => {
+  const AMAZON = contraparte({
+    key: "amazon",
+    category: "Familia",
+    subcategory: "Pai",
+    sent: 300,
+    count: 3,
+    transactions: [
+      { id: "t1", date: "2026-05-01T12:00:00Z", description: "a", amount: -100 },
+      { id: "t2", date: "2026-05-02T12:00:00Z", description: "b", amount: -100 },
+      { id: "t3", date: "2026-05-03T12:00:00Z", description: "c", amount: -100 },
+    ],
+  });
+
+  const CENTROS = [
+    centro("pai", "cat-familia", "Pai"),
+    centro("bariloche", "cat-viagem", "Bariloche"),
+  ];
+
+  it("move so o lancamento rotulado, deixando os outros na contraparte", () => {
+    const { categorias } = cruzarCentrosDeCusto([FAMILIA, VIAGEM], CENTROS, [AMAZON], {
+      t2: { categoryId: null, costCenterId: "bariloche" },
+    });
+
+    const familia = categorias.find((c) => c.id === "cat-familia")!;
+    const viagem = categorias.find((c) => c.id === "cat-viagem")!;
+
+    expect(familia.sent).toBe(200);
+    expect(viagem.sent).toBe(100);
+    expect(viagem.centros.find((c) => c.id === "bariloche")?.sent).toBe(100);
+  });
+
+  it("nao conta duas vezes: a soma continua sendo o total da contraparte", () => {
+    const { categorias, semCategoria } = cruzarCentrosDeCusto([FAMILIA, VIAGEM], CENTROS, [AMAZON], {
+      t1: { categoryId: null, costCenterId: "bariloche" },
+    });
+
+    const total = categorias.reduce((s, c) => s + c.sent, 0) + semCategoria.sent;
+    expect(total).toBe(300);
+  });
+
+  it("rotulo so com categoria cai em 'sem centro' dela", () => {
+    const { categorias } = cruzarCentrosDeCusto([FAMILIA, VIAGEM], CENTROS, [AMAZON], {
+      t2: { categoryId: "cat-viagem", costCenterId: null },
+    });
+
+    const viagem = categorias.find((c) => c.id === "cat-viagem")!;
+    expect(viagem.semCentro.sent).toBe(100);
+  });
+
+  it("contraparte com todos os lancamentos rotulados nao deixa resto", () => {
+    const { categorias, semCategoria } = cruzarCentrosDeCusto([FAMILIA, VIAGEM], CENTROS, [AMAZON], {
+      t1: { categoryId: null, costCenterId: "bariloche" },
+      t2: { categoryId: null, costCenterId: "bariloche" },
+      t3: { categoryId: null, costCenterId: "bariloche" },
+    });
+
+    expect(categorias.find((c) => c.id === "cat-familia")!.sent).toBe(0);
+    expect(categorias.find((c) => c.id === "cat-viagem")!.sent).toBe(300);
+    expect(semCategoria.sent).toBe(0);
+  });
+
+  it("rotulo apontando para centro inexistente cai em 'sem categoria'", () => {
+    const { semCategoria } = cruzarCentrosDeCusto([FAMILIA, VIAGEM], CENTROS, [AMAZON], {
+      t2: { categoryId: null, costCenterId: "apagado" },
+    });
+
+    expect(semCategoria.sent).toBe(100);
+  });
+});

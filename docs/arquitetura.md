@@ -255,7 +255,32 @@ Decisoes que valem registro:
 - O backfill da migracao transforma o que ja estava classificado em taxonomia,
   entao nada do que foi classificado a mao se perde.
 
-### 8. O mapa do gasto e por que ele nao e colorido por categoria
+### 8. Classificar arrastando, e o rotulo por lancamento
+
+A tela do dia ganhou blocos de categoria a direita: arrasta-se o cartao do
+lancamento para o bloco e ele muda de cor no lugar. **O cartao nao migra para
+dentro do bloco** — a lista do dia continua sendo a lista do dia; se os cartoes
+sumissem ao serem classificados, o dia se desmontaria enquanto se olha para ele.
+
+**Arrastar e uma das formas, nao a unica.** Cada cartao tem um seletor de
+categoria que faz exatamente a mesma coisa, porque arraste nao funciona no
+celular nem no teclado, e a funcionalidade nao pode depender disso.
+
+**O rotulo do lancamento vence o da contraparte.** Ate aqui a classificacao
+vivia so na contraparte, o que basta para a padaria e nao basta para uma pessoa:
+um Pix para a mesma pessoa pode ser Familia num mes e Viagem no outro. Arrastar
+UM lancamento vale para aquele lancamento; marcar "aplicar a todos" e que grava
+no cadastro da contraparte.
+
+Isso obrigou a agregacao a mudar: `cruzarCentrosDeCusto` recebe os rotulos por
+lancamento, tira esses lancamentos do total da contraparte e os soma na
+categoria propria. Sem isso, classificar moveria a cor do cartao e nao moveria
+numero nenhum — a pior falha possivel numa tela de classificacao.
+
+Subcategoria nova digitada no editor vira centro de custo na hora. Exigir uma
+visita a outra tela para criar "Bariloche 2026" mataria o fluxo.
+
+### 9. O mapa do gasto e por que ele nao e colorido por categoria
 
 A aba de categorias abre com um treemap: area proporcional ao gasto, categorias
 subdivididas nos seus centros de custo.
@@ -290,7 +315,7 @@ Outras decisoes:
 - A tabela detalhada abaixo do mapa e a visao acessivel: todo valor esta la, com
   precisao, para quem nao le area.
 
-### 9. Sistema visual
+### 10. Sistema visual
 
 A referencia e a pagina de transacoes do template financeiro do AlignUI, conferida
 contra o HTML dela. Tudo vive em `globals.css`, em tokens — nao ha CSS por

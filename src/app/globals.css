@@ -2447,3 +2447,398 @@ ul.cat-linhas {
     order: 3;
   }
 }
+
+/* --- Classificar arrastando ---
+   Lista a esquerda, blocos de categoria a direita e grudados: o alvo precisa
+   continuar visivel enquanto se rola a lista, senao o arraste nao alcanca. */
+.classificador {
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  gap: 28px;
+  align-items: start;
+  margin-top: 4px;
+}
+
+.classificador-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lanc {
+  padding: 14px 16px;
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+}
+
+.lanc-pendente {
+  cursor: grab;
+}
+
+.lanc-pendente:active {
+  cursor: grabbing;
+}
+
+/* Classificado: fundo na cor da categoria e uma faixa na borda esquerda. O
+   cartao muda de cor no lugar, sem sair da lista — o dia continua inteiro. */
+.lanc-classificado {
+  background: var(--cat-tint);
+  border-color: var(--cat-border);
+  border-left: 3px solid var(--cat-base);
+}
+
+.lanc-topo {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.lanc-hora {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+}
+
+.lanc-desc {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lanc-valor {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--error-dark);
+  white-space: nowrap;
+}
+
+.lanc-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.lanc-rodape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.lanc-etiqueta {
+  height: auto;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--cat-fg);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--cat-border);
+  border-radius: 999px;
+  box-shadow: none;
+}
+
+.lanc-etiqueta:hover:not(:disabled) {
+  background: #ffffff;
+}
+
+.lanc-dica {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--warning-dark);
+  background: var(--warning-light);
+  border-radius: 999px;
+}
+
+.lanc-escolha {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lanc-escolha select {
+  height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+  box-shadow: none;
+}
+
+/* --- Editor dentro do cartao --- */
+.lanc-editor {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cat-border);
+}
+
+.editor-titulo {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.editor-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* O radio fica invisivel mas presente: o rotulo inteiro e o alvo, e o foco do
+   teclado continua funcionando. */
+.chip {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--cat-fg);
+  background: var(--cat-tint);
+  border: 1px solid var(--cat-border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.chip-ativo {
+  color: #ffffff;
+  background: var(--cat-base);
+  border-color: transparent;
+}
+
+.chip input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.chip:focus-within {
+  outline: 2px solid var(--cat-strong);
+  outline-offset: 2px;
+}
+
+.editor-nova {
+  width: 100%;
+  height: 32px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.lanc-editor textarea {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+  color: var(--text-strong);
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+}
+
+.editor-aplicar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-sub);
+  cursor: pointer;
+}
+
+.editor-acoes {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.editor-acoes button {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.editor-tirar {
+  grid-column: 1 / -1;
+}
+
+.editor-link {
+  height: auto;
+  padding: 0;
+  font-size: 11px;
+  color: var(--text-soft);
+  background: none;
+  border: none;
+  box-shadow: none;
+  text-decoration: underline;
+}
+
+.editor-link:hover:not(:disabled) {
+  color: var(--error-dark);
+  background: none;
+}
+
+/* --- Blocos de categoria (alvos do arraste) --- */
+.blocos {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bloco {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 104px;
+  padding: 14px 16px;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  color: #ffffff;
+  background: var(--cat-base);
+  border: 1px solid transparent;
+  box-shadow: 0 8px 18px -10px var(--cat-base);
+  transition: transform 160ms ease, outline-color 160ms ease;
+  outline: 0 solid transparent;
+  outline-offset: 2px;
+}
+
+/* Vazio: contorno tracejado, como uma caixa esperando. */
+.bloco-vazio {
+  color: var(--cat-fg);
+  background: var(--cat-tint);
+  border: 1px dashed var(--cat-border);
+  box-shadow: none;
+}
+
+.bloco-sobre {
+  outline: 3px solid var(--cat-strong);
+  transform: scale(1.015);
+}
+
+.bloco-bolha {
+  position: absolute;
+  right: -26px;
+  bottom: -34px;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  pointer-events: none;
+}
+
+.bloco-vazio .bloco-bolha {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.bloco-topo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bloco-nome {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bloco-badge {
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Fora do fluxo: entrar e sair nao pode mudar a altura do bloco. */
+.bloco-solte {
+  position: absolute;
+  left: 16px;
+  bottom: 32px;
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.bloco-rodape {
+  position: relative;
+  margin-top: auto;
+  font-size: 11.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.bloco-vazio .bloco-rodape {
+  color: var(--cat-fg);
+}
+
+/* Pulo ao receber um cartao: confirma que chegou onde devia. */
+.bloco-pulou .rabisco {
+  animation: sk-pop 560ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@keyframes sk-pop {
+  40% {
+    transform: scale(1.35) rotate(-10deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bloco,
+  .bloco-pulou .rabisco {
+    transition: none;
+    animation: none;
+  }
+}
+
+@media (max-width: 1000px) {
+  /* Blocos acima da lista, em grade: com menos largura, a coluna grudada
+     espremeria as duas. */
+  .classificador {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .blocos {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    order: -1;
+  }
+
+  .lanc-editor {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .blocos {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .bloco {
+    height: 92px;
+    padding: 12px;
+  }
+}

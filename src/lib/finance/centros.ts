@@ -66,6 +66,17 @@ function vazio() {
   return { sent: 0, received: 0, count: 0, counterparties: 0 };
 }
 
+/**
+ * Classificacao de um lancamento individual, que vence a da contraparte.
+ *
+ * Existe porque contraparte nao basta para pessoa: um Pix para a mesma pessoa
+ * pode ser Familia num mes e Viagem no outro.
+ */
+export interface RotuloDeLancamento {
+  categoryId: string | null;
+  costCenterId: string | null;
+}
+
 export interface Resultado {
   categorias: CategoriaTotal[];
   /** Contrapartes ainda sem categoria: o que falta classificar. */
@@ -84,6 +95,8 @@ export function cruzarCentrosDeCusto(
   categorias: Categoria[],
   centros: CentroDeCusto[],
   contrapartes: CounterpartyTotal[],
+  /** Lancamentos com classificacao propria, por id. */
+  rotulos: Record<string, RotuloDeLancamento> = {},
 ): Resultado {
   const porCategoria = new Map<string, CategoriaTotal>();
   const porNomeDeCategoria = new Map<string, CategoriaTotal>();
@@ -100,8 +113,10 @@ export function cruzarCentrosDeCusto(
   }
 
   // Indice de centros por (categoria, nome), que e como a contraparte os
-  // referencia hoje — pelo texto que o usuario digitou.
+  // referencia hoje — pelo texto que o usuario digitou. E tambem por id, que e
+  // como o rotulo de lancamento aponta.
   const porNomeDeCentro = new Map<string, CentroTotal>();
+  const porIdDeCentro = new Map<string, CentroTotal>();
   for (const centro of centros) {
     const categoria = porCategoria.get(centro.categoryId);
     if (!categoria) continue;
@@ -109,26 +124,70 @@ export function cruzarCentrosDeCusto(
     const total: CentroTotal = { ...centro, ...vazio() };
     categoria.centros.push(total);
     porNomeDeCentro.set(`${centro.categoryId}|${chave(centro.name)}`, total);
+    porIdDeCentro.set(centro.id, total);
   }
 
   const semCategoria = vazio();
+  const temRotulos = Object.keys(rotulos).length > 0;
+
+  function somar(
+    alvo: { sent: number; received: number; count: number },
+    valor: number,
+    lancamentos: number,
+  ) {
+    if (valor < 0) alvo.sent += -valor;
+    else alvo.received += valor;
+    alvo.count += lancamentos;
+  }
 
   for (const c of contrapartes) {
     // Transferencia entre contas proprias nao e gasto de ninguem.
     if (c.self) continue;
 
+    // Lancamentos com classificacao propria saem da contraparte e vao para a
+    // categoria deles. O resto continua herdando o rotulo da contraparte.
+    const proprios = temRotulos ? c.transactions.filter((t) => rotulos[t.id]) : [];
+
+    for (const lancamento of proprios) {
+      const rotulo = rotulos[lancamento.id];
+      const centro = rotulo.costCenterId ? porIdDeCentro.get(rotulo.costCenterId) : undefined;
+      const categoria = centro
+        ? porCategoria.get(centro.categoryId)
+        : rotulo.categoryId
+          ? porCategoria.get(rotulo.categoryId)
+          : undefined;
+
+      if (!categoria) {
+        somar(semCategoria, lancamento.amount, 1);
+        continue;
+      }
+
+      somar(categoria, lancamento.amount, 1);
+      somar(centro ?? categoria.semCentro, lancamento.amount, 1);
+    }
+
+    if (proprios.length === c.transactions.length && c.transactions.length > 0) continue;
+
+    // O que sobra da contraparte depois de tirar os lancamentos proprios.
+    const restante = { sent: c.sent, received: c.received, count: c.count };
+    for (const lancamento of proprios) {
+      if (lancamento.amount < 0) restante.sent -= -lancamento.amount;
+      else restante.received -= lancamento.amount;
+      restante.count -= 1;
+    }
+
     const categoria = c.category ? porNomeDeCategoria.get(chave(c.category)) : undefined;
     if (!categoria) {
-      semCategoria.sent += c.sent;
-      semCategoria.received += c.received;
-      semCategoria.count += c.count;
+      semCategoria.sent += restante.sent;
+      semCategoria.received += restante.received;
+      semCategoria.count += restante.count;
       semCategoria.counterparties += 1;
       continue;
     }
 
-    categoria.sent += c.sent;
-    categoria.received += c.received;
-    categoria.count += c.count;
+    categoria.sent += restante.sent;
+    categoria.received += restante.received;
+    categoria.count += restante.count;
     categoria.counterparties += 1;
 
     const centro = c.subcategory
@@ -136,9 +195,9 @@ export function cruzarCentrosDeCusto(
       : undefined;
 
     const alvo = centro ?? categoria.semCentro;
-    alvo.sent += c.sent;
-    alvo.received += c.received;
-    alvo.count += c.count;
+    alvo.sent += restante.sent;
+    alvo.received += restante.received;
+    alvo.count += restante.count;
     alvo.counterparties += 1;
   }
 

@@ -9,7 +9,8 @@ import { translateCategory } from "@/lib/finance/categories";
 import { maskDocument } from "@/lib/finance/counterparties";
 import { localDay, localTime, shiftDay } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
-import { loadDay } from "@/lib/finance/service";
+import { loadClassificacaoDoDia, loadDay } from "@/lib/finance/service";
+import { Classificador } from "./Classificador";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,10 @@ export default async function Dia({
   const accountIds = parseAccountIds(params.contas);
   const contasQuery = accountQuery(accountIds);
 
-  const dados = await loadDay(dia, { accountIds });
+  const [dados, paraClassificar] = await Promise.all([
+    loadDay(dia, { accountIds }),
+    loadClassificacaoDoDia(dia, { accountIds }),
+  ]);
 
   // Por padrao a aba responde "o que eu fiz neste dia": so despesas iniciadas
   // por voce, sem IOF, rendimento de saldo remunerado nem movimentacoes.
@@ -117,6 +121,16 @@ export default async function Dia({
         <p className="banner">
           <strong>Dados ficticios.</strong> <code>PLUGGY_MOCK</code> esta ativo.
         </p>
+      ) : null}
+
+      {!verTudo && paraClassificar.categorias.length > 0 ? (
+        <section>
+          <h2>Classificar</h2>
+          <Classificador
+            lancamentos={paraClassificar.lancamentos}
+            categorias={paraClassificar.categorias}
+          />
+        </section>
       ) : null}
 
       {dados.failures.length > 0 ? (
