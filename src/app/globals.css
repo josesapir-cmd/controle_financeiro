@@ -2304,6 +2304,12 @@ ul.centros {
 .rabisco-saude { animation: sk-beat 4.2s ease-in-out infinite 0.6s; }
 .rabisco-familia { animation: sk-wiggle 4.8s ease-in-out infinite 0.2s; }
 .rabisco-compras { animation: sk-swing 5.2s ease-in-out infinite 0.4s; }
+.rabisco-alimentacao { animation: sk-wiggle 5s ease-in-out infinite 0.5s; }
+/* O carro anda, nao balanca. */
+.rabisco-carro { animation: sk-roll 5.4s ease-in-out infinite 0.2s; }
+.rabisco-livro { animation: sk-tilt 5.8s ease-in-out infinite 0.7s; }
+/* A taca brinda: inclina e volta. */
+.rabisco-taca { animation: sk-brinde 4.8s ease-in-out infinite 0.4s; }
 .rabisco-etiqueta { animation: sk-tilt 5.6s ease-in-out infinite 0.5s; }
 
 @keyframes sk-bob { 50% { transform: translateY(-2.5px); } }
@@ -2312,6 +2318,8 @@ ul.centros {
 @keyframes sk-beat { 40% { transform: scale(1.08); } 60% { transform: scale(0.98); } }
 @keyframes sk-wiggle { 30% { transform: rotate(4deg); } 70% { transform: rotate(-4deg); } }
 @keyframes sk-swing { 50% { transform: rotate(5deg) translateY(-1.5px); } }
+@keyframes sk-roll { 50% { transform: translateX(2.5px); } }
+@keyframes sk-brinde { 40% { transform: rotate(-9deg); } 65% { transform: rotate(2deg); } }
 
 /* Quem pediu menos movimento nao recebe movimento nenhum. */
 @media (prefers-reduced-motion: reduce) {

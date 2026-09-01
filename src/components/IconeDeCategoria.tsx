@@ -7,9 +7,10 @@ import { normalizeName } from "@/lib/finance/counterparties";
  * irregulares — desenhadas a mao, nao geometricas. Sao placeholder de estilo:
  * o handoff diz que nao sao arte final.
  *
- * So seis categorias tem desenho proprio. As outras dez usam a etiqueta
- * generica, que e honesto: inventar dez rabiscos ruins seria pior do que
- * repetir um neutro ate haver arte de verdade.
+ * Cada categoria com desenho proprio tem um objeto reconhecivel — casa,
+ * garfo e faca, carro, livro, taca. Quem nao tem cai na etiqueta generica, que
+ * e honesto: inventar um rabisco ruim e pior do que repetir um neutro ate haver
+ * arte de verdade.
  */
 
 const RABISCO: Record<string, string[]> = {
@@ -38,6 +39,36 @@ const RABISCO: Record<string, string[]> = {
     "M21.4 12.4c1.6 0 2.8-1.3 2.8-2.9s-1.2-2.8-2.8-2.8",
     "M20.6 18.2c4-.4 6.6 2.4 6.4 6.9-1.6.2-3.2.3-4.8.3",
   ],
+  alimentacao: [
+    // Garfo a esquerda, faca a direita. Os dentes sao tres tracos curtos
+    // saindo da mesma boca, e nao um pente: em 26px de dock, dente separado
+    // vira ruido.
+    "M8.2 6.2c-.2 2.6-.3 5.2-.2 7.8.2 1.4 1.4 2.2 3.4 2.2s3.2-.8 3.4-2.2c.1-2.6 0-5.2-.2-7.8",
+    "M10.3 6.3c-.1 2.2-.1 4.4 0 6.5",
+    "M12.6 6.3c.1 2.2.1 4.4 0 6.5",
+    "M11.4 16.2c-.1 3.5-.2 7-.1 10.5",
+    "M23.4 6c1 3.3 1.2 6.7.5 10.1-1 .6-2 .6-3 0-.1-3.5.7-6.9 2.5-10.1",
+    "M21.9 16.6c0 3.4 0 6.7.1 10.1",
+  ],
+  carro: [
+    "M4.8 21.2c-.3-2.1 0-4.1.9-6 1.2-.3 2.5-.5 3.8-.6 1.5-2 3.4-3.2 5.8-3.6 2.5-.4 5 0 7.3 1.1 1.1.8 2.1 1.7 2.9 2.7 1.2.1 2.3.3 3.4.6.8 1.9 1.1 3.9.8 6",
+    "M5.1 21.4c7.3.4 14.5.4 21.8 0",
+    "M10.5 14.6c1.3-1.7 3-2.7 5.2-3 2.2-.3 4.3.2 6.3 1.4.9.5 1.6 1.1 2.2 1.8-4.5.3-9 .2-13.7-.2",
+    "M10.6 19.2c1.5 0 2.7 1.2 2.7 2.7s-1.2 2.6-2.7 2.6-2.6-1.2-2.6-2.7 1.2-2.6 2.6-2.6",
+    "M21.4 19.2c1.5 0 2.7 1.2 2.7 2.7s-1.2 2.6-2.7 2.6-2.6-1.2-2.6-2.7 1.2-2.6 2.6-2.6",
+  ],
+  livro: [
+    "M16 10.4c0 5 0 10 .1 15",
+    "M15.9 10.5c-2.6-1.5-5.4-2.2-8.4-2.1-.4 4.9-.4 9.8 0 14.7 3-.1 5.8.6 8.4 2.1",
+    "M16.1 10.5c2.6-1.5 5.4-2.2 8.4-2.1.4 4.9.4 9.8 0 14.7-3-.1-5.8.6-8.4 2.1",
+  ],
+  taca: [
+    "M10.4 6.4c3.7-.3 7.5-.3 11.2 0 .3 3.4-.4 6.4-2.2 8.9-1 1.3-2 2-3.4 2s-2.4-.7-3.4-2c-1.8-2.5-2.5-5.5-2.2-8.9",
+    // Linha do vinho: sem ela a taca vira um cone qualquer.
+    "M11 10.7c3.3.4 6.7.4 10 0",
+    "M16 17.3c0 2.7 0 5.4.1 8",
+    "M11.6 25.6c2.9-.4 5.9-.4 8.8 0",
+  ],
   compras: [
     "M7.4 11.6c5.8-.5 11.5-.5 17.3 0 .8 4.4 1.1 8.9.9 13.4-6.4.5-12.8.5-19.2 0-.2-4.5.2-9 1-13.4",
     "M11.8 13.6c-.3-3.4.9-6.1 4.2-6.2 3.3-.1 4.6 2.7 4.4 6.1",
@@ -48,14 +79,24 @@ const RABISCO: Record<string, string[]> = {
   ],
 };
 
-/** Nome da categoria para o desenho, com recuo na etiqueta generica. */
+/**
+ * Nome da categoria para o desenho, com recuo na etiqueta generica.
+ *
+ * Os nomes antigos continuam na lista de proposito: a taxonomia enxuta trocou
+ * "Casa" por "Moradia" e "Mantimentos" por "Alimentacao", mas categoria antiga
+ * ainda aparece em historico e em nome que o usuario digitou a mao.
+ */
 const POR_NOME: [RegExp, string][] = [
-  [/^CASA/, "casa"],
-  [/FOLHA/, "folha"],
-  [/VIAGEM|VIAGENS/, "viagem"],
+  [/^CASA|MORADIA/, "casa"],
+  [/FOLHA|SERVICOS DOMESTICOS/, "folha"],
+  [/ALIMENTACAO|MANTIMENTOS|MERCADO/, "alimentacao"],
+  [/TRANSPORTE|CARRO/, "carro"],
   [/SAUDE/, "saude"],
+  [/EDUCACAO/, "livro"],
+  [/LAZER/, "taca"],
+  [/VIAGEM|VIAGENS/, "viagem"],
+  [/VESTUARIO|COMPRAS/, "compras"],
   [/FAMILIA/, "familia"],
-  [/COMPRAS|MANTIMENTOS|MERCADO/, "compras"],
 ];
 
 export function desenhoDaCategoria(nome: string): string {
