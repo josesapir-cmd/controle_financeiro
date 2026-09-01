@@ -2557,7 +2557,10 @@ ul.cat-linhas {
    continuar visivel enquanto se rola a lista, senao o arraste nao alcanca. */
 .classificador {
   display: grid;
-  grid-template-columns: 1fr 400px;
+  /* A coluna da direita ficou mais larga porque agora leva duas colunas de
+     categoria: com dez categorias empilhadas, o alvo do arraste passava da
+     altura da tela e era preciso rolar para alcancar as ultimas. */
+  grid-template-columns: minmax(0, 1fr) 468px;
   gap: 28px;
   align-items: start;
   margin-top: 4px;
@@ -2807,16 +2810,29 @@ ul.cat-linhas {
 .blocos {
   position: sticky;
   top: 16px;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  /* Duas colunas: as dez categorias cabem de uma vez na altura da tela, entao
+     so a lista de despesas rola. Uma coluna unica passava do enquadramento e o
+     alvo do arraste saia de vista justamente enquanto se arrasta. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
   gap: 10px;
+  /* Rede de seguranca para quem tiver muitas categorias: em vez de a ultima
+     linha ficar inalcancavel abaixo da dobra, o proprio painel rola. O respiro
+     de 6px existe para o contorno de 3px do bloco sob o cursor nao ser cortado
+     pela borda do painel. */
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  margin: -6px;
+  padding: 6px;
+  scrollbar-width: thin;
 }
 
 .bloco {
   position: relative;
   display: flex;
   flex-direction: column;
-  height: 104px;
+  height: 96px;
   padding: 14px 16px;
   overflow: hidden;
   border-radius: var(--radius-lg);
@@ -2864,14 +2880,20 @@ ul.cat-linhas {
   gap: 10px;
 }
 
+/* Em duas colunas o bloco tem metade da largura: "Vestuario e Cuidados
+   Pessoais" cortado em "Vestuario e Cuid..." nao identifica categoria nenhuma.
+   Entao o nome quebra em ate duas linhas e so depois disso corta. */
 .bloco-nome {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
+  font-size: 12.5px;
   font-weight: 600;
+  line-height: 1.25;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .bloco-badge {
@@ -2937,6 +2959,11 @@ ul.cat-linhas {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     order: -1;
+    /* Fora da coluna grudada, o painel nao tem por que rolar sozinho. */
+    max-height: none;
+    overflow: visible;
+    margin: 0;
+    padding: 0;
   }
 
   .lanc-editor {
@@ -2962,6 +2989,10 @@ ul.cat-linhas {
     flex-direction: row;
     gap: 6px;
     order: 2;
+    /* O dock nunca rola sozinho: a base limita a altura para a coluna grudada
+       do computador, e aqui isso cortaria a ampliacao dos ladrilhos. */
+    max-height: none;
+    overflow: visible;
     margin: 18px 0 42px;
     padding: 8px 10px;
     background: rgba(255, 255, 255, 0.82);

@@ -18,8 +18,9 @@ import { classificarLancamento, limparLancamento } from "./actions";
  *
  * Sao dois arrastes diferentes, de proposito:
  *
- * - **No computador**, arrastar e soltar do HTML5, com os blocos numa coluna
- *   grudada a direita.
+ * - **No computador**, arrastar e soltar do HTML5, com os blocos em duas
+ *   colunas grudadas a direita — as dez categorias cabem de uma vez na altura
+ *   da tela, entao so a lista de despesas rola e o alvo nunca sai de vista.
  * - **No celular**, eventos de ponteiro e um dock no rodape. O arraste do HTML5
  *   no toque exige segurar o dedo parado antes de comecar; aqui o cartao sai
  *   com 4px de movimento, sem espera.
