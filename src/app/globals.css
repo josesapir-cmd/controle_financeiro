@@ -1923,6 +1923,22 @@ td input.numerico {
     gap: 10px;
   }
 
+  /* A fita gruda no alto: e o controle que se usa o tempo todo, e rolando a
+     lista do dia ela era a primeira coisa a sumir. Fica abaixo da barra de
+     navegacao na pilha (z-index 30) e acima do dock (20), que estao no rodape
+     e nunca disputam o mesmo espaco com ela. */
+  .spinner-barra {
+    position: sticky;
+    top: 0;
+    z-index: 25;
+    /* Sangra ate as bordas: com os 16px de respiro da pagina, o conteudo
+       passaria visivel pelos lados da faixa grudada. */
+    margin: 12px -16px 0;
+    padding: 8px 16px;
+    background: var(--bg-white);
+    border-bottom: 1px solid var(--stroke-soft);
+  }
+
   .presets,
   .range-form,
   .filtros {
@@ -3211,12 +3227,14 @@ ul.cat-linhas {
    Mostra os vizinhos e deixa pular direto, o que os tres botoes de antes nao
    faziam: com eles so dava para andar um dia por vez, sem ver onde se estava
    na semana. */
+/* A fita mora numa faixa propria, acima dos outros controles. Dividindo a barra
+   com eles cabiam cinco dias — menos contexto do que ela existe para dar — e no
+   celular ela precisa de um pai alto para ter onde grudar. */
+.spinner-barra {
+  margin-top: 20px;
+}
+
 .spinner {
-  /* Linha inteira: a fita e o controle principal da tela e ganha a largura toda,
-     com o filtro de contas e o campo de data na linha de baixo. Dividindo a
-     barra com eles, cabiam cinco dias — menos contexto do que a fita existe
-     para dar. */
-  flex: 1 1 100%;
   display: flex;
   align-items: center;
   gap: 8px;

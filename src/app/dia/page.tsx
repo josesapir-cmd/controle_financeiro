@@ -67,12 +67,17 @@ export default async function Dia({
 
       <Nav atual="/dia" contasQuery={contasQuery} />
 
-      <div className="period-controls">
+      {/* A fita fica fora dos outros controles porque no celular ela gruda no
+          alto da tela, e um `sticky` so anda dentro do proprio pai: dentro da
+          barra de controles ela teria uns cem pixels de curso e nada mais. */}
+      <div className="spinner-barra">
         <SpinnerDeDatas
           dia={dia}
           queryExtra={buildQuery(soNaoClassificados ? "nc=1" : undefined, contasQuery)}
         />
+      </div>
 
+      <div className="period-controls">
         <FiltroDeContas
           options={dados.accountOptions}
           selected={accountIds}
