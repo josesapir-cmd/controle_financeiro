@@ -728,6 +728,7 @@ export interface CategoriaParaClassificar {
   id: string;
   name: string;
   hue: number;
+  hint: string | null;
   /** Total ja classificado nesta categoria no dia e no mes. */
   noDia: number;
   noMes: number;
@@ -883,6 +884,7 @@ export async function loadClassificacaoDoDia(
         id: c.id,
         name: c.name,
         hue: c.hue,
+        hint: c.hint,
         noDia: totais.get(c.id)?.dia ?? 0,
         noMes: totais.get(c.id)?.mes ?? 0,
         lancamentosNoDia: totais.get(c.id)?.contagem ?? 0,

@@ -158,6 +158,7 @@ export function Classificador({ lancamentos, categorias }: Props) {
                 .filter(Boolean)
                 .join(" ")}
               style={{ "--cat-h": categoria.hue } as React.CSSProperties}
+              title={categoria.hint ?? undefined}
               onDragOver={(evento) => {
                 evento.preventDefault();
                 evento.dataTransfer.dropEffect = "move";

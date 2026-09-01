@@ -3004,3 +3004,12 @@ ul.cat-linhas {
     display: none;
   }
 }
+
+/* A regra de borda de cada categoria, escrita onde se decide. */
+.cat-dica {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cat-fg);
+  opacity: 0.85;
+}

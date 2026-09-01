@@ -570,12 +570,41 @@ describe("decisoes de identidade entre contrapartes", () => {
 });
 
 describe("taxonomia de centros de custo", () => {
-  it("nasce com as categorias do Poupa.ai", async () => {
-    const nomes = (await listCategorias(db)).map((c) => c.name);
+  // A lista foi enxugada de dezesseis para dez: categoria que ninguem usa nao
+  // ajuda a classificar, atrapalha.
+  it("nasce com as dez categorias de despesa escolhidas, e so elas", async () => {
+    const despesas = (await listCategorias(db))
+      .filter((c) => c.kind === "despesa")
+      .map((c) => c.name)
+      .sort();
 
-    expect(nomes).toContain("Casa");
-    expect(nomes).toContain("Familia");
-    expect(nomes).toContain("Viagem");
+    expect(despesas).toEqual([
+      "Alimentacao",
+      "Educacao",
+      "Lazer e Cultura",
+      "Moradia",
+      "Presentes, Doacoes e Transferencias",
+      "Saude",
+      "Servicos domesticos",
+      "Transporte",
+      "Vestuario e Cuidados Pessoais",
+      "Viagens",
+    ]);
+  });
+
+  // Renda e Movimentacao nao sao gasto: some-las a lista de despesa seria dizer
+  // que salario e um tipo de gasto.
+  it("mantem renda e movimentacao fora das categorias de despesa", async () => {
+    const tipos = new Map((await listCategorias(db)).map((c) => [c.name, c.kind]));
+
+    expect(tipos.get("Renda")).toBe("receita");
+    expect(tipos.get("Movimentacao")).toBe("movimentacao");
+  });
+
+  it("cada categoria diz o que entra nela", async () => {
+    const moradia = (await listCategorias(db)).find((c) => c.name === "Moradia");
+
+    expect(moradia?.hint).toContain("condominio");
   });
 
   // Duas grafias da mesma categoria era exatamente como o texto livre se
@@ -590,7 +619,7 @@ describe("taxonomia de centros de custo", () => {
 
   it("o mesmo nome de centro pode existir em categorias diferentes", async () => {
     // "Pai" faz sentido em Familia e em Saude ao mesmo tempo.
-    const familia = (await acharOuCriarCategoria(db, "Familia"))!;
+    const familia = (await acharOuCriarCategoria(db, "Presentes, Doacoes e Transferencias"))!;
     const saude = (await acharOuCriarCategoria(db, "Saude"))!;
 
     const a = await acharOuCriarCentroDeCusto(db, familia, "Pai");
@@ -600,7 +629,7 @@ describe("taxonomia de centros de custo", () => {
   });
 
   it("guarda orcamento e periodo do centro", async () => {
-    const viagem = (await acharOuCriarCategoria(db, "Viagem"))!;
+    const viagem = (await acharOuCriarCategoria(db, "Viagens"))!;
     const id = (await acharOuCriarCentroDeCusto(db, viagem, "Bariloche"))!;
 
     await salvarCentroDeCusto(db, id, {
@@ -618,25 +647,27 @@ describe("taxonomia de centros de custo", () => {
     expect(centro?.endsOn).toBe("2026-07-20");
   });
 
+  // Nomes inventados de proposito: os da taxonomia real mudam quando o usuario
+  // reorganiza as categorias, e o teste passaria a falhar por isso.
   it("renomear a categoria vale para todo o historico de uma vez", async () => {
-    const id = (await acharOuCriarCategoria(db, "Lazer"))!;
-    await salvarCategoria(db, id, { name: "Lazer e cultura" });
+    const id = (await acharOuCriarCategoria(db, "Nautica"))!;
+    await salvarCategoria(db, id, { name: "Nautica e vela" });
 
     const nomes = (await listCategorias(db)).map((c) => c.name);
-    expect(nomes).toContain("Lazer e cultura");
-    expect(nomes).not.toContain("Lazer");
+    expect(nomes).toContain("Nautica e vela");
+    expect(nomes).not.toContain("Nautica");
   });
 
   it("nome vazio nao apaga o nome existente", async () => {
-    const id = (await acharOuCriarCategoria(db, "Pet"))!;
+    const id = (await acharOuCriarCategoria(db, "Apicultura"))!;
     await salvarCategoria(db, id, { name: "   " });
 
-    expect((await listCategorias(db)).map((c) => c.name)).toContain("Pet");
+    expect((await listCategorias(db)).map((c) => c.name)).toContain("Apicultura");
   });
 
   // Apagar levaria junto a classificacao feita a mao; arquivar so tira da lista.
   it("centro arquivado some da listagem mas continua no banco", async () => {
-    const viagem = (await acharOuCriarCategoria(db, "Viagem"))!;
+    const viagem = (await acharOuCriarCategoria(db, "Viagens"))!;
     const id = (await acharOuCriarCentroDeCusto(db, viagem, "Campos do Jordao"))!;
 
     await arquivarCentroDeCusto(db, id);

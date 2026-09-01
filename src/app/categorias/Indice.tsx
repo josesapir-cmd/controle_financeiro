@@ -65,6 +65,7 @@ export function Indice({
               scroll={false}
               aria-current={ativa ? "true" : undefined}
               className={ativa ? "cat-bloco ativo" : "cat-bloco"}
+              title={categoria.hint ?? undefined}
               style={{ "--cat-h": categoria.hue } as React.CSSProperties}
             >
               {/* Circulos decorativos saindo pelo canto: dao peso ao bloco sem
@@ -117,6 +118,9 @@ function Painel({
             {categoria.centros.length === 1 ? "subcategoria" : "subcategorias"} ·{" "}
             {lancamentosNoAno} {lancamentosNoAno === 1 ? "lancamento" : "lancamentos"} no ano
           </div>
+          {/* O que entra aqui, escrito. E onde mora a regra de borda — que
+              restaurante vai em Lazer, nao em Alimentacao. */}
+          {categoria.hint ? <div className="cat-dica">{categoria.hint}</div> : null}
         </div>
         <div className="cat-painel-resumo">
           {MES.format(categoria.sent)} / {ANO.format(noAno?.sent ?? 0)}

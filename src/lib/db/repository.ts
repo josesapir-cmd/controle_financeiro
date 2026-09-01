@@ -698,6 +698,8 @@ export interface CategoriaRow {
   position: number;
   /** Matiz OKLCH (0-359) da cor de sinalizacao da categoria. */
   hue: number;
+  /** O que entra nesta categoria, nas palavras do usuario. Aparece na duvida. */
+  hint: string | null;
   archived: boolean;
 }
 
@@ -724,7 +726,7 @@ export async function listCategorias(
   incluirArquivadas = false,
 ): Promise<CategoriaRow[]> {
   const linhas = await db.query<Record<string, unknown>>(
-    `SELECT id, name, kind, position, hue, archived_at FROM categories
+    `SELECT id, name, kind, position, hue, hint, archived_at FROM categories
       ${incluirArquivadas ? "" : "WHERE archived_at IS NULL"}
       ORDER BY position, name`,
   );
@@ -735,6 +737,7 @@ export async function listCategorias(
     kind: String(linha.kind) as TipoDeCategoria,
     position: Number(linha.position ?? 100),
     hue: Number(linha.hue ?? 250),
+    hint: linha.hint ? String(linha.hint) : null,
     archived: Boolean(linha.archived_at),
   }));
 }

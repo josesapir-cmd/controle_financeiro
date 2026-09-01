@@ -20,6 +20,8 @@ export interface Categoria {
   position: number;
   /** Matiz OKLCH da cor de sinalizacao. Nao entra em nenhuma conta. */
   hue: number;
+  /** O que entra nesta categoria, nas palavras do usuario. */
+  hint?: string | null;
 }
 
 export interface CentroDeCusto {

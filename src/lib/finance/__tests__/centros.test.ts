@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { CounterpartyTotal } from "../counterparties";
 import { cruzarCentrosDeCusto, totalPorTipo, type Categoria, type CentroDeCusto } from "../centros";
 
-const VIAGEM: Categoria = { id: "cat-viagem", name: "Viagem", kind: "despesa", position: 10, hue: 30 };
-const FAMILIA: Categoria = { id: "cat-familia", name: "Familia", kind: "despesa", position: 20, hue: 145 };
+const VIAGEM: Categoria = { id: "cat-viagem", name: "Viagem", kind: "despesa", position: 10, hue: 30, hint: null };
+const FAMILIA: Categoria = { id: "cat-familia", name: "Familia", kind: "despesa", position: 20, hue: 145, hint: null };
 
 function centro(id: string, categoryId: string, name: string, extra: Partial<CentroDeCusto> = {}): CentroDeCusto {
   return { id, categoryId, name, note: null, startsOn: null, endsOn: null, budget: null, ...extra };
@@ -165,7 +165,7 @@ describe("cruzarCentrosDeCusto", () => {
 describe("totalPorTipo", () => {
   it("soma so as categorias do tipo pedido", () => {
     const { categorias } = cruzarCentrosDeCusto(
-      [VIAGEM, { id: "r", name: "Renda", kind: "receita", position: 1, hue: 150 }],
+      [VIAGEM, { id: "r", name: "Renda", kind: "receita", position: 1, hue: 150, hint: null }],
       [],
       [
         contraparte({ category: "Viagem", sent: 400 }),
