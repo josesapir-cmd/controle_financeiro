@@ -2351,8 +2351,11 @@ ul.centros {
   border: 1px solid var(--cat-recuado-borda);
   outline: 0 solid transparent;
   outline-offset: 2px;
+  /* A ampliacao acompanha o cursor a cada movimento: transicao curta, senao
+     ela chega depois do ponteiro. O `transform` vem do JS — a distancia ate o
+     cursor nao e uma pergunta que o CSS saiba responder. */
   transition:
-    transform 180ms ease,
+    transform 110ms ease-out,
     background 220ms ease,
     color 220ms ease,
     box-shadow 180ms ease;
@@ -2360,7 +2363,17 @@ ul.centros {
 
 .cat-bloco:hover {
   text-decoration: none;
-  transform: translateY(-1px);
+}
+
+/* Os blocos das pontas crescem para dentro. Crescendo a partir do centro, o
+   bloco da borda passa do respiro da pagina e o navegador ganha uma barra de
+   rolagem horizontal — o dock do macOS resolve a ponta do mesmo jeito. */
+.cat-indice > :nth-child(3n + 1) {
+  transform-origin: left center;
+}
+
+.cat-indice > :nth-child(3n) {
+  transform-origin: right center;
 }
 
 /* Aberta: cor cheia. E o unico bloco saturado da grade, entao ele se le como
@@ -2370,7 +2383,6 @@ ul.centros {
   background: var(--cat-base);
   border-color: transparent;
   outline: 3px solid var(--cat-strong);
-  transform: translateY(-2px);
   box-shadow: 0 14px 26px -14px var(--cat-base);
 }
 
@@ -2464,66 +2476,117 @@ ul.centros {
   white-space: nowrap;
 }
 
-ul.cat-linhas {
-  margin: 16px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.cat-linha {
+/* --- Subcategorias em quadrados ---
+   Substituem a tabela de linhas: a pergunta da tela e "em que se divide esta
+   categoria", e para isso um punhado de blocos do mesmo tamanho responde mais
+   rapido que uma lista com tres colunas de numero. */
+.cat-quadrados {
   display: grid;
-  grid-template-columns: minmax(180px, 260px) 1fr auto;
-  gap: 18px;
-  align-items: center;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--cat-border);
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
 }
 
-.cat-linha:last-child {
-  border-bottom: none;
+.sub-quadrado {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+  min-height: 104px;
+  padding: 12px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--cat-border);
+  border-radius: var(--radius);
 }
 
-.cat-linha-nome .description {
-  font-size: 14px;
-  font-weight: 500;
+.sub-nome {
+  margin-bottom: auto;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--cat-fg);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.sub-valor {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--text-strong);
 }
 
-.cat-linha-nome .tag {
-  background: rgba(255, 255, 255, 0.7);
-  color: var(--cat-fg);
+.sub-meta {
+  font-size: 11px;
+  color: var(--text-soft);
 }
 
-.cat-trilho {
-  height: 8px;
-  background: rgba(255, 255, 255, 0.75);
+/* Faixa do orcamento no pe do quadrado: perder o dado para caber no desenho
+   seria trocar informacao por enfeite. */
+.sub-orcamento {
+  display: block;
+  height: 4px;
+  margin-top: 8px;
+  background: var(--cat-tint);
   border-radius: 999px;
   overflow: hidden;
 }
 
-.cat-preenchimento {
+.sub-orcamento-uso {
+  display: block;
   height: 100%;
   border-radius: 999px;
   background: var(--cat-base);
   transition: width 320ms cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
-.cat-linha-barra .account-meta {
-  margin-top: 6px;
+.sub-orcamento-uso.estourado {
+  background: var(--error);
 }
 
-.cat-linha-valores {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  white-space: nowrap;
+/* O quadrado de criar: pontilhado e vazio, que e como se desenha um lugar que
+   ainda nao existe. */
+.sub-novo {
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 300;
+  line-height: 1;
+  color: var(--cat-fg);
+  background: none;
+  border: 1px dashed var(--cat-border);
+  box-shadow: none;
+  cursor: pointer;
 }
 
-.cat-valor-mes {
-  font-size: 14px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-strong);
+.sub-novo:hover:not(:disabled) {
+  color: var(--cat-base);
+  background: var(--cat-tint);
+  border-style: dashed;
+  border-color: var(--cat-strong);
+}
+
+.sub-novo-aberto {
+  gap: 8px;
+  justify-content: center;
+  border-style: dashed;
+}
+
+.sub-novo-aberto input {
+  width: 100%;
+  height: 32px;
+  font-size: 13px;
+}
+
+.sub-novo-aberto button {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .cat-sem-centro {
@@ -2543,6 +2606,20 @@ ul.cat-linhas {
   .cat-indice {
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+  }
+
+  /* Duas colunas: as pontas sao outras. */
+  .cat-indice > :nth-child(3n + 1),
+  .cat-indice > :nth-child(3n) {
+    transform-origin: center;
+  }
+
+  .cat-indice > :nth-child(2n + 1) {
+    transform-origin: left center;
+  }
+
+  .cat-indice > :nth-child(2n) {
+    transform-origin: right center;
   }
 
   .cat-bloco {

@@ -1,14 +1,22 @@
+"use client";
+
 import Link from "next/link";
+import { useRef, useState } from "react";
 import { IconeDeCategoria } from "@/components/IconeDeCategoria";
 import type { CategoriaTotal, CentroTotal } from "@/lib/finance/centros";
+import { adicionarCentro } from "./actions";
 
 /**
- * Indice de categorias em blocos de cor, com o painel da categoria aberta
- * logo abaixo.
+ * Indice de categorias em blocos de cor, com as subcategorias da categoria
+ * aberta logo abaixo.
  *
- * Uma categoria aberta por vez, e a selecao mora na URL (`?cat=`): a tela
- * continua sendo renderizada no servidor, o botao voltar funciona e o link e
- * compartilhavel — como ja acontece com a expansao de contraparte.
+ * Os blocos crescem com a aproximacao do ponteiro, como o dock do celular na
+ * aba Dia — mesma formula, so que a distancia aqui e nas duas dimensoes, porque
+ * isto e uma grade e nao uma fila. O bloco aberto fica grande o tempo todo: a
+ * selecao precisa se ver mesmo com o ponteiro longe.
+ *
+ * A selecao mora na URL (`?cat=`): a tela continua sendo renderizada no
+ * servidor, o botao voltar funciona e o link e compartilhavel.
  */
 
 /** Numero grande sem simbolo nem sinal: tudo no bloco e despesa. */
@@ -19,6 +27,12 @@ const MES = new Intl.NumberFormat("pt-BR", {
 const ANO = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 
 const DIA_CURTO = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" });
+
+/** Distancia em que a ampliacao ja acabou, e quanto ela cresce no centro. */
+const ALCANCE = 150;
+const AUMENTO = 0.22;
+/** O bloco aberto fica ampliado sem ponteiro nenhum. */
+const ABERTO = 1.1;
 
 function periodo(centro: CentroTotal): string | null {
   if (!centro.startsOn && !centro.endsOn) return null;
@@ -41,6 +55,10 @@ export function Indice({
   /** Parametros da URL que precisam sobreviver ao clique (periodo, contas). */
   queryBase: string;
 }) {
+  const grade = useRef<HTMLDivElement>(null);
+  const blocos = useRef(new Map<string, HTMLElement>());
+  const [ponteiro, setPonteiro] = useState<{ x: number; y: number } | null>(null);
+
   if (categorias.length === 0) return null;
 
   const anoPorId = new Map(noAno.map((c) => [c.id, c]));
@@ -49,24 +67,68 @@ export function Indice({
   const link = (id: string) =>
     `/categorias?${[queryBase, `cat=${encodeURIComponent(id)}`].filter(Boolean).join("&")}`;
 
+  /**
+   * Escala pela distancia do ponteiro ao centro do bloco.
+   *
+   * A ampliacao e por `transform`, entao crescer nao empurra os vizinhos — o
+   * alvo nao foge de baixo do cursor enquanto ele se aproxima.
+   */
+  function escala(id: string, ativa: boolean): number {
+    const base = ativa ? ABERTO : 1;
+    if (!ponteiro) return base;
+
+    const elemento = blocos.current.get(id);
+    if (!elemento) return base;
+
+    const caixa = elemento.getBoundingClientRect();
+    const dx = ponteiro.x - (caixa.left + caixa.width / 2);
+    const dy = ponteiro.y - (caixa.top + caixa.height / 2);
+    const distancia = Math.hypot(dx, dy);
+
+    return base + AUMENTO * Math.exp(-((distancia / ALCANCE) ** 2));
+  }
+
   return (
     <section>
       <h2>Categorias</h2>
 
-      <div className="cat-indice">
+      <div
+        ref={grade}
+        className="cat-indice"
+        // So o mouse amplia: no toque nao existe "passar por cima", e ampliar
+        // no primeiro contato faria o alvo se mexer debaixo do dedo.
+        onPointerMove={(evento) => {
+          if (evento.pointerType !== "mouse") return;
+          setPonteiro({ x: evento.clientX, y: evento.clientY });
+        }}
+        onPointerLeave={() => setPonteiro(null)}
+      >
         {categorias.map((categoria) => {
           const ativa = categoria.id === selecionada.id;
           const ano = anoPorId.get(categoria.id);
+          const s = escala(categoria.id, ativa);
 
           return (
             <Link
               key={categoria.id}
+              ref={(elemento) => {
+                if (elemento) blocos.current.set(categoria.id, elemento);
+                else blocos.current.delete(categoria.id);
+              }}
               href={link(categoria.id)}
               scroll={false}
               aria-current={ativa ? "true" : undefined}
               className={ativa ? "cat-bloco ativo" : "cat-bloco"}
               title={categoria.hint ?? undefined}
-              style={{ "--cat-h": categoria.hue } as React.CSSProperties}
+              style={
+                {
+                  "--cat-h": categoria.hue,
+                  transform: `scale(${s.toFixed(3)})`,
+                  // Quem cresce passa por cima; o aberto ganha do vizinho
+                  // ampliado de passagem.
+                  zIndex: ativa ? 3 : s > 1.02 ? 2 : 1,
+                } as React.CSSProperties
+              }
             >
               {/* Circulos decorativos saindo pelo canto: dao peso ao bloco sem
                   competir com o texto. */}
@@ -98,11 +160,8 @@ function Painel({
   categoria: CategoriaTotal;
   noAno: CategoriaTotal | undefined;
 }) {
+  const [criando, setCriando] = useState(false);
   const anoPorCentro = new Map((noAno?.centros ?? []).map((c) => [c.id, c]));
-  // A barra compara dentro da categoria: a maior subcategoria do periodo e a
-  // referencia. Comparar com o total do app faria toda categoria pequena virar
-  // um tracinho.
-  const maior = Math.max(1, ...categoria.centros.map((c) => c.sent));
   const lancamentosNoAno = (noAno?.centros ?? []).reduce((total, c) => total + c.count, 0);
 
   return (
@@ -127,56 +186,66 @@ function Painel({
         </div>
       </div>
 
-      {categoria.centros.length === 0 ? (
-        <p className="empty" style={{ marginTop: 16 }}>
-          Nenhuma subcategoria ainda. Crie uma abaixo para separar o gasto desta categoria por
-          viagem, por obra ou por pessoa.
-        </p>
-      ) : (
-        <ul className="cat-linhas">
-          {categoria.centros.map((centro) => {
-            const ano = anoPorCentro.get(centro.id);
-            const janela = periodo(centro);
-            // Obra e viagem se medem pelo acumulado; o resto, pelo mes.
-            const acumulado = Boolean(centro.startsOn || centro.endsOn);
-            const gasto = acumulado ? (ano?.sent ?? centro.sent) : centro.sent;
-            const usado = centro.budget ? gasto / centro.budget : 0;
-            const estourou = usado > 1;
+      <div className="cat-quadrados">
+        {categoria.centros.map((centro) => {
+          const ano = anoPorCentro.get(centro.id);
+          const janela = periodo(centro);
+          // Obra e viagem se medem pelo acumulado; o resto, pelo mes.
+          const acumulado = Boolean(centro.startsOn || centro.endsOn);
+          const gasto = acumulado ? (ano?.sent ?? centro.sent) : centro.sent;
+          const usado = centro.budget ? gasto / centro.budget : 0;
+          const estourou = usado > 1;
 
-            return (
-              <li key={centro.id} className="cat-linha">
-                <div className="cat-linha-nome">
-                  <span className="description">{centro.name}</span>
-                  {janela ? <span className="tag">{janela}</span> : null}
-                  <div className="account-meta">
-                    {centro.count} {centro.count === 1 ? "lancamento" : "lancamentos"}
-                  </div>
-                </div>
+          return (
+            <div key={centro.id} className="sub-quadrado">
+              <span className="sub-nome">{centro.name}</span>
+              <span className="sub-valor">{MES.format(centro.sent)}</span>
+              <span className="sub-meta">
+                {janela ??
+                  `${centro.count} ${centro.count === 1 ? "lancamento" : "lancamentos"}`}
+              </span>
 
-                <div className="cat-linha-barra">
-                  <div className="cat-trilho">
-                    <div
-                      className="cat-preenchimento"
-                      style={{ width: `${Math.max(2, (centro.sent / maior) * 100)}%` }}
-                    />
-                  </div>
-                  {centro.budget ? (
-                    <div className={`account-meta ${estourou ? "negative" : ""}`}>
-                      {ANO.format(centro.budget)} orcado{acumulado ? " (acumulado)" : ""} ·{" "}
-                      {Math.round(usado * 100)}%{estourou ? " — estourou" : ""}
-                    </div>
-                  ) : null}
-                </div>
+              {/* O orcamento vira uma faixa no pe do quadrado: perder o dado
+                  para caber no desenho seria trocar informacao por enfeite. */}
+              {centro.budget ? (
+                <span className="sub-orcamento" title={`${Math.round(usado * 100)}% de ${ANO.format(centro.budget)}`}>
+                  <span
+                    className={estourou ? "sub-orcamento-uso estourado" : "sub-orcamento-uso"}
+                    style={{ width: `${Math.min(usado, 1) * 100}%` }}
+                  />
+                </span>
+              ) : null}
+            </div>
+          );
+        })}
 
-                <div className="cat-linha-valores">
-                  <span className="cat-valor-mes">{MES.format(centro.sent)}</span>
-                  <span className="account-meta">{ANO.format(ano?.sent ?? 0)}</span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+        {criando ? (
+          <form action={adicionarCentro} className="sub-quadrado sub-novo-aberto">
+            <input type="hidden" name="categoryId" value={categoria.id} />
+            <input
+              type="text"
+              name="name"
+              // eslint-disable-next-line jsx-a11y/no-autofocus
+              autoFocus
+              placeholder="nome"
+              aria-label={`Nova subcategoria de ${categoria.name}`}
+              onKeyDown={(evento) => {
+                if (evento.key === "Escape") setCriando(false);
+              }}
+            />
+            <button type="submit">Criar</button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            className="sub-quadrado sub-novo"
+            onClick={() => setCriando(true)}
+            aria-label={`Nova subcategoria de ${categoria.name}`}
+          >
+            <span aria-hidden>+</span>
+          </button>
+        )}
+      </div>
 
       {categoria.semCentro.count > 0 ? (
         <p className="cat-sem-centro">
