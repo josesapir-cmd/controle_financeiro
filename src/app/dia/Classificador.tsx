@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { IconeDeCategoria } from "@/components/IconeDeCategoria";
 import { formatBRL } from "@/lib/finance/money";
 import { rotuloContemNome } from "@/lib/finance/rotulo";
@@ -130,7 +130,7 @@ export function Classificador({ lancamentos, categorias }: Props) {
     <div className="classificador" ref={container}>
       <div className="classificador-lista">
         {lancamentos.length === 0 ? (
-          <p className="empty">Nenhuma despesa sua neste dia.</p>
+          <p className="empty">Nenhum lancamento neste dia.</p>
         ) : null}
 
         {lancamentos.map((lancamento) => {
@@ -142,13 +142,17 @@ export function Classificador({ lancamentos, categorias }: Props) {
               key={lancamento.id}
               className={[
                 "lanc",
-                categoria ? "lanc-classificado" : "lanc-pendente",
+                !lancamento.classificavel
+                  ? "lanc-fora"
+                  : categoria
+                    ? "lanc-classificado"
+                    : "lanc-pendente",
                 arraste?.id === lancamento.id ? "lanc-saindo" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
               style={categoria ? ({ "--cat-h": categoria.hue } as React.CSSProperties) : undefined}
-              draggable={!categoria}
+              draggable={lancamento.classificavel}
               onDragStart={(evento) => {
                 evento.dataTransfer.setData("text/plain", lancamento.id);
                 evento.dataTransfer.effectAllowed = "move";
@@ -156,8 +160,11 @@ export function Classificador({ lancamentos, categorias }: Props) {
               onPointerDown={(evento) => {
                 // So toque: no computador quem manda e o arraste do HTML5, e os
                 // dois juntos brigariam pelo mesmo gesto.
-                if (categoria || evento.pointerType === "mouse") return;
-                evento.currentTarget.setPointerCapture(evento.pointerId);
+                if (!lancamento.classificavel || evento.pointerType === "mouse") return;
+                // A captura NAO acontece aqui. Com o ponteiro capturado, o
+                // `click` vai para o cartao e nunca chega ao botao da etiqueta,
+                // que e justamente o que abre o editor. So capturamos quando
+                // vira arraste de verdade.
                 origem.current = { x: evento.clientX, y: evento.clientY, id: lancamento.id };
               }}
               onPointerMove={(evento) => {
@@ -169,6 +176,7 @@ export function Classificador({ lancamentos, categorias }: Props) {
                   evento.clientY - inicio.y,
                 );
                 if (!arraste && distancia < LIMIAR) return;
+                if (!arraste) evento.currentTarget.setPointerCapture(evento.pointerId);
 
                 const caixa = container.current?.getBoundingClientRect();
                 setArraste({
@@ -193,12 +201,16 @@ export function Classificador({ lancamentos, categorias }: Props) {
               <div className="lanc-topo">
                 <span className="lanc-hora">{lancamento.hora}</span>
                 <span className="lanc-desc">{lancamento.descricao}</span>
-                <span className="lanc-valor">{formatBRL(lancamento.valor)}</span>
+                <span
+                  className={`lanc-valor${lancamento.valor >= 0 ? " positive" : ""}`}
+                >
+                  {formatBRL(lancamento.valor)}
+                </span>
               </div>
 
               <div className="lanc-meta">
                 {[
-                  categoria ? null : "Sem categoria",
+                  lancamento.classificavel && !categoria ? "Sem categoria" : null,
                   // "PIX para Fulano · Fulano" nao ajuda ninguem: quando o
                   // titulo ja diz para quem foi, a linha de baixo cala.
                   rotuloContemNome(lancamento.descricao, lancamento.contraparte)
@@ -211,43 +223,50 @@ export function Classificador({ lancamentos, categorias }: Props) {
                   .join(" · ")}
               </div>
 
-              <div className="lanc-rodape">
-                {categoria ? (
-                  <button
-                    type="button"
-                    className="lanc-etiqueta"
-                    onClick={() => setAberto(aberto === lancamento.id ? null : lancamento.id)}
-                    aria-expanded={aberto === lancamento.id}
-                  >
-                    {categoria.name}
-                    {centro ? ` · ${centro.name}` : ""}
-                    {lancamento.herdada ? " (da contraparte)" : ""}
-                  </button>
-                ) : (
-                  <span className="lanc-dica">arraste para um bloco</span>
-                )}
+              {lancamento.classificavel ? (
+                <div className="lanc-rodape">
+                  {categoria ? (
+                    <button
+                      type="button"
+                      className="lanc-etiqueta"
+                      onClick={() => setAberto(aberto === lancamento.id ? null : lancamento.id)}
+                      aria-expanded={aberto === lancamento.id}
+                    >
+                      {categoria.name}
+                      {centro ? ` · ${centro.name}` : ""}
+                      {lancamento.herdada ? " (da contraparte)" : ""}
+                    </button>
+                  ) : (
+                    <>
+                      <span className="lanc-dica">arraste para um bloco</span>
 
-                {/* O mesmo destino, sem arrastar: no celular e no teclado esta e
-                    a unica forma que funciona. */}
-                <label className="lanc-escolha">
-                  <span className="account-meta">categoria</span>
-                  <select
-                    value={lancamento.categoriaId ?? ""}
-                    disabled={pendente}
-                    onChange={(evento) => {
-                      if (evento.target.value) classificar(lancamento, evento.target.value);
-                    }}
-                    aria-label={`Categoria de ${lancamento.descricao}`}
-                  >
-                    <option value="">escolher…</option>
-                    {categorias.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
+                      {/* O mesmo destino, sem arrastar: no teclado esta e a
+                          unica forma que funciona. So aparece enquanto o
+                          lancamento nao tem categoria — depois disso quem
+                          recategoriza e o arraste, e para o teclado sobra
+                          "tirar a categoria" dentro do editor. */}
+                      <label className="lanc-escolha">
+                        <span className="account-meta">categoria</span>
+                        <select
+                          value=""
+                          disabled={pendente}
+                          onChange={(evento) => {
+                            if (evento.target.value) classificar(lancamento, evento.target.value);
+                          }}
+                          aria-label={`Categoria de ${lancamento.descricao}`}
+                        >
+                          <option value="">escolher…</option>
+                          {categorias.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </>
+                  )}
+                </div>
+              ) : null}
 
               {aberto === lancamento.id && categoria ? (
                 <Editor lancamento={lancamento} categoria={categoria} onFechar={() => setAberto(null)} />
@@ -347,6 +366,12 @@ function Editor({
   categoria: CategoriaParaClassificar;
   onFechar: () => void;
 }) {
+  const comentario = lancamento.comentario ?? "";
+  // Comentario salvo aparece como texto; a caixa so volta pelo lapis. Um campo
+  // aberto o tempo todo faz o que ja foi escrito parecer rascunho.
+  const [editandoNota, setEditandoNota] = useState(!comentario);
+  useEffect(() => setEditandoNota(!comentario), [comentario]);
+
   return (
     <form action={classificarLancamento} className="lanc-editor">
       <input type="hidden" name="transactionId" value={lancamento.id} />
@@ -381,14 +406,37 @@ function Editor({
       </div>
 
       <div>
-        <div className="editor-titulo">Comentario</div>
-        <textarea
-          name="note"
-          rows={3}
-          defaultValue={lancamento.comentario ?? ""}
-          placeholder="o que foi este gasto"
-          aria-label="Comentario"
-        />
+        <div className="editor-titulo">
+          Comentario
+          {comentario && !editandoNota ? (
+            <button
+              type="button"
+              className="editor-lapis"
+              onClick={() => setEditandoNota(true)}
+              aria-label="Editar comentario"
+              title="Editar comentario"
+            >
+              <Lapis />
+            </button>
+          ) : null}
+        </div>
+
+        {comentario && !editandoNota ? (
+          <>
+            <p className="editor-nota">{comentario}</p>
+            {/* O comentario ja salvo continua viajando no envio: sem isto,
+                salvar uma subcategoria apagaria o texto que esta na tela. */}
+            <input type="hidden" name="note" value={comentario} />
+          </>
+        ) : (
+          <textarea
+            name="note"
+            rows={3}
+            defaultValue={comentario}
+            placeholder="o que foi este gasto"
+            aria-label="Comentario"
+          />
+        )}
 
         {lancamento.contraparteKey && lancamento.frequencia > 1 ? (
           <label className="editor-aplicar">
@@ -414,5 +462,17 @@ function Editor({
         </button>
       </div>
     </form>
+  );
+}
+
+/** Lapis do botao de editar comentario. Inline, como o resto dos icones. */
+function Lapis() {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden focusable="false">
+      <path
+        d="M11.2 1.9a1.4 1.4 0 0 1 2 2l-.7.7-2-2 .7-.7ZM9.6 3.5l2 2L5 12.1l-2.6.6.6-2.6L9.6 3.5Z"
+        fill="currentColor"
+      />
+    </svg>
   );
 }

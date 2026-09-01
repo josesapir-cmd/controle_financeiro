@@ -2581,15 +2581,38 @@ ul.cat-linhas {
   box-shadow: var(--shadow-xs);
 }
 
-.lanc-pendente {
+/* Todo cartao que pede categoria e o gesto — o ja classificado tambem, porque
+   recategorizar e arrastar de novo. Sem `touch-action: none` o navegador leva o
+   toque para a rolagem e o arraste so comecaria depois de segurar o dedo. */
+.lanc-pendente,
+.lanc-classificado {
   cursor: grab;
-  /* O cartao pendente e o gesto: sem isto o navegador leva o toque para a
-     rolagem e o arraste so comecaria depois de segurar o dedo parado. */
   touch-action: none;
 }
 
-.lanc-pendente:active {
+.lanc-pendente:active,
+.lanc-classificado:active {
   cursor: grabbing;
+}
+
+/* Entrada, movimentacao e lancamento do proprio banco: aparecem porque o dia e
+   o dia inteiro, mas nao pedem categoria. Sem gesto, sem etiqueta, e em tom
+   mais baixo, para nao competirem com o que espera decisao. */
+.lanc-fora {
+  background: var(--bg-weak);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.lanc-fora .lanc-desc {
+  font-weight: 500;
+  color: var(--text-sub);
+}
+
+/* O valor mantem a cor do sinal: e a unica coisa no cartao que nao pode
+   desbotar, porque entrada e saida se distinguem por ela. */
+.lanc-fora .lanc-valor {
+  font-weight: 500;
 }
 
 /* Classificado: fundo na cor da categoria e uma faixa na borda esquerda. O
@@ -2634,6 +2657,11 @@ ul.cat-linhas {
   font-variant-numeric: tabular-nums;
   color: var(--error-dark);
   white-space: nowrap;
+}
+
+/* Entrada na lista do dia: o vermelho de saida seria uma mentira. */
+.lanc-valor.positive {
+  color: var(--success-dark);
 }
 
 .lanc-meta {
@@ -2700,12 +2728,52 @@ ul.cat-linhas {
 }
 
 .editor-titulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 8px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-soft);
+}
+
+/* Lapis ao lado do rotulo: e o unico caminho de volta para a caixa de texto
+   depois que o comentario virou texto salvo. */
+.editor-lapis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--text-soft);
+  background: none;
+  border: none;
+  border-radius: var(--radius-xs);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.editor-lapis:hover:not(:disabled) {
+  color: var(--cat-fg);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+/* Comentario salvo: texto, nao campo. Um campo aberto o tempo todo faz o que ja
+   foi escrito parecer rascunho. */
+.editor-nota {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-strong);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--cat-border);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .editor-chips {

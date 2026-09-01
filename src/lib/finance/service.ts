@@ -746,6 +746,12 @@ export interface LancamentoParaClassificar {
   conta: string;
   contraparte: string | null;
   contraparteKey: string | null;
+  /**
+   * Se pede categoria. Entrada, movimentacao e lancamento automatico do banco
+   * aparecem na lista — o dia e o dia inteiro — mas nao se classificam, entao
+   * nao arrastam, nao contam como pendencia e nao ganham etiqueta.
+   */
+  classificavel: boolean;
   /** Quantos lancamentos a mesma contraparte tem no periodo carregado. */
   frequencia: number;
   /** Classificacao atual: do proprio lancamento, ou herdada da contraparte. */
@@ -809,10 +815,11 @@ export async function loadClassificacaoDoDia(
     if (chave) frequencia.set(chave, (frequencia.get(chave) ?? 0) + 1);
   }
 
-  // Saidas do dia iniciadas pelo usuario: e o que se classifica. Entrada,
-  // movimentacao e lancamento automatico do banco nao pedem categoria.
+  // O dia inteiro, nao so o que se classifica: esta e a unica lista da tela.
+  // Quem pede categoria e a saida iniciada pelo usuario; o resto vem junto
+  // marcado como nao classificavel.
   const doDia = conciliado.transacoes
-    .filter((t) => localDay(t.date) === dia && isUserInitiatedExpense(t))
+    .filter((t) => localDay(t.date) === dia)
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const resolver = (t: Transaction) => {
@@ -854,17 +861,27 @@ export async function loadClassificacaoDoDia(
     return (chave ? cadastro[chave]?.alias : null) || t.counterparty?.name || null;
   };
 
-  const lancamentos: LancamentoParaClassificar[] = doDia.map((t) => ({
-    id: t.id,
-    hora: localTime(t.date),
-    descricao: rotuloDoLancamento(t, nomeDaParte(t)),
-    valor: t.amount,
-    conta: nomeDaConta[t.accountId] ?? "",
-    contraparte: nomeDaParte(t),
-    contraparteKey: chaveIdentificada(t.counterparty?.key),
-    frequencia: frequencia.get(chaveIdentificada(t.counterparty?.key) ?? "") ?? 1,
-    ...resolver(t),
-  }));
+  const lancamentos: LancamentoParaClassificar[] = doDia.map((t) => {
+    const classificavel = isUserInitiatedExpense(t);
+    const decidido = resolver(t);
+
+    return {
+      id: t.id,
+      hora: localTime(t.date),
+      descricao: rotuloDoLancamento(t, nomeDaParte(t)),
+      valor: t.amount,
+      conta: nomeDaConta[t.accountId] ?? "",
+      contraparte: nomeDaParte(t),
+      contraparteKey: chaveIdentificada(t.counterparty?.key),
+      classificavel,
+      frequencia: frequencia.get(chaveIdentificada(t.counterparty?.key) ?? "") ?? 1,
+      ...decidido,
+      // Uma contraparte com categoria tambem manda dinheiro de volta: sem este
+      // corte, um reembolso apareceria etiquetado como despesa dela.
+      categoriaId: classificavel ? decidido.categoriaId : null,
+      centroId: classificavel ? decidido.centroId : null,
+    };
+  });
 
   // Totais dos blocos: o que ja esta classificado naquela categoria, no dia e
   // no mes. Usa a mesma resolucao dos cartoes, entao os numeros batem com o que
