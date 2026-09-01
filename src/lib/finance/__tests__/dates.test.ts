@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { localDay, localMonth, localTime, minutesOfDay, noonAt, shiftDay } from "../dates";
+import {
+  localDay,
+  localMonth,
+  localTime,
+  minutesOfDay,
+  monthRange,
+  noonAt,
+  shiftDay,
+  shiftMonth,
+} from "../dates";
 
 describe("localDay", () => {
   // Brasilia e UTC-3: 01h UTC ainda e o dia anterior por la.
@@ -68,5 +77,53 @@ describe("noonAt", () => {
 
   it("devolve data invalida para entrada invalida, sem lancar", () => {
     expect(Number.isNaN(noonAt("nao e data").getTime())).toBe(true);
+  });
+});
+
+describe("shiftMonth", () => {
+  it("anda para tras e para frente", () => {
+    expect(shiftMonth("2026-09", -1)).toBe("2026-08");
+    expect(shiftMonth("2026-09", 1)).toBe("2026-10");
+  });
+
+  it("vira o ano nas duas direcoes", () => {
+    expect(shiftMonth("2026-01", -1)).toBe("2025-12");
+    expect(shiftMonth("2026-12", 1)).toBe("2027-01");
+  });
+
+  it("anda varios meses de uma vez", () => {
+    expect(shiftMonth("2026-09", -12)).toBe("2025-09");
+    expect(shiftMonth("2026-09", -20)).toBe("2025-01");
+  });
+
+  it("nao cai no mes errado partindo de mes curto", () => {
+    // Somar meses a partir do dia 31 estoura para o mes seguinte em fevereiro;
+    // por isso a conta parte do meio do mes.
+    expect(shiftMonth("2026-01", 1)).toBe("2026-02");
+    expect(shiftMonth("2026-03", -1)).toBe("2026-02");
+  });
+
+  it("devolve a entrada quando ela nao e um mes", () => {
+    expect(shiftMonth("", 1)).toBe("");
+    expect(shiftMonth("nada", 1)).toBe("nada");
+  });
+});
+
+describe("monthRange", () => {
+  const hoje = new Date("2026-09-10T15:00:00Z");
+
+  it("mes fechado vai do dia 1 ao ultimo dia", () => {
+    expect(monthRange("2026-08", hoje)).toEqual({ from: "2026-08-01", to: "2026-08-31" });
+    expect(monthRange("2026-04", hoje)).toEqual({ from: "2026-04-01", to: "2026-04-30" });
+  });
+
+  it("acerta fevereiro, inclusive bissexto", () => {
+    expect(monthRange("2026-02", hoje).to).toBe("2026-02-28");
+    expect(monthRange("2024-02", hoje).to).toBe("2024-02-29");
+  });
+
+  it("o mes corrente para em hoje", () => {
+    // Prometer ate o dia 30 num mes que esta no dia 10 nao traz nada a mais.
+    expect(monthRange("2026-09", hoje)).toEqual({ from: "2026-09-01", to: "2026-09-10" });
   });
 });

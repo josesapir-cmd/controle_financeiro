@@ -4,6 +4,7 @@ import { AccountFilter } from "@/components/AccountFilter";
 import { Nav } from "@/components/Nav";
 import { TreemapCategorias } from "@/components/TreemapCategorias";
 import { Indice } from "./Indice";
+import { SpinnerDeMeses } from "./SpinnerDeMeses";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import type { CategoriaTotal, CentroTotal } from "@/lib/finance/centros";
 import { currentMonthRange } from "@/lib/finance/dates";
@@ -255,8 +256,28 @@ export default async function Categorias({
 
       <Nav atual="/categorias" contasQuery={contasQuery} />
 
+      {/* A fita fica fora dos outros controles porque no celular ela gruda no
+          alto da tela, e um `sticky` so anda dentro do proprio pai. */}
+      <div className="spinner-barra">
+        <SpinnerDeMeses from={periodo.from} to={periodo.to} queryExtra={contasQuery} />
+      </div>
+
       <div className="period-controls">
+        <AccountFilter
+          options={dados.accountOptions}
+          selected={dados.selectedAccountIds}
+          action="/categorias"
+          hidden={{ from: periodo.from, to: periodo.to }}
+        />
+
+        {/* O de/ate continua aqui, so que em segundo plano: a fita responde a
+            pergunta comum — "e neste mes?" — e este formulario responde as
+            outras, como um ano inteiro ou os dias exatos de uma viagem. */}
         <form className="range-form" method="get">
+          {/* Sem isto, escolher um periodo aqui desfazia o filtro de contas. */}
+          {dados.selectedAccountIds.length > 0 ? (
+            <input type="hidden" name="contas" value={dados.selectedAccountIds.join(",")} />
+          ) : null}
           <label>
             De <input type="date" name="from" defaultValue={periodo.from} />
           </label>
@@ -265,13 +286,6 @@ export default async function Categorias({
           </label>
           <button type="submit">Ver</button>
         </form>
-
-        <AccountFilter
-          options={dados.accountOptions}
-          selected={dados.selectedAccountIds}
-          action="/categorias"
-          hidden={{ from: periodo.from, to: periodo.to }}
-        />
       </div>
 
       <div className="tiles">

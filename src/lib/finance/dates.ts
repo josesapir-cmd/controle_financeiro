@@ -68,6 +68,36 @@ export function minutesOfDay(date: Date | string): number {
   return h * 60 + m;
 }
 
+/** Mes vizinho, deslocado em N meses. Formato AAAA-MM. */
+export function shiftMonth(month: string, delta: number): string {
+  const [ano, mes] = month.split("-").map(Number);
+  if (!ano || !mes) return month;
+
+  // Meio do mes e dia 15 as 12h UTC: somar meses a partir do dia 1 tambem
+  // funciona, mas o dia 15 sobrevive a qualquer aritmetica de fuso.
+  const base = new Date(Date.UTC(ano, mes - 1 + delta, 15, 12));
+  return base.toISOString().slice(0, 7);
+}
+
+/**
+ * Primeiro e ultimo dia de um mes AAAA-MM.
+ *
+ * O mes corrente para em hoje, nao no dia 31: pedir ate o fim de um mes que
+ * ainda nao acabou nao traz nada a mais e faz a tela prometer um periodo que
+ * nao existe.
+ */
+export function monthRange(
+  month: string,
+  today: Date = new Date(),
+): { from: string; to: string } {
+  const [ano, mes] = month.split("-").map(Number);
+  const hoje = localDay(today);
+  const from = `${month}-01`;
+  // Dia 0 do mes seguinte e o ultimo dia deste.
+  const ultimo = new Date(Date.UTC(ano, mes, 0, 12)).toISOString().slice(0, 10);
+  return { from, to: ultimo > hoje ? hoje : ultimo };
+}
+
 /** Dia vizinho, deslocado em N dias. */
 export function shiftDay(day: string, delta: number): string {
   const base = new Date(`${day}T12:00:00Z`);
