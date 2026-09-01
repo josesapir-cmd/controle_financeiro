@@ -23,9 +23,12 @@ const DIRETORIO = path.join(process.cwd(), "src", "lib", "db", "migrations");
  *
  * @param {Executor} executor
  * @param {(mensagem: string) => void} [log]
+ * @param {{ ate?: string }} [opcoes] `ate` para no arquivo indicado, inclusive.
+ *   Serve aos testes que precisam preparar o banco no estado de uma versao
+ *   antiga antes de exercitar a migracao seguinte.
  * @returns {Promise<string[]>}
  */
-export async function migrate(executor, log = () => {}) {
+export async function migrate(executor, log = () => {}, opcoes = {}) {
   await executor.unsafe(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       name       text PRIMARY KEY,
@@ -44,6 +47,7 @@ export async function migrate(executor, log = () => {}) {
 
   for (const arquivo of arquivos) {
     if (aplicadas.has(arquivo)) continue;
+    if (opcoes.ate && arquivo > opcoes.ate) break;
 
     const conteudo = await readFile(path.join(DIRETORIO, arquivo), "utf8");
     log(`aplicando ${arquivo}`);
