@@ -37,6 +37,8 @@ const ALTURA_DO_PULO = 30;
 const MIRA = 90;
 /** Movimento minimo para virar arraste em vez de toque. */
 const LIMIAR = 4;
+/** Janela entre os dois toques do duplo, em ms. */
+const DUPLO = 320;
 
 interface Arraste {
   id: string;
@@ -71,6 +73,32 @@ export function Classificador({ lancamentos, categorias }: Props) {
   const [pulou, setPulou] = useState<string | null>(null);
   const [pendente, iniciar] = useTransition();
   const origem = useRef<{ x: number; y: number; id: string } | null>(null);
+  /** Cartao em modo arrastar. So ele arrasta, e so ele trava a rolagem. */
+  const [armado, setArmado] = useState<string | null>(null);
+  /** Ultimo toque, para reconhecer o duplo. */
+  const toque = useRef<{ id: string; tempo: number } | null>(null);
+
+  // Sair do modo arrastar sem precisar acertar o cartao de novo: Esc, ou um
+  // toque em qualquer outro lugar. Um cartao que fica armado sozinho e um
+  // pedaco da tela que nao rola mais, e ninguem adivinha por que.
+  useEffect(() => {
+    if (!armado) return;
+
+    const fora = (evento: PointerEvent) => {
+      const alvo = evento.target as Element | null;
+      if (!alvo?.closest?.(`[data-lanc="${armado}"]`)) setArmado(null);
+    };
+    const tecla = (evento: KeyboardEvent) => {
+      if (evento.key === "Escape") setArmado(null);
+    };
+
+    document.addEventListener("pointerdown", fora);
+    document.addEventListener("keydown", tecla);
+    return () => {
+      document.removeEventListener("pointerdown", fora);
+      document.removeEventListener("keydown", tecla);
+    };
+  }, [armado]);
 
   const porId = new Map(categorias.map((c) => [c.id, c]));
   const emArraste = arraste ? lancamentos.find((l) => l.id === arraste.id) : undefined;
@@ -147,20 +175,49 @@ export function Classificador({ lancamentos, categorias }: Props) {
                   : categoria
                     ? "lanc-classificado"
                     : "lanc-pendente",
+                armado === lancamento.id ? "lanc-armado" : "",
                 arraste?.id === lancamento.id ? "lanc-saindo" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
               style={categoria ? ({ "--cat-h": categoria.hue } as React.CSSProperties) : undefined}
-              draggable={lancamento.classificavel}
+              data-lanc={lancamento.id}
+              draggable={lancamento.classificavel && armado === lancamento.id}
               onDragStart={(evento) => {
                 evento.dataTransfer.setData("text/plain", lancamento.id);
                 evento.dataTransfer.effectAllowed = "move";
               }}
               onPointerDown={(evento) => {
-                // So toque: no computador quem manda e o arraste do HTML5, e os
-                // dois juntos brigariam pelo mesmo gesto.
-                if (!lancamento.classificavel || evento.pointerType === "mouse") return;
+                if (!lancamento.classificavel) return;
+
+                // Toque em controle e do controle: abrir o editor ou escolher no
+                // seletor nao pode armar o arraste por baixo.
+                const alvo = evento.target as Element | null;
+                if (alvo?.closest?.("button, select, input, textarea, label, a")) return;
+
+                const agora = Date.now();
+                const anterior = toque.current;
+                const duplo =
+                  anterior && anterior.id === lancamento.id && agora - anterior.tempo < DUPLO;
+
+                if (duplo) {
+                  toque.current = null;
+                  // O duplo clique seleciona a palavra sob o cursor antes de
+                  // qualquer classe nossa valer; desfazemos na mao.
+                  evento.preventDefault();
+                  window.getSelection()?.removeAllRanges();
+                  setArmado((atual) => (atual === lancamento.id ? null : lancamento.id));
+                  return;
+                }
+
+                toque.current = { id: lancamento.id, tempo: agora };
+
+                // No computador quem arrasta e o HTML5, e os dois juntos
+                // brigariam pelo mesmo gesto.
+                if (evento.pointerType === "mouse") return;
+                // Sem armar, o cartao e so texto: a lista rola normalmente por
+                // cima dele. Era isto que estava travado antes.
+                if (armado !== lancamento.id) return;
                 // A captura NAO acontece aqui. Com o ponteiro capturado, o
                 // `click` vai para o cartao e nunca chega ao botao da etiqueta,
                 // que e justamente o que abre o editor. So capturamos quando
@@ -190,7 +247,10 @@ export function Classificador({ lancamentos, categorias }: Props) {
               }}
               onPointerUp={() => {
                 origem.current = null;
-                if (arraste?.alvo) classificar(lancamento, arraste.alvo);
+                if (arraste?.alvo) {
+                  classificar(lancamento, arraste.alvo);
+                  setArmado(null);
+                }
                 setArraste(null);
               }}
               onPointerCancel={() => {
@@ -238,7 +298,11 @@ export function Classificador({ lancamentos, categorias }: Props) {
                     </button>
                   ) : (
                     <>
-                      <span className="lanc-dica">arraste para um bloco</span>
+                      <span className="lanc-dica">
+                        {armado === lancamento.id
+                          ? "arraste para um bloco"
+                          : "toque duas vezes para arrastar"}
+                      </span>
 
                       {/* O mesmo destino, sem arrastar: no teclado esta e a
                           unica forma que funciona. So aparece enquanto o
@@ -314,6 +378,7 @@ export function Classificador({ lancamentos, categorias }: Props) {
                 const id = evento.dataTransfer.getData("text/plain");
                 const lancamento = lancamentos.find((l) => l.id === id);
                 if (lancamento) classificar(lancamento, categoria.id);
+                setArmado(null);
               }}
             >
               <span className="bloco-bolha" aria-hidden />

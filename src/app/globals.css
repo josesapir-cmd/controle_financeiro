@@ -76,6 +76,9 @@
   --shadow-md: 0 16px 32px -12px rgba(14, 18, 27, 0.1);
 
   --sidebar: 272px;
+  /* Altura util da barra inferior do celular: 6px + 44px de alvo + 6px, mais a
+     area de seguranca do iPhone. O dock de categorias se apoia nela. */
+  --nav-mobile: calc(56px + env(safe-area-inset-bottom));
 
   /* O recuo dentro do var() e obrigatorio: `var(--x)` com --x indefinida
      invalida a declaracao inteira, e a pagina cai em serif. Acontece se o
@@ -2581,17 +2584,33 @@ ul.cat-linhas {
   box-shadow: var(--shadow-xs);
 }
 
-/* Todo cartao que pede categoria e o gesto — o ja classificado tambem, porque
-   recategorizar e arrastar de novo. Sem `touch-action: none` o navegador leva o
-   toque para a rolagem e o arraste so comecaria depois de segurar o dedo. */
+/* O cartao NAO trava a rolagem por padrao. `touch-action: none` em todo cartao
+   que pede categoria transformava a lista inteira em area morta: o dedo
+   pousava num cartao e a pagina parava de rolar. Agora so o cartao armado
+   trava, e um cartao de cada vez. */
 .lanc-pendente,
 .lanc-classificado {
-  cursor: grab;
-  touch-action: none;
+  cursor: pointer;
+  /* Rola normalmente, mas sem o zoom de duplo toque do iOS — o duplo toque aqui
+     e o que arma o arraste, e nao pode virar zoom. */
+  touch-action: manipulation;
 }
 
-.lanc-pendente:active,
-.lanc-classificado:active {
+/* Modo arrastar, ligado pelo duplo clique ou duplo toque. Aqui sim o gesto e do
+   cartao: nada de rolagem por cima dele, nada de selecao de texto no meio do
+   arraste. O contorno existe para o modo ser visivel — um estado que muda o que
+   o dedo faz e nao aparece na tela e uma armadilha. */
+.lanc-armado {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.lanc-armado:active {
   cursor: grabbing;
 }
 
@@ -3050,18 +3069,22 @@ ul.cat-linhas {
     /* `top` vem da regra base, onde a coluna gruda no alto; aqui o dock gruda
        embaixo, e as duas ancoras juntas anulam o grude. */
     top: auto;
-    bottom: 42px;
+    /* Acima da barra inferior, com folga. Em 42px o dock ficava atras dela: a
+       barra tem 56px mais a area de seguranca. */
+    bottom: calc(var(--nav-mobile) + 8px);
     z-index: 20;
     display: flex;
     /* Tambem da base: sem isto os ladrilhos continuam empilhados em coluna. */
     flex-direction: row;
-    gap: 6px;
+    gap: 4px;
     order: 2;
     /* O dock nunca rola sozinho: a base limita a altura para a coluna grudada
        do computador, e aqui isso cortaria a ampliacao dos ladrilhos. */
     max-height: none;
     overflow: visible;
-    margin: 18px 0 42px;
+    /* A margem de baixo reserva no fluxo o espaco que o dock ocupa grudado,
+       senao o ultimo cartao da lista fica embaixo dele. */
+    margin: 18px 0 calc(var(--nav-mobile) + 8px);
     padding: 8px 10px;
     background: rgba(255, 255, 255, 0.82);
     backdrop-filter: blur(18px);
@@ -3072,6 +3095,9 @@ ul.cat-linhas {
 
   .bloco {
     flex: 1;
+    /* Sem isto o ladrilho nao encolhe abaixo do proprio icone: dez categorias
+       somavam mais que a largura da tela e a ultima ficava cortada. */
+    min-width: 0;
     height: 46px;
     padding: 0;
     align-items: center;
@@ -3097,6 +3123,14 @@ ul.cat-linhas {
 
   .bloco-topo {
     gap: 0;
+  }
+
+  /* O icone encolhe junto com o ladrilho: em 30px, dez deles nao cabem em
+     390px de tela. A mira do arraste pega a celula mais proxima num raio de
+     90px, entao o alvo continua alcancavel com folga. */
+  .bloco svg {
+    width: 26px;
+    height: 26px;
   }
 
   /* No ladrilho so cabe o icone: o nome aparece na pilula do alvo durante o
