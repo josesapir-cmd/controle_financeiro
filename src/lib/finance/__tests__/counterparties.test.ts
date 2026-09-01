@@ -8,6 +8,7 @@ import {
   maskDocument,
   nameFromDescription,
   NAO_IDENTIFICADA,
+  chaveIdentificada,
 } from "../counterparties";
 
 const MEU_CPF = { type: "CPF", value: "136.557.127-07" };
@@ -301,5 +302,25 @@ describe("nome oficial e apelido", () => {
 
     expect(c.officialName).toBe("HOTEL FAZENDA CASCATINHA LTDA");
     expect(c.count).toBe(2);
+  });
+});
+
+describe("chaveIdentificada", () => {
+  it("deixa passar a chave de quem foi identificado", () => {
+    expect(chaveIdentificada("12345678901")).toBe("12345678901");
+  });
+
+  it("recusa o balde dos nao identificados", () => {
+    // O balde junta todo Pix que chegou sem nome e sem documento. Deixa-lo
+    // passar faria a tela dizer "40 lancamentos" para quarenta pessoas
+    // diferentes, e espalharia para as outras trinta e nove a categoria
+    // decidida em uma delas.
+    expect(chaveIdentificada(NAO_IDENTIFICADA)).toBeNull();
+  });
+
+  it("recusa ausencia e vazio", () => {
+    expect(chaveIdentificada(null)).toBeNull();
+    expect(chaveIdentificada(undefined)).toBeNull();
+    expect(chaveIdentificada("")).toBeNull();
   });
 });

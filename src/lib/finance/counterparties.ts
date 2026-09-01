@@ -43,6 +43,19 @@ export interface Counterparty {
 
 export const NAO_IDENTIFICADA = "__nao_identificada__";
 
+/**
+ * A chave, quando ela identifica alguem de fato.
+ *
+ * `NAO_IDENTIFICADA` e um balde, nao uma contraparte: cabe nele todo Pix que
+ * chegou sem nome e sem documento. Tratar o balde como contraparte faz duas
+ * coisas erradas — diz "40 lancamentos" para quarenta pessoas diferentes, e
+ * espalha para as outras trinta e nove a categoria decidida numa delas. Quem
+ * for herdar rotulo ou contar frequencia passa por aqui antes.
+ */
+export function chaveIdentificada(key: string | null | undefined): string | null {
+  return key && key !== NAO_IDENTIFICADA ? key : null;
+}
+
 function digits(value: string | null | undefined): string {
   return (value ?? "").replace(/\D/g, "");
 }

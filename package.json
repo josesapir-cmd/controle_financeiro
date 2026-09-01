@@ -17,7 +17,8 @@
     "diagnostico": "node scripts/diagnostico.mjs",
     "corrigir-contas": "node scripts/corrigir-contas.mjs",
     "conta": "node scripts/conta.mjs",
-    "apagar-conta": "node scripts/apagar-conta.mjs"
+    "apagar-conta": "node scripts/apagar-conta.mjs",
+    "pix": "node scripts/inspecionar-pix.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

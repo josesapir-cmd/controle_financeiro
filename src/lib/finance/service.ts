@@ -33,6 +33,7 @@ import {
 } from "./conciliacao";
 import {
   aggregateCounterparties,
+  chaveIdentificada,
   type CounterpartyRegistry,
   type CounterpartyTotal,
 } from "./counterparties";
@@ -804,7 +805,7 @@ export async function loadClassificacaoDoDia(
 
   const frequencia = new Map<string, number>();
   for (const t of conciliado.transacoes) {
-    const chave = t.counterparty?.key;
+    const chave = chaveIdentificada(t.counterparty?.key);
     if (chave) frequencia.set(chave, (frequencia.get(chave) ?? 0) + 1);
   }
 
@@ -826,7 +827,8 @@ export async function loadClassificacaoDoDia(
       };
     }
 
-    const cadastroDaParte = t.counterparty?.key ? cadastro[t.counterparty.key] : undefined;
+    const chave = chaveIdentificada(t.counterparty?.key);
+    const cadastroDaParte = chave ? cadastro[chave] : undefined;
     if (!cadastroDaParte?.category) {
       return {
         categoriaId: null,
@@ -848,7 +850,7 @@ export async function loadClassificacaoDoDia(
   // mais que "PIX para MARIA DA SILVA SANTOS", e o nome do extrato continua
   // guardado na contraparte, que e quem identifica e concilia.
   const nomeDaParte = (t: Transaction): string | null => {
-    const chave = t.counterparty?.key;
+    const chave = chaveIdentificada(t.counterparty?.key);
     return (chave ? cadastro[chave]?.alias : null) || t.counterparty?.name || null;
   };
 
@@ -859,8 +861,8 @@ export async function loadClassificacaoDoDia(
     valor: t.amount,
     conta: nomeDaConta[t.accountId] ?? "",
     contraparte: nomeDaParte(t),
-    contraparteKey: t.counterparty?.key ?? null,
-    frequencia: t.counterparty?.key ? (frequencia.get(t.counterparty.key) ?? 1) : 1,
+    contraparteKey: chaveIdentificada(t.counterparty?.key),
+    frequencia: frequencia.get(chaveIdentificada(t.counterparty?.key) ?? "") ?? 1,
     ...resolver(t),
   }));
 
