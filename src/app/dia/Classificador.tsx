@@ -216,8 +216,8 @@ export function Classificador({
           // `jogo=1` viaja junto: sem ele, trocar de dia dentro do jogo
           // devolveria a lista em vez de continuar classificando.
           queryExtra={[queryExtra, "jogo=1"].filter(Boolean).join("&")}
-          onClassificar={(lancamento, categoriaId, subcategoria) =>
-            classificar(lancamento, categoriaId, false, subcategoria)
+          onClassificar={(lancamento, categoriaId, subcategoria, aContraparteToda) =>
+            classificar(lancamento, categoriaId, aContraparteToda ?? false, subcategoria)
           }
           onFechar={() => setJogando(false)}
         />

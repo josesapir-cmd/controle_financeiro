@@ -22,23 +22,46 @@ const LEGENDA: Record<SituacaoDoDia, string> = {
  * do servidor, o que se veria seria um salto, nao um deslize.
  */
 
-/** Ate 20 dias atras; dois dias a frente entram so como contexto. */
-const PASSADO = 20;
+/** Quantos dias a fita monta de saida, e quantos ela ganha ao chegar na ponta. */
+const PASSADO_INICIAL = 30;
+const CRESCIMENTO = 30;
+/** Chegando a esta distancia da ponta esquerda, a fita cresce. */
+const MARGEM = 6;
+/** Dois dias a frente entram so como contexto. */
 const FUTURO = 2;
 const LARGURA = 70;
 /** Abaixo disso o ponteiro andou de menos para ser arraste: e clique. */
 const LIMIAR = 4;
 
-const DIA_MES = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" });
-const SEMANA = new Intl.DateTimeFormat("pt-BR", { weekday: "short" });
+const MES_CURTO = new Intl.DateTimeFormat("pt-BR", { month: "short", timeZone: "UTC" });
+const SEMANA = new Intl.DateTimeFormat("pt-BR", { weekday: "short", timeZone: "UTC" });
+
+/** As contas selecionadas, tiradas da query que a fita ja carrega. */
+function contasDaQuery(query: string): string[] {
+  const valor = new URLSearchParams(query).get("contas");
+  return valor ? valor.split(",").filter(Boolean) : [];
+}
 
 /** Meio-dia UTC: longe das duas viradas, entao o rotulo nunca cai no dia errado. */
 function comoData(dia: string): Date {
   return new Date(`${dia}T12:00:00Z`);
 }
 
-function rotulo(formatador: Intl.DateTimeFormat, data: Date): string {
-  return formatador.format(data).replace(".", "");
+/**
+ * "13/ago", montado a mao.
+ *
+ * `Intl` com dia e mes juntos devolve "13 de ago." em pt-BR, que nao cabe nos
+ * 70px da celula e quebra em duas linhas. So o mes vem do `Intl`, que e o unico
+ * pedaco que depende do idioma.
+ */
+function rotuloDoDia(dia: string): string {
+  const data = comoData(dia);
+  const mes = MES_CURTO.format(data).replace(".", "");
+  return `${String(data.getUTCDate()).padStart(2, "0")}/${mes}`;
+}
+
+function rotuloDaSemana(dia: string): string {
+  return SEMANA.format(comoData(dia)).replace(".", "").slice(0, 3);
 }
 
 export function SpinnerDeDatas({
@@ -64,6 +87,9 @@ export function SpinnerDeDatas({
   const router = useRouter();
   const [, iniciar] = useTransition();
   const trilho = useRef<HTMLDivElement>(null);
+  // Sem bolinha nenhuma na primeira pintura, quem chamou nao quer bolinhas: nao
+  // ha por que ir buscar as dos trechos seguintes.
+  const temSituacoes = Object.keys(situacoes).length > 0;
 
   const [selecionado, setSelecionado] = useState(dia);
   useEffect(() => setSelecionado(dia), [dia]);
@@ -79,10 +105,24 @@ export function SpinnerDeDatas({
   const andou = useRef(0);
 
   const hoje = localDay(new Date());
+
+  /**
+   * Ate onde a fita vai para tras. Cresce ao se chegar perto da ponta, entao
+   * andar para o passado nunca esbarra num fim — e o fim, quando existia, nao
+   * dizia "acabou o historico", dizia "acabou o que eu montei".
+   */
+  const [passado, setPassado] = useState(PASSADO_INICIAL);
+  /** Bolinhas dos trechos que a fita foi buscar depois da primeira pintura. */
+  const [situacoesExtras, setSituacoesExtras] = useState<Record<string, SituacaoDoDia>>({});
+  /** Ate onde ja pedimos, para nao pedir o mesmo trecho duas vezes. */
+  const carregado = useRef<string | null>(null);
+
   // A lista e ancorada em HOJE, nao no dia selecionado: assim o limite direito e
-  // sempre o mesmo lugar e a fita nao se reconstroi a cada navegacao.
-  const dias = Array.from({ length: PASSADO + FUTURO + 1 }, (_, i) =>
-    shiftDay(hoje, i - PASSADO),
+  // sempre o mesmo lugar e a fita nao se reconstroi a cada navegacao. Crescer
+  // para tras tambem nao desloca nada na tela, porque o deslocamento e contado
+  // a partir do indice, que cresce junto.
+  const dias = Array.from({ length: passado + FUTURO + 1 }, (_, i) =>
+    shiftDay(hoje, i - passado),
   );
   const indice = Math.max(0, dias.indexOf(selecionado));
   const noLimitePassado = indice <= 0;
@@ -129,6 +169,45 @@ export function SpinnerDeDatas({
 
   /** Deslocamento aplicado a fita, ja somado ao arraste em curso. */
   const eixo = navegacaoPorTeclado ? Math.max(0, dias.indexOf(focado)) : indice;
+
+  // Perto da ponta, a fita ganha mais um mes. Vale para as tres formas de
+  // andar — clique, arraste e teclado — porque todas passam por aqui.
+  useEffect(() => {
+    if (eixo <= MARGEM) setPassado((atual) => atual + CRESCIMENTO);
+  }, [eixo]);
+
+  // As bolinhas do trecho novo vem do servidor. Sem elas o passado distante
+  // apareceria todo sem marca, que a fita leria como "ainda nao recebido" — a
+  // resposta errada, e justamente para os dias que ja foram fechados.
+  useEffect(() => {
+    if (!temSituacoes) return;
+
+    const inicio = dias[0];
+    if (!inicio || carregado.current === inicio) return;
+    carregado.current = inicio;
+
+    const fim = shiftDay(hoje, -PASSADO_INICIAL);
+    if (inicio >= fim) return;
+
+    const busca = new URLSearchParams({ de: inicio, ate: fim });
+    for (const conta of contasDaQuery(queryExtra)) busca.append("contas", conta);
+
+    let cancelado = false;
+    fetch(`/api/situacao?${busca}`)
+      .then((resposta) => (resposta.ok ? resposta.json() : null))
+      .then((corpo) => {
+        if (cancelado || !corpo?.dias) return;
+        setSituacoesExtras((atuais) => ({ ...corpo.dias, ...atuais }));
+      })
+      .catch(() => {
+        // Bolinha que nao chegou nao vale um erro na tela: a fita continua
+        // navegavel sem ela.
+      });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [dias[0], temSituacoes, hoje, queryExtra]);
   const deslocamento = eixo * LARGURA + LARGURA / 2 - (puxando?.dx ?? 0);
 
   return (
@@ -192,8 +271,7 @@ export function SpinnerDeDatas({
             const atual = valor === selecionado;
             const marcado = navegacaoPorTeclado && valor === focado;
             const futuro = valor > hoje;
-            const data = comoData(valor);
-            const situacao = situacoes[valor];
+            const situacao = situacoes[valor] ?? situacoesExtras[valor];
 
             return (
               <button
@@ -224,8 +302,8 @@ export function SpinnerDeDatas({
                   } as React.CSSProperties
                 }
               >
-                <span className="spinner-data">{rotulo(DIA_MES, data)}</span>
-                <span className="spinner-semana">{rotulo(SEMANA, data).slice(0, 3)}</span>
+                <span className="spinner-data">{rotuloDoDia(valor)}</span>
+                <span className="spinner-semana">{rotuloDaSemana(valor)}</span>
                 {situacao ? (
                   <span
                     className={`spinner-bolha ${situacao}`}

@@ -197,3 +197,34 @@ describe("o nome de origem pode ser outro", () => {
     expect(rotulo.category).toBe("Compras");
   });
 });
+
+describe("ordem da bussola", () => {
+  it("Saude e Educacao ficam por ultimo, na segunda volta", async () => {
+    // A bussola tem oito lugares; da nona em diante custa um `tab`. Quem paga
+    // esse preco tem de ser o gasto raro.
+    await migrate(executor);
+
+    const despesas = (await listCategorias(db)).filter((c) => c.kind === "despesa");
+    expect(despesas.slice(-2).map((c) => c.name)).toEqual(["Saude", "Educacao"]);
+  });
+
+  it("as quatro primeiras sao as do dia a dia, que ganham as setas retas", async () => {
+    await migrate(executor);
+
+    const despesas = (await listCategorias(db)).filter((c) => c.kind === "despesa");
+    expect(despesas.slice(0, 4).map((c) => c.name)).toEqual([
+      "Moradia",
+      "Servicos domesticos",
+      "Alimentacao",
+      "Transporte",
+    ]);
+  });
+
+  it("nenhuma categoria de despesa fica sem lugar", async () => {
+    await migrate(executor);
+
+    const despesas = (await listCategorias(db)).filter((c) => c.kind === "despesa");
+    expect(despesas).toHaveLength(10);
+    expect(new Set(despesas.map((c) => c.position)).size).toBe(10);
+  });
+});

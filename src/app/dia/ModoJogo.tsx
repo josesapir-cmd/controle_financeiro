@@ -74,6 +74,8 @@ interface Props {
     lancamento: LancamentoParaClassificar,
     categoriaId: string,
     subcategoria?: string,
+    /** Vale para toda a contraparte, e nao so para este lancamento. */
+    aContraparteToda?: boolean,
   ) => void;
   onFechar: () => void;
 }
@@ -116,6 +118,8 @@ export function ModoJogo({
   const [informando, setInformando] = useState(false);
   /** Categoria que acabou de receber um cartao, para o baque de chegada. */
   const [recebeu, setRecebeu] = useState<Direcao | null>(null);
+  /** Recado de uma classificacao que passou de um lancamento so. */
+  const [aviso, setAviso] = useState<string | null>(null);
 
   /** Setas pressionadas neste instante, para reconhecer a diagonal. */
   const teclas = useRef(new Set<string>());
@@ -212,12 +216,26 @@ export function ModoJogo({
     window.setTimeout(() => setRecebeu(null), VOO + 180);
   }
 
-  function classificar() {
+  /**
+   * @param aContraparteToda Shift junto do enter: a categoria passa a valer
+   * para todo lancamento da mesma origem, passado e futuro. E o mesmo que o
+   * Ctrl faz ao soltar um cartao na lista.
+   */
+  function classificar(aContraparteToda = false) {
     if (!atual || !escolhida || !direcao) return;
 
     levantarVoo(atual, direcao, escolhida.hue);
-    onClassificar(atual, escolhida.id, subcategoria ?? undefined);
+    onClassificar(atual, escolhida.id, subcategoria ?? undefined, aContraparteToda);
     setDespachados((atuais) => new Set(atuais).add(atual.id));
+
+    if (aContraparteToda) {
+      // Uma regra que muda o historico inteiro nao acontece em silencio, ainda
+      // mais aqui, onde a proxima despesa ja tomou a tela.
+      const alvo = atual.alvoDaRegra ?? "esta contraparte";
+      setAviso(`${escolhida.name} vale agora para tudo de ${alvo}`);
+      window.setTimeout(() => setAviso(null), 4000);
+    }
+
     limparMira();
     // Sem mexer no indice: a despesa sai da fila e a seguinte assume o lugar.
     // Avancar tambem pularia uma.
@@ -249,7 +267,9 @@ export function ModoJogo({
 
       if (evento.key === "Enter") {
         evento.preventDefault();
-        classificar();
+        // Shift so vale com contraparte identificada: sem ela nao ha o que
+        // generalizar, e o enter comum e o que acontece.
+        classificar(evento.shiftKey && Boolean(atual.contraparteKey));
         return;
       }
 
@@ -361,11 +381,19 @@ export function ModoJogo({
       // O que esta no campo vence: o completado ja esta la, e a seta tambem
       // escreve nele. Nao ha um segundo lugar de onde tirar a escolha.
       const escolha = (subcategoria ?? "").trim();
+      const aTodos = evento.shiftKey && Boolean(atual?.contraparteKey);
 
       if (!atual || !escolhida || !direcao) return;
       levantarVoo(atual, direcao, escolhida.hue);
-      onClassificar(atual, escolhida.id, escolha || undefined);
+      onClassificar(atual, escolhida.id, escolha || undefined, aTodos);
       setDespachados((atuais) => new Set(atuais).add(atual.id));
+
+      if (aTodos) {
+        const alvo = atual.alvoDaRegra ?? "esta contraparte";
+        setAviso(`${escolhida.name} vale agora para tudo de ${alvo}`);
+        window.setTimeout(() => setAviso(null), 4000);
+      }
+
       limparMira();
       caixa.current?.focus();
     }
@@ -531,7 +559,7 @@ export function ModoJogo({
                     type="button"
                     className="jogo-confirmar"
                     disabled={!escolhida}
-                    onClick={classificar}
+                    onClick={() => classificar()}
                   >
                     {escolhida ? `${escolhida.name} · enter` : "escolha uma direcao"}
                   </button>
@@ -559,10 +587,17 @@ export function ModoJogo({
               </dl>
             ) : null}
 
+            {aviso ? (
+              <p className="jogo-aviso" role="status">
+                {aviso}
+              </p>
+            ) : null}
+
             <div className="jogo-rodape">
               <span className="account-meta">
-                setas miram · duas juntas fazem a diagonal · enter classifica · espaco abre a
-                subcategoria · i mostra o que se sabe · backspace pula
+                setas miram · duas juntas fazem a diagonal · enter classifica · shift+enter vale
+                para toda a contraparte · espaco abre a subcategoria · i mostra o que se sabe ·
+                backspace pula
                 {paginas > 1 ? ` · tab troca de volta (${pagina + 1}/${paginas})` : ""}
               </span>
               <button type="button" className="jogo-pular" onClick={avancar}>
