@@ -3694,3 +3694,294 @@ ul.produtos {
     white-space: nowrap;
   }
 }
+
+/* ==========================================================================
+   Modo jogo — classificar no teclado
+   A despesa no centro, as categorias em volta, sempre nos mesmos lugares. A
+   grade e 3x3 de proposito: e o mesmo desenho das oito direcoes das setas, e
+   e o que faz a posicao na tela ser a posicao na mao.
+   ========================================================================== */
+.jogo-abrir {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--primary);
+  background: var(--bg-white);
+  border: 1px dashed color-mix(in oklab, var(--primary) 45%, var(--stroke-soft));
+  border-radius: var(--radius);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.jogo-abrir:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--primary) 6%, var(--bg-white));
+}
+
+.jogo-abrir-conta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--bg-white);
+  background: var(--primary);
+  border-radius: 999px;
+}
+
+.jogo-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(14, 18, 27, 0.55);
+  backdrop-filter: blur(6px);
+}
+
+.jogo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(760px, 100%);
+  max-height: 100%;
+  padding: 18px;
+  overflow: auto;
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 32px 64px -24px rgba(14, 18, 27, 0.5);
+}
+
+.jogo:focus {
+  outline: none;
+}
+
+.jogo-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.jogo-contador {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-sub);
+}
+
+.jogo-sair,
+.jogo-pular {
+  height: auto;
+  padding: 2px 6px;
+  font-size: 12px;
+  color: var(--text-soft);
+  background: none;
+  border: none;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.jogo-sair:hover:not(:disabled),
+.jogo-pular:hover:not(:disabled) {
+  color: var(--text-strong);
+  background: none;
+}
+
+.jogo-grade {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, minmax(84px, auto));
+  gap: 8px;
+}
+
+/* As oito posicoes sao nomeadas, nao ordenadas: assim a ordem no HTML pode
+   seguir a importancia da categoria sem mexer no desenho. */
+.jogo-NW { grid-area: 1 / 1; }
+.jogo-N  { grid-area: 1 / 2; }
+.jogo-NE { grid-area: 1 / 3; }
+.jogo-W  { grid-area: 2 / 1; }
+.jogo-centro { grid-area: 2 / 2; }
+.jogo-E  { grid-area: 2 / 3; }
+.jogo-SW { grid-area: 3 / 1; }
+.jogo-S  { grid-area: 3 / 2; }
+.jogo-SE { grid-area: 3 / 3; }
+
+.jogo-alvo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  padding: 10px 8px;
+  color: var(--cat-fg);
+  background: var(--cat-tint);
+  border: 1px solid var(--cat-border);
+  border-radius: var(--radius);
+  box-shadow: none;
+  cursor: pointer;
+  transition: transform 110ms ease-out, background 140ms ease, color 140ms ease;
+}
+
+.jogo-alvo:hover:not(:disabled) {
+  background: var(--cat-recuado);
+}
+
+/* Acesa: cor cheia. E a unica saturada da grade, entao se le como "e esta" sem
+   precisar de outra marca — e a forma tambem muda, pelo contorno. */
+.jogo-alvo.aceso {
+  color: #ffffff;
+  background: var(--cat-base);
+  border-color: transparent;
+  outline: 3px solid var(--cat-strong);
+  outline-offset: 2px;
+  transform: scale(1.04);
+}
+
+.jogo-nome {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.jogo-seta {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.65;
+}
+
+.jogo-vazio {
+  border: 1px dashed var(--stroke-soft);
+  border-radius: var(--radius);
+}
+
+.jogo-centro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 14px 12px;
+  text-align: center;
+  background: var(--bg-weak);
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius);
+}
+
+.jogo-hora {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+}
+
+.jogo-desc {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text-strong);
+}
+
+.jogo-valor {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--error-dark);
+}
+
+.jogo-confirmar {
+  width: 100%;
+  height: 34px;
+  margin-top: 8px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #ffffff;
+  background: var(--cat-base, var(--primary));
+  border: none;
+}
+
+.jogo-confirmar:disabled {
+  color: var(--text-soft);
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-soft);
+}
+
+.jogo-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.jogo-fim {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 12px;
+  text-align: center;
+}
+
+/* Quem pediu menos movimento nao recebe o pulo da celula acesa. */
+@media (prefers-reduced-motion: reduce) {
+  .jogo-alvo {
+    transition: none;
+  }
+
+  .jogo-alvo.aceso {
+    transform: none;
+  }
+}
+
+/* Numa tela de 390px a grade de tres colunas espreme o nome ate sumir. As
+   categorias viram duas colunas e a despesa vai para cima delas: sem teclado,
+   a posicao nao carrega significado nenhum, e o que sobra e a lista. */
+@media (max-width: 720px) {
+  .jogo-grade {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: none;
+  }
+
+  .jogo-NW, .jogo-N, .jogo-NE, .jogo-W, .jogo-E, .jogo-SW, .jogo-S, .jogo-SE,
+  .jogo-centro, .jogo-vazio {
+    grid-area: auto;
+  }
+
+  .jogo-centro {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+
+  .jogo-seta {
+    display: none;
+  }
+}
+
+/* Sem teclado nao ha o que explicar sobre setas. */
+@media (pointer: coarse) {
+  .jogo-rodape .account-meta {
+    display: none;
+  }
+
+  .jogo-rodape {
+    justify-content: flex-end;
+  }
+}

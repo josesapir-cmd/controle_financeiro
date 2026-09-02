@@ -8,6 +8,7 @@ import type {
   CategoriaParaClassificar,
   LancamentoParaClassificar,
 } from "@/lib/finance/service";
+import { ModoJogo } from "./ModoJogo";
 import { classificarLancamento, limparLancamento } from "./actions";
 
 /**
@@ -79,6 +80,10 @@ export function Classificador({ lancamentos, categorias }: Props) {
   const toque = useRef<{ id: string; tempo: number } | null>(null);
   /** Recado de uma classificacao que passou de um lancamento so. */
   const [aviso, setAviso] = useState<string | null>(null);
+  const [jogando, setJogando] = useState(false);
+
+  /** O que o modo jogo despacha: so o que ainda pede categoria. */
+  const semCategoria = lancamentos.filter((l) => l.classificavel && !l.categoriaId);
 
   // Sair do modo arrastar sem precisar acertar o cartao de novo: Esc, ou um
   // toque em qualquer outro lugar. Um cartao que fica armado sozinho e um
@@ -183,7 +188,23 @@ export function Classificador({ lancamentos, categorias }: Props) {
 
   return (
     <div className="classificador" ref={container}>
+      {jogando ? (
+        <ModoJogo
+          lancamentos={semCategoria}
+          categorias={categorias}
+          onClassificar={(lancamento, categoriaId) => classificar(lancamento, categoriaId)}
+          onFechar={() => setJogando(false)}
+        />
+      ) : null}
+
       <div className="classificador-lista">
+        {semCategoria.length > 0 && categorias.length > 0 ? (
+          <button type="button" className="jogo-abrir" onClick={() => setJogando(true)}>
+            Classificar no teclado
+            <span className="jogo-abrir-conta">{semCategoria.length}</span>
+          </button>
+        ) : null}
+
         {lancamentos.length === 0 ? (
           <p className="empty">Nenhum lancamento neste dia.</p>
         ) : null}
