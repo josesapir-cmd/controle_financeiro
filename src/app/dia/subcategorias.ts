@@ -36,3 +36,29 @@ export function filtrarSubcategorias(
 
   return [...comeca, ...contem];
 }
+
+/**
+ * O nome que o campo completa sozinho enquanto se digita.
+ *
+ * So prefixo, nunca "contem": completar "vi" para "Servico de vidro" trocaria o
+ * que a pessoa esta escrevendo por outra coisa no meio da digitacao. Quem quer
+ * um nome que so contem o texto chega nele pelas setas.
+ *
+ * O nome completo vence o digitado inclusive no acento: digitar "fe" completa
+ * para "Ferias" com o acento que o cadastro tem, porque e aquele registro que
+ * vai ser usado, nao um homonimo sem acento.
+ */
+export function completarSubcategoria(
+  centros: { name: string }[],
+  digitado: string,
+): string | null {
+  const alvo = comparavel(digitado);
+  if (!alvo) return null;
+
+  const achado = centros.find((centro) => {
+    const nome = comparavel(centro.name);
+    return nome.startsWith(alvo) && nome.length > alvo.length;
+  });
+
+  return achado?.name ?? null;
+}

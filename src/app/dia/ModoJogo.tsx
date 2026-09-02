@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IconeDeCategoria } from "@/components/IconeDeCategoria";
 import { formatBRL } from "@/lib/finance/money";
 import type {
@@ -10,7 +10,7 @@ import type {
 import type { SituacaoDoDia } from "@/lib/finance/situacao";
 import { PREENCHIMENTO, POR_VOLTA, SETA, direcaoDasTeclas, type Direcao } from "./bussola";
 import { SpinnerDeDatas } from "./SpinnerDeDatas";
-import { filtrarSubcategorias } from "./subcategorias";
+import { completarSubcategoria, filtrarSubcategorias } from "./subcategorias";
 
 /**
  * Classificar no teclado, uma despesa por vez.
@@ -25,6 +25,24 @@ import { filtrarSubcategorias } from "./subcategorias";
  * num teclado, e inventar atalho de letra para elas perderia justamente o que
  * faz isto funcionar: a posicao na tela ser a posicao na mao.
  */
+
+const DIA_EXTENSO = new Intl.DateTimeFormat("pt-BR", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+});
+
+/**
+ * "Segunda-feira, 2 de setembro".
+ *
+ * Meio-dia UTC e fuso fixo: o rotulo nao pode cair no dia anterior por causa da
+ * hora em que a pagina foi aberta.
+ */
+function diaPorExtenso(dia: string): string {
+  const texto = DIA_EXTENSO.format(new Date(`${dia}T12:00:00Z`));
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
 
 /** Duracao do voo do cartao ate a categoria, em ms. */
 const VOO = 420;
@@ -81,9 +99,18 @@ export function ModoJogo({
    * proxima aparecer no mesmo quadro.
    */
   const [despachados, setDespachados] = useState<ReadonlySet<string>>(new Set());
-  /** Texto digitado no campo de subcategoria. `null` quando ele esta fechado. */
+  /** Valor do campo de subcategoria. `null` quando ele esta fechado. */
   const [subcategoria, setSubcategoria] = useState<string | null>(null);
+  /**
+   * O que a pessoa realmente digitou, sem a parte que o campo completou.
+   *
+   * Filtrar pelo valor do campo faria o completado virar entrada na tecla
+   * seguinte, e a lista de alternativas encolheria para uma so.
+   */
+  const [digitado, setDigitado] = useState("");
   const [sugestao, setSugestao] = useState(0);
+  /** Trecho a selecionar depois do render, para o completado sair na proxima tecla. */
+  const selecao = useRef<[number, number] | null>(null);
   const [voo, setVoo] = useState<Voo | null>(null);
   /** Painel com tudo o que se sabe da despesa, aberto pela tecla `i`. */
   const [informando, setInformando] = useState(false);
@@ -98,16 +125,15 @@ export function ModoJogo({
   const campo = useRef<HTMLInputElement>(null);
 
   /**
-   * A bussola e fixa durante a sessao inteira.
+   * A bussola nao se reordena. Nunca.
    *
-   * A ordem sai do quanto cada categoria ja foi usada no mes, calculada UMA vez:
-   * reordenar a cada despesa jogaria fora a memoria muscular, que e a unica
-   * razao de isto ser mais rapido que arrastar.
+   * A ordem e a das categorias no cadastro (`position`), que e estavel entre
+   * sessoes, entre meses e entre maquinas. A primeira versao ordenava pelo uso
+   * no mes, e era pior de um jeito que so aparece com o tempo: a posicao mudava
+   * sozinha conforme o mes andava, e a memoria muscular — a unica razao de isto
+   * ser mais rapido que arrastar — nunca chegava a se formar.
    */
-  const bussola = useMemo(
-    () => [...categorias].sort((a, b) => b.noMes - a.noMes || a.name.localeCompare(b.name, "pt-BR")),
-    [categorias],
-  );
+  const bussola = categorias;
 
   const paginas = Math.max(1, Math.ceil(bussola.length / POR_VOLTA));
   const daVolta = bussola.slice(pagina * POR_VOLTA, pagina * POR_VOLTA + POR_VOLTA);
@@ -120,7 +146,7 @@ export function ModoJogo({
   const atual = fila.length ? fila[indice % fila.length] : undefined;
   const escolhida = direcao ? porDirecao.get(direcao) : undefined;
 
-  const opcoes = escolhida ? filtrarSubcategorias(escolhida.centros, subcategoria ?? "") : [];
+  const opcoes = escolhida ? filtrarSubcategorias(escolhida.centros, digitado) : [];
 
   // Foco na caixa: sem ele as setas rolariam a pagina de fundo em vez de mirar.
   useEffect(() => {
@@ -131,9 +157,19 @@ export function ModoJogo({
     if (subcategoria !== null) campo.current?.focus();
   }, [subcategoria !== null]);
 
+  // A selecao do trecho completado so pode ser feita depois que o valor novo
+  // esta no campo — antes disso os indices apontam para o texto velho.
+  useEffect(() => {
+    const alvo = selecao.current;
+    if (!alvo || !campo.current) return;
+    selecao.current = null;
+    campo.current.setSelectionRange(alvo[0], alvo[1]);
+  });
+
   function limparMira() {
     setDirecao(null);
     setSubcategoria(null);
+    setDigitado("");
     // O painel e sobre AQUELA despesa: deixa-lo aberto mostraria os dados de
     // uma e o cartao de outra.
     setInformando(false);
@@ -223,6 +259,7 @@ export function ModoJogo({
         evento.preventDefault();
         if (escolhida) {
           setSugestao(0);
+          setDigitado("");
           setSubcategoria("");
         }
         return;
@@ -267,38 +304,70 @@ export function ModoJogo({
     };
   });
 
+  /**
+   * O campo completa sozinho enquanto se digita.
+   *
+   * Digitou "vi", o campo fica "Viagem Bariloche" com "agem Bariloche"
+   * selecionado: a proxima tecla substitui o completado, e o enter aceita o que
+   * esta la. E o comportamento que o navegador ja faz em campo de endereco, e a
+   * mao ja conhece.
+   */
+  function aoDigitar(evento: React.ChangeEvent<HTMLInputElement>) {
+    const bruto = evento.target.value;
+    const apagando = (evento.nativeEvent as InputEvent).inputType?.startsWith("delete");
+
+    setDigitado(bruto);
+    setSugestao(0);
+
+    // Apagando nao se completa: o campo brigaria com quem esta tentando apagar,
+    // devolvendo a cada backspace a letra que acabou de sair.
+    const completo = apagando || !escolhida ? null : completarSubcategoria(escolhida.centros, bruto);
+
+    if (!completo) {
+      setSubcategoria(bruto);
+      return;
+    }
+
+    setSubcategoria(completo);
+    selecao.current = [Math.min(bruto.length, completo.length), completo.length];
+  }
+
   /** Teclas do campo de subcategoria, enquanto ele esta aberto. */
   function noCampo(evento: React.KeyboardEvent<HTMLInputElement>) {
     if (evento.key === "Escape") {
       evento.preventDefault();
       setSubcategoria(null);
+      setDigitado("");
       caixa.current?.focus();
       return;
     }
 
+    // As setas percorrem as alternativas, inclusive as que so contem o texto —
+    // e o caminho para "Servico de vidro" quando se digitou "vid".
     if (evento.key === "ArrowDown" || evento.key === "ArrowUp") {
       evento.preventDefault();
       if (opcoes.length === 0) return;
+
       const passo = evento.key === "ArrowDown" ? 1 : -1;
-      setSugestao((i) => (i + passo + opcoes.length) % opcoes.length);
+      const proxima = (sugestao + passo + opcoes.length) % opcoes.length;
+      setSugestao(proxima);
+      setSubcategoria(opcoes[proxima]);
+      selecao.current = [opcoes[proxima].length, opcoes[proxima].length];
       return;
     }
 
     if (evento.key === "Enter") {
       evento.preventDefault();
-      // A sugestao marcada vence o texto cru: quem desceu a seta ate ela quis
-      // aquela, e nao criar outra com o nome pela metade.
-      const escolha = opcoes[sugestao] ?? subcategoria ?? "";
-      setSubcategoria(escolha);
-      // Um quadro depois, com o texto ja no estado, a classificacao acontece.
-      window.setTimeout(() => {
-        if (!atual || !escolhida || !direcao) return;
-        levantarVoo(atual, direcao, escolhida.hue);
-        onClassificar(atual, escolhida.id, escolha || undefined);
-        setDespachados((atuais) => new Set(atuais).add(atual.id));
-        limparMira();
-        caixa.current?.focus();
-      }, 0);
+      // O que esta no campo vence: o completado ja esta la, e a seta tambem
+      // escreve nele. Nao ha um segundo lugar de onde tirar a escolha.
+      const escolha = (subcategoria ?? "").trim();
+
+      if (!atual || !escolhida || !direcao) return;
+      levantarVoo(atual, direcao, escolhida.hue);
+      onClassificar(atual, escolhida.id, escolha || undefined);
+      setDespachados((atuais) => new Set(atuais).add(atual.id));
+      limparMira();
+      caixa.current?.focus();
     }
   }
 
@@ -333,7 +402,8 @@ export function ModoJogo({
       <div className="jogo" ref={caixa} tabIndex={-1}>
         <div className="jogo-topo">
           <span className="jogo-contador">
-            {restam} {restam === 1 ? "despesa" : "despesas"} sem categoria
+            <strong>{diaPorExtenso(dia)}</strong> — {restam}{" "}
+            {restam === 1 ? "despesa" : "despesas"} sem categoria
           </span>
           <button type="button" className="jogo-sair" onClick={onFechar}>
             sair (esc)
@@ -435,36 +505,25 @@ export function ModoJogo({
                       value={subcategoria}
                       placeholder={`subcategoria de ${escolhida.name}`}
                       aria-label={`Subcategoria de ${escolhida.name}`}
-                      onChange={(evento) => {
-                        setSubcategoria(evento.target.value);
-                        setSugestao(0);
-                      }}
+                      autoComplete="off"
+                      spellCheck={false}
+                      onChange={aoDigitar}
                       onKeyDown={noCampo}
                     />
 
-                    {opcoes.length > 0 ? (
-                      <ul className="jogo-sugestoes">
-                        {opcoes.map((nome, i) => (
-                          <li key={nome}>
-                            <button
-                              type="button"
-                              className={i === sugestao ? "marcada" : ""}
-                              onMouseEnter={() => setSugestao(i)}
-                              onClick={() => setSubcategoria(nome)}
-                            >
-                              {nome}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
+                    {/* As alternativas em texto, nao em botao: aqui ninguem
+                        larga o teclado para clicar, e alvo de clique so
+                        convidaria a isso. */}
+                    {opcoes.length > 1 ? (
+                      <span className="jogo-alternativas">
+                        {opcoes.length} nomes · setas percorrem
+                      </span>
                     ) : null}
 
                     <span className="account-meta">
-                      {opcoes.length > 0
-                        ? "setas escolhem · enter classifica · esc volta"
-                        : subcategoria.trim()
-                          ? `enter cria "${subcategoria.trim()}"`
-                          : "digite ou deixe em branco · esc volta"}
+                      {subcategoria.trim() && !opcoes.includes(subcategoria)
+                        ? `enter cria "${subcategoria.trim()}"`
+                        : "enter classifica · esc volta"}
                     </span>
                   </div>
                 ) : (

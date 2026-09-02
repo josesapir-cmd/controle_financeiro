@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filtrarSubcategorias } from "../subcategorias";
+import { completarSubcategoria, filtrarSubcategorias } from "../subcategorias";
 
 const CENTROS = [
   { name: "Viagem Bariloche" },
@@ -47,5 +47,52 @@ describe("filtrarSubcategorias", () => {
   it("nao repete quem casa das duas formas", () => {
     const centros = [{ name: "Vinho do Porto" }];
     expect(filtrarSubcategorias(centros, "vinho")).toEqual(["Vinho do Porto"]);
+  });
+});
+
+describe("completarSubcategoria", () => {
+  const CENTROS = [
+    { name: "Viagem Bariloche" },
+    { name: "Servico de vidro" },
+    { name: "Vinho" },
+    { name: "Férias" },
+  ];
+
+  it("completa pelo comeco", () => {
+    expect(completarSubcategoria(CENTROS, "via")).toBe("Viagem Bariloche");
+  });
+
+  it("nao completa para quem so contem o texto", () => {
+    // Completar "vid" para "Servico de vidro" trocaria o que a pessoa esta
+    // escrevendo por outra coisa no meio da digitacao.
+    expect(completarSubcategoria(CENTROS, "vid")).toBeNull();
+  });
+
+  it("o primeiro da lista vence quando dois comecam igual", () => {
+    expect(completarSubcategoria(CENTROS, "vi")).toBe("Viagem Bariloche");
+  });
+
+  it("devolve o nome do cadastro, com o acento dele", () => {
+    // E aquele registro que vai ser usado, nao um homonimo sem acento.
+    expect(completarSubcategoria(CENTROS, "fe")).toBe("Férias");
+    expect(completarSubcategoria(CENTROS, "FÉR")).toBe("Férias");
+  });
+
+  it("nome ja completo nao se completa de novo", () => {
+    // Sem isto o campo ficaria com a selecao vazia piscando a cada tecla.
+    expect(completarSubcategoria(CENTROS, "Vinho")).toBeNull();
+    expect(completarSubcategoria(CENTROS, "vinho")).toBeNull();
+  });
+
+  it("campo vazio nao completa nada", () => {
+    // Completar no primeiro caractere ainda nao digitado seria escolher por
+    // quem nem comecou a escrever.
+    expect(completarSubcategoria(CENTROS, "")).toBeNull();
+    expect(completarSubcategoria(CENTROS, "  ")).toBeNull();
+  });
+
+  it("sem correspondencia, nao completa", () => {
+    expect(completarSubcategoria(CENTROS, "zzz")).toBeNull();
+    expect(completarSubcategoria([], "vi")).toBeNull();
   });
 });

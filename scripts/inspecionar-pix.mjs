@@ -24,6 +24,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import postgres from "postgres";
 import { normalizeConnectionString } from "../src/lib/db/connection-string.mjs";
+import { morrerComExplicacao } from "./erro-de-banco.mjs";
 
 async function lerEnv() {
   for (const arquivo of [".env.local", ".env"]) {
@@ -93,7 +94,13 @@ function ehPix(t) {
 }
 
 const sql = postgres(normalizeConnectionString(process.env.DATABASE_URL), { max: 1, ssl: "require" });
-const conexoes = await sql`SELECT item_id, connector_name FROM connections ORDER BY connector_name`;
+
+let conexoes;
+try {
+  conexoes = await sql`SELECT item_id, connector_name FROM connections ORDER BY connector_name`;
+} catch (erro) {
+  morrerComExplicacao(erro);
+}
 
 let comNome = 0;
 let semNome = 0;

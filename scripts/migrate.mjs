@@ -9,6 +9,7 @@ import path from "node:path";
 import postgres from "postgres";
 import { normalizeConnectionString } from "../src/lib/db/connection-string.mjs";
 import { migrate } from "../src/lib/db/migrate.mjs";
+import { morrerComExplicacao } from "./erro-de-banco.mjs";
 
 async function lerEnv() {
   for (const arquivo of [".env.local", ".env"]) {
@@ -45,6 +46,8 @@ const sql = postgres(normalizeConnectionString(process.env.DATABASE_URL), {
 try {
   const novas = await migrate(sql, (m) => console.log(m));
   console.log(novas.length ? `${novas.length} migracao(oes) aplicada(s).` : "Nada pendente.");
+} catch (erro) {
+  morrerComExplicacao(erro);
 } finally {
   await sql.end();
 }

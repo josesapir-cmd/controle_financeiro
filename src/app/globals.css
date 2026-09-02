@@ -3818,8 +3818,12 @@ ul.produtos {
 
 .jogo-contador {
   font-size: 13px;
-  font-weight: 500;
   color: var(--text-sub);
+}
+
+.jogo-contador strong {
+  font-weight: 600;
+  color: var(--text-strong);
 }
 
 .jogo-sair,
@@ -4092,36 +4096,18 @@ ul.produtos {
   font-size: 13px;
 }
 
-.jogo-sugestoes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+/* Quantas alternativas existem, em texto. Nao ha pastilha para clicar: aqui
+   ninguem larga o teclado, e alvo de clique so convidaria a isso. */
+.jogo-alternativas {
+  font-size: 11px;
+  color: var(--text-soft);
 }
 
-.jogo-sugestoes button {
-  height: auto;
-  padding: 3px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--cat-fg, var(--text-sub));
-  background: var(--bg-white);
-  border: 1px solid var(--cat-border, var(--stroke-soft));
-  border-radius: 999px;
-  box-shadow: none;
-  cursor: pointer;
-}
-
-/* A marcada e a que o enter escolhe: precisa se distinguir sem depender de cor,
-   por isso o contorno alem do preenchimento. */
-.jogo-sugestoes button.marcada {
+/* O trecho que o campo completou sozinho fica selecionado, entao a proxima
+   tecla o substitui. A selecao usa a cor da categoria mirada. */
+.jogo-sub input::selection {
   color: #ffffff;
   background: var(--cat-base, var(--primary));
-  border-color: transparent;
-  outline: 2px solid var(--cat-strong, var(--primary));
-  outline-offset: 1px;
 }
 
 /* --- Tudo o que se sabe da despesa (tecla i) --- */
