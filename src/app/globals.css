@@ -3209,9 +3209,9 @@ ul.produtos {
   gap: 10px;
 }
 
-/* Em duas colunas o bloco tem metade da largura: "Vestuario e Cuidados
-   Pessoais" cortado em "Vestuario e Cuid..." nao identifica categoria nenhuma.
-   Entao o nome quebra em ate duas linhas e so depois disso corta. */
+/* Em duas colunas o bloco tem metade da largura: "Presentes, Doacoes e
+   Transferencias" cortado em "Presentes, Doa..." nao identifica categoria
+   nenhuma. Entao o nome quebra em ate duas linhas e so depois disso corta. */
 .bloco-nome {
   flex: 1;
   min-width: 0;

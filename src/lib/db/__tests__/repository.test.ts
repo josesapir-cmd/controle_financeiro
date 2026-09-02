@@ -580,6 +580,7 @@ describe("taxonomia de centros de custo", () => {
 
     expect(despesas).toEqual([
       "Alimentacao",
+      "Compras",
       "Educacao",
       "Lazer e Cultura",
       "Moradia",
@@ -587,7 +588,6 @@ describe("taxonomia de centros de custo", () => {
       "Saude",
       "Servicos domesticos",
       "Transporte",
-      "Vestuario e Cuidados Pessoais",
       "Viagens",
     ]);
   });
