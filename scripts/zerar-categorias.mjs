@@ -28,8 +28,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import postgres from "postgres";
-import { normalizeConnectionString } from "../src/lib/db/connection-string.mjs";
+import { abrirBanco } from "./conectar.mjs";
 import {
   coletarClassificacao,
   restaurarClassificacao,
@@ -57,26 +56,12 @@ async function lerEnv() {
 
 await lerEnv();
 
-if (!process.env.DATABASE_URL) {
-  console.error("DATABASE_URL nao definida.");
-  process.exit(1);
-}
-
 const aplicar = process.argv.includes("--aplicar");
 const restaurar = process.argv[process.argv.indexOf("--restaurar") + 1];
 const ehRestauracao = process.argv.includes("--restaurar");
 
-const sql = postgres(normalizeConnectionString(process.env.DATABASE_URL), {
-  max: 1,
-  ssl: "require",
-});
-
-/** Adaptador minimo: o modulo fala `query(texto, parametros)`. */
-const db = {
-  async query(texto, parametros = []) {
-    return sql.unsafe(texto, parametros);
-  },
-};
+const banco = await abrirBanco();
+const db = banco;
 
 try {
   if (ehRestauracao) {
@@ -91,12 +76,7 @@ try {
       `  ${backup.transacoes.length} lancamento(s), ${backup.contrapartes.length} contraparte(s)\n`,
     );
 
-    await sql.begin(async (tx) => {
-      await restaurarClassificacao(
-        { async query(texto, parametros = []) { return tx.unsafe(texto, parametros); } },
-        backup,
-      );
-    });
+    await banco.transacao((tx) => restaurarClassificacao(tx, backup));
 
     console.log("restaurado.");
     process.exit(0);
@@ -144,13 +124,7 @@ try {
   );
   console.log(`\nbackup em ${destino}`);
 
-  await sql.begin(async (tx) => {
-    await zerarClassificacao({
-      async query(texto, parametros = []) {
-        return tx.unsafe(texto, parametros);
-      },
-    });
-  });
+  await banco.transacao((tx) => zerarClassificacao(tx));
 
   const depois = await coletarClassificacao(db);
   console.log(
@@ -162,5 +136,5 @@ try {
 } catch (erro) {
   morrerComExplicacao(erro);
 } finally {
-  await sql.end();
+  await banco.fim();
 }

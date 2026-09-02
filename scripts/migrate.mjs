@@ -6,9 +6,8 @@
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import postgres from "postgres";
-import { normalizeConnectionString } from "../src/lib/db/connection-string.mjs";
 import { migrate } from "../src/lib/db/migrate.mjs";
+import { abrirBanco } from "./conectar.mjs";
 import { morrerComExplicacao } from "./erro-de-banco.mjs";
 
 async function lerEnv() {
@@ -33,21 +32,21 @@ async function lerEnv() {
 
 await lerEnv();
 
-if (!process.env.DATABASE_URL) {
-  console.error("DATABASE_URL nao definida.");
-  process.exit(1);
-}
+const banco = await abrirBanco();
 
-const sql = postgres(normalizeConnectionString(process.env.DATABASE_URL), {
-  max: 1,
-  ssl: "require",
-});
+// `migrate` fala `unsafe(texto)`, que e o formato do postgres.js. Por HTTPS a
+// mesma coisa e `query`; a ponte cabe aqui e evita mexer no migrador.
+const executor = {
+  async unsafe(texto) {
+    return banco.query(texto);
+  },
+};
 
 try {
-  const novas = await migrate(sql, (m) => console.log(m));
+  const novas = await migrate(executor, (m) => console.log(m));
   console.log(novas.length ? `${novas.length} migracao(oes) aplicada(s).` : "Nada pendente.");
 } catch (erro) {
   morrerComExplicacao(erro);
 } finally {
-  await sql.end();
+  await banco.fim();
 }

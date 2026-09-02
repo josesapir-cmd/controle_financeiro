@@ -19,10 +19,12 @@
     "conta": "node scripts/conta.mjs",
     "apagar-conta": "node scripts/apagar-conta.mjs",
     "pix": "node scripts/inspecionar-pix.mjs",
-    "zerar-categorias": "node scripts/zerar-categorias.mjs"
+    "zerar-categorias": "node scripts/zerar-categorias.mjs",
+    "banco": "node scripts/testar-banco.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
+    "@neondatabase/serverless": "^1.1.0",
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.3",
     "next": "^16.3.3",
