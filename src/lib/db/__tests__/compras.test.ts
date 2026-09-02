@@ -167,3 +167,33 @@ describe("Vestuario e Cuidados Pessoais vira Compras", () => {
     expect(nomes).not.toContain("Vestuario e Cuidados Pessoais");
   });
 });
+
+describe("o nome de origem pode ser outro", () => {
+  it("renomeia tambem quando a categoria se chama Vestuario e bem estar", async () => {
+    // Ha banco em que ela aparece com esse nome. Casar so um deixaria a
+    // migracao passar sem fazer nada, em silencio.
+    await ateAntesDaRenomeacao();
+    await pg.exec(
+      "UPDATE categories SET name = 'Vestuario e bem estar' WHERE lower(name) = 'vestuario e cuidados pessoais'",
+    );
+
+    await aplicarRenomeacao();
+
+    const nomes = (await listCategorias(db)).map((c) => c.name);
+    expect(nomes).toContain("Compras");
+    expect(nomes).not.toContain("Vestuario e bem estar");
+  });
+
+  it("leva o texto da contraparte junto, com qualquer um dos dois nomes", async () => {
+    await ateAntesDaRenomeacao();
+    await pg.exec(
+      "UPDATE categories SET name = 'Vestuario e bem estar' WHERE lower(name) = 'vestuario e cuidados pessoais'",
+    );
+    await setLabel(db, "fp-loja", { category: "Vestuario e bem estar" });
+
+    await aplicarRenomeacao();
+
+    const [rotulo] = await listLabels(db);
+    expect(rotulo.category).toBe("Compras");
+  });
+});

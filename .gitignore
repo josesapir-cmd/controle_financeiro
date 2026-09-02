@@ -13,3 +13,6 @@ next-env.d.ts
 # itemIds e cadastro de contrapartes ficam fora do versionamento
 /data/*.json
 !/data/.gitkeep
+
+# Backups de classificacao: dado financeiro, fica so na maquina
+/backups/

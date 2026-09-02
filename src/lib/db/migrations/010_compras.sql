@@ -20,8 +20,15 @@
 --    indice de centro e unico por (categoria, nome), entao a que ja pertence ao
 --    destino vence e a outra e absorvida.
 -- ---------------------------------------------------------------------------
+-- Mais de um nome de origem porque a categoria ja foi chamada de duas formas:
+-- a migracao 008 a criou como "Vestuario e Cuidados Pessoais", e ha banco em
+-- que ela aparece como "Vestuario e bem estar". Casar so um deixaria a
+-- migracao passar sem fazer nada, em silencio.
 CREATE TEMP TABLE renomeada ON COMMIT DROP AS
-SELECT id FROM categories WHERE lower(name) = 'vestuario e cuidados pessoais';
+SELECT id FROM categories
+ WHERE lower(name) IN ('vestuario e cuidados pessoais', 'vestuario e bem estar')
+ ORDER BY position, name
+ LIMIT 1;
 
 CREATE TEMP TABLE antiga ON COMMIT DROP AS
 SELECT id FROM categories
@@ -72,4 +79,4 @@ UPDATE categories
 
 UPDATE counterparty_labels
    SET category = 'Compras'
- WHERE lower(trim(category)) = 'vestuario e cuidados pessoais';
+ WHERE lower(trim(category)) IN ('vestuario e cuidados pessoais', 'vestuario e bem estar');
