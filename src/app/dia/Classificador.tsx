@@ -156,11 +156,15 @@ export function Classificador({ lancamentos, categorias }: Props) {
     lancamento: LancamentoParaClassificar,
     categoriaId: string,
     aContraparteToda = false,
+    subcategoria?: string,
   ) {
     const dados = new FormData();
     dados.set("transactionId", lancamento.id);
     dados.set("categoryId", categoriaId);
     if (lancamento.comentario) dados.set("note", lancamento.comentario);
+    // O servidor acha ou cria: o mesmo campo serve para escolher uma
+    // subcategoria que ja existe e para inventar uma na hora.
+    if (subcategoria?.trim()) dados.set("novaSubcategoria", subcategoria.trim());
 
     const amplo = aContraparteToda && Boolean(lancamento.contraparteKey);
     if (amplo) {
@@ -192,7 +196,9 @@ export function Classificador({ lancamentos, categorias }: Props) {
         <ModoJogo
           lancamentos={semCategoria}
           categorias={categorias}
-          onClassificar={(lancamento, categoriaId) => classificar(lancamento, categoriaId)}
+          onClassificar={(lancamento, categoriaId, subcategoria) =>
+            classificar(lancamento, categoriaId, false, subcategoria)
+          }
           onFechar={() => setJogando(false)}
         />
       ) : null}

@@ -3985,3 +3985,150 @@ ul.produtos {
     justify-content: flex-end;
   }
 }
+
+/* --- Voo do cartao ate a categoria ---
+   Sai do centro e pousa na celula escolhida. Confirma o destino sem texto: e
+   mais rapido ver o cartao chegar do que ler que ele chegou. Fora da grade, em
+   posicao fixa, porque atravessa a modal inteira. */
+.jogo-voo {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 12px;
+  pointer-events: none;
+  color: #ffffff;
+  background: var(--cat-base);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 36px -14px var(--cat-base);
+  animation: jogo-voo var(--voo-ms, 420ms) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.jogo-voo .jogo-valor,
+.jogo-voo .jogo-desc {
+  color: #ffffff;
+}
+
+@keyframes jogo-voo {
+  to {
+    transform: translate(var(--voo-dx), var(--voo-dy)) scale(var(--voo-s));
+    opacity: 0;
+  }
+}
+
+/* Baque de chegada na celula que recebeu. */
+.jogo-alvo.recebeu {
+  animation: jogo-baque 380ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@keyframes jogo-baque {
+  35% {
+    transform: scale(1.1);
+  }
+  70% {
+    transform: scale(0.97);
+  }
+}
+
+/* --- Subcategoria no proprio cartao --- */
+.jogo-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 10px;
+  text-align: left;
+}
+
+.jogo-sub input {
+  width: 100%;
+  height: 34px;
+  font-size: 13px;
+}
+
+.jogo-sugestoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jogo-sugestoes button {
+  height: auto;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--cat-fg, var(--text-sub));
+  background: var(--bg-white);
+  border: 1px solid var(--cat-border, var(--stroke-soft));
+  border-radius: 999px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+/* A marcada e a que o enter escolhe: precisa se distinguir sem depender de cor,
+   por isso o contorno alem do preenchimento. */
+.jogo-sugestoes button.marcada {
+  color: #ffffff;
+  background: var(--cat-base, var(--primary));
+  border-color: transparent;
+  outline: 2px solid var(--cat-strong, var(--primary));
+  outline-offset: 1px;
+}
+
+/* --- Tudo o que se sabe da despesa (tecla i) --- */
+.jogo-info {
+  display: grid;
+  /* Duas colunas de rotulo/valor: o painel tem a largura da modal, e uma coluna
+     so deixaria metade da linha vazia em cada item. */
+  grid-template-columns: repeat(2, auto 1fr);
+  gap: 6px 12px;
+  align-items: baseline;
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--bg-weak);
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius);
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+.jogo-info > div {
+  display: contents;
+}
+
+.jogo-info dt {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.jogo-info dd {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+/* Numa coluna so no celular: duas colunas de rotulo e valor em 390px deixam
+   cada valor com meia palavra por linha. */
+@media (max-width: 720px) {
+  .jogo-info {
+    grid-template-columns: auto 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jogo-voo,
+  .jogo-alvo.recebeu {
+    animation-duration: 1ms;
+  }
+}

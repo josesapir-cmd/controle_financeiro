@@ -20,7 +20,7 @@ import {
 import { classificarParaConferencia } from "@/lib/importacao/linhas";
 import { mockAccounts, mockItems, mockTransactions } from "@/lib/pluggy/mock";
 import type { AccountWithConnector, Transaction } from "@/lib/pluggy/types";
-import { classify } from "./categories";
+import { classify, translateCategory } from "./categories";
 import {
   cruzarCentrosDeCusto,
   totalPorTipo,
@@ -40,7 +40,7 @@ import {
   type CounterpartyTotal,
 } from "./counterparties";
 import { isUserInitiatedExpense } from "./automatic";
-import { normalizeName } from "./counterparties";
+import { maskDocument, normalizeName } from "./counterparties";
 import { currentMonthRange, currentYearRange, localDay, localTime } from "./dates";
 import { netWorth, normalizeAmount, sumBy } from "./money";
 import { rotuloDoLancamento } from "./rotulo";
@@ -755,6 +755,15 @@ export interface LancamentoParaClassificar {
   /** Como chamar o alvo da regra na tela: o apelido, o nome, ou a descricao. */
   alvoDaRegra: string | null;
   /**
+   * Tudo o que se sabe sobre o lancamento, pronto para exibir.
+   *
+   * Existe para a hora de decidir a categoria: o cartao mostra o essencial, e
+   * quando ele nao basta — "AMAZON BR" nao diz se foi livro ou fone — o resto
+   * esta aqui. Montado no servidor porque e ele que tem os detalhes da Pluggy,
+   * o documento e a categoria que ela atribuiu.
+   */
+  detalhes: { label: string; value: string }[];
+  /**
    * O que foi comprado, quando um print de tela de pedido disse. A fatura traz
    * so "AMAZON BR"; isto e o que ela nao traz.
    */
@@ -908,19 +917,54 @@ export async function loadClassificacaoDoDia(
     return (chave ? cadastro[chave]?.alias : null) || t.counterparty?.name || null;
   };
 
+  /** O que se sabe do lancamento, sem repetir o que o cartao ja mostra. */
+  const detalhesDe = (t: Transaction, rotulo: string): { label: string; value: string }[] => {
+    const linhas: { label: string; value: string }[] = [];
+    const original = t.description?.trim();
+
+    // So quando o rotulo trocou o texto: repetir a mesma frase duas vezes com
+    // rotulos diferentes nao informa nada.
+    if (original && original !== rotulo) {
+      linhas.push({ label: "No extrato", value: original });
+    }
+    if (t.category) {
+      linhas.push({ label: "Categoria da Pluggy", value: translateCategory(t.category) });
+    }
+    if (t.counterparty?.name) linhas.push({ label: "Contraparte", value: t.counterparty.name });
+    if (t.counterparty?.document) {
+      linhas.push({
+        label: "Documento",
+        value: maskDocument(t.counterparty.document, t.counterparty.documentType),
+      });
+    }
+
+    const produtos = produtosPorTransacao.get(t.id) ?? [];
+    if (produtos.length > 0) {
+      linhas.push({ label: "Comprado", value: produtos.join(" · ") });
+    }
+
+    // Os detalhes que vieram da Pluggy por ultimo: meio de pagamento,
+    // estabelecimento, dados do cartao. Sao os mais especificos.
+    for (const detalhe of t.details ?? []) linhas.push(detalhe);
+
+    return linhas;
+  };
+
   const lancamentos: LancamentoParaClassificar[] = doDia.map((t) => {
     const classificavel = isUserInitiatedExpense(t);
     const decidido = resolver(t);
+    const rotulo = rotuloDoLancamento(t, nomeDaParte(t));
 
     return {
       id: t.id,
       hora: localTime(t.date),
-      descricao: rotuloDoLancamento(t, nomeDaParte(t)),
+      descricao: rotulo,
       valor: t.amount,
       conta: nomeDaConta[t.accountId] ?? "",
       contraparte: nomeDaParte(t),
       contraparteKey: chaveDaRegra(t),
       alvoDaRegra: nomeDaParte(t) || t.description?.trim() || null,
+      detalhes: detalhesDe(t, rotulo),
       produtos: produtosPorTransacao.get(t.id) ?? [],
       classificavel,
       frequencia: frequencia.get(chaveDaRegra(t) ?? "") ?? 1,
