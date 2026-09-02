@@ -8,6 +8,7 @@ import type {
   CategoriaParaClassificar,
   LancamentoParaClassificar,
 } from "@/lib/finance/service";
+import type { SituacaoDoDia } from "@/lib/finance/situacao";
 import { ModoJogo } from "./ModoJogo";
 import { classificarLancamento, limparLancamento } from "./actions";
 
@@ -60,9 +61,23 @@ const MES = new Intl.NumberFormat("pt-BR", {
 interface Props {
   lancamentos: LancamentoParaClassificar[];
   categorias: CategoriaParaClassificar[];
+  /** Dia da tela, para o modo jogo saber de onde parte a fita de datas. */
+  dia: string;
+  situacoes: Record<string, SituacaoDoDia>;
+  /** O modo jogo nasce aberto quando a URL diz — e o que o mantem aberto ao
+      trocar de dia dentro dele. */
+  jogoAberto: boolean;
+  queryExtra: string;
 }
 
-export function Classificador({ lancamentos, categorias }: Props) {
+export function Classificador({
+  lancamentos,
+  categorias,
+  dia,
+  situacoes,
+  jogoAberto,
+  queryExtra,
+}: Props) {
   /** Bloco sob o cursor durante o arraste. */
   const [sobre, setSobre] = useState<string | null>(null);
   const [arraste, setArraste] = useState<Arraste | null>(null);
@@ -80,7 +95,7 @@ export function Classificador({ lancamentos, categorias }: Props) {
   const toque = useRef<{ id: string; tempo: number } | null>(null);
   /** Recado de uma classificacao que passou de um lancamento so. */
   const [aviso, setAviso] = useState<string | null>(null);
-  const [jogando, setJogando] = useState(false);
+  const [jogando, setJogando] = useState(jogoAberto);
 
   /** O que o modo jogo despacha: so o que ainda pede categoria. */
   const semCategoria = lancamentos.filter((l) => l.classificavel && !l.categoriaId);
@@ -196,6 +211,11 @@ export function Classificador({ lancamentos, categorias }: Props) {
         <ModoJogo
           lancamentos={semCategoria}
           categorias={categorias}
+          dia={dia}
+          situacoes={situacoes}
+          // `jogo=1` viaja junto: sem ele, trocar de dia dentro do jogo
+          // devolveria a lista em vez de continuar classificando.
+          queryExtra={[queryExtra, "jogo=1"].filter(Boolean).join("&")}
           onClassificar={(lancamento, categoriaId, subcategoria) =>
             classificar(lancamento, categoriaId, false, subcategoria)
           }

@@ -284,6 +284,34 @@ export interface TransactionQuery {
   accountIds?: string[];
 }
 
+/**
+ * Ultimo dia com lancamento, por conta, ate a data informada.
+ *
+ * E a fronteira do que ja chegou. Serve para distinguir "voce nao gastou nada
+ * neste dia" de "o banco ainda nao mandou este dia" — que na tela sao coisas
+ * opostas e sem isto ficam iguais.
+ *
+ * O corte em `ate` existe por causa das parcelas: uma compra em 6x grava
+ * lancamentos com data nos meses seguintes, e sem o corte a conta pareceria ter
+ * dados ate o ano que vem.
+ */
+export async function ultimoDiaPorConta(
+  db: Db,
+  ate: string,
+): Promise<Record<string, string>> {
+  const linhas = await db.query<{ account_id: string; dia: string }>(
+    `SELECT account_id, max(local_day) AS dia
+       FROM transactions
+      WHERE local_day <= $1
+      GROUP BY account_id`,
+    [ate],
+  );
+
+  const mapa: Record<string, string> = {};
+  for (const linha of linhas) mapa[String(linha.account_id)] = String(linha.dia).slice(0, 10);
+  return mapa;
+}
+
 export async function listTransactions(
   db: Db,
   filtro: TransactionQuery = {},

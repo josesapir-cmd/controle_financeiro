@@ -5,8 +5,8 @@ import { DayStrip } from "@/components/DayStrip";
 import { FiltroDeContas } from "@/components/FiltroDeContas";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import { coresPorConta } from "@/lib/finance/cores-de-conta";
-import { localDay } from "@/lib/finance/dates";
-import { loadClassificacaoDoDia, loadDay } from "@/lib/finance/service";
+import { localDay, shiftDay } from "@/lib/finance/dates";
+import { loadClassificacaoDoDia, loadDay, loadSituacaoDaFita } from "@/lib/finance/service";
 import { Classificador } from "./Classificador";
 import { SpinnerDeDatas } from "./SpinnerDeDatas";
 
@@ -23,7 +23,7 @@ const diaExtenso = new Intl.DateTimeFormat("pt-BR", {
 export default async function Dia({
   searchParams,
 }: {
-  searchParams: Promise<{ d?: string; nc?: string; contas?: string | string[] }>;
+  searchParams: Promise<{ d?: string; nc?: string; jogo?: string; contas?: string | string[] }>;
 }) {
   await requireSession();
 
@@ -35,9 +35,14 @@ export default async function Dia({
   const accountIds = parseAccountIds(params.contas);
   const contasQuery = accountQuery(accountIds);
 
-  const [dados, paraClassificar] = await Promise.all([
+  // A fita mostra 20 dias atras e 2 a frente; a situacao de cada um vem junto
+  // para as bolinhas nao precisarem de uma consulta por dia.
+  const hoje = localDay(new Date());
+
+  const [dados, paraClassificar, situacao] = await Promise.all([
     loadDay(dia, { accountIds }),
     loadClassificacaoDoDia(dia, { accountIds }),
+    loadSituacaoDaFita(shiftDay(hoje, -20), shiftDay(hoje, 2), { accountIds, hoje }),
   ]);
 
   // Nao classificado e o que o app nao sabe categorizar, nem por rotulo proprio
@@ -74,6 +79,7 @@ export default async function Dia({
         <SpinnerDeDatas
           dia={dia}
           queryExtra={buildQuery(soNaoClassificados ? "nc=1" : undefined, contasQuery)}
+          situacoes={situacao.dias}
         />
       </div>
 
@@ -121,9 +127,17 @@ export default async function Dia({
 
       <section>
         <h2>{soNaoClassificados ? "Classificar" : "Lancamentos do dia"}</h2>
+        {/* A chave e o dia: trocar de data no modo jogo remonta o
+            classificador, e o que ja foi despachado no dia anterior nao
+            atravessa para o novo. */}
         <Classificador
+          key={dia}
+          dia={dia}
           lancamentos={paraOClassificador}
           categorias={paraClassificar.categorias}
+          situacoes={situacao.dias}
+          jogoAberto={params.jogo === "1"}
+          queryExtra={buildQuery(soNaoClassificados ? "nc=1" : undefined, contasQuery)}
         />
       </section>
     </main>

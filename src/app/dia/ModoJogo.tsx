@@ -7,7 +7,9 @@ import type {
   CategoriaParaClassificar,
   LancamentoParaClassificar,
 } from "@/lib/finance/service";
+import type { SituacaoDoDia } from "@/lib/finance/situacao";
 import { PREENCHIMENTO, POR_VOLTA, SETA, direcaoDasTeclas, type Direcao } from "./bussola";
+import { SpinnerDeDatas } from "./SpinnerDeDatas";
 import { filtrarSubcategorias } from "./subcategorias";
 
 /**
@@ -45,6 +47,11 @@ interface Voo {
 interface Props {
   lancamentos: LancamentoParaClassificar[];
   categorias: CategoriaParaClassificar[];
+  /** Dia da tela: e de onde a fita de datas parte quando a fila acaba. */
+  dia: string;
+  situacoes: Record<string, SituacaoDoDia>;
+  /** O que precisa sobreviver a troca de dia, `jogo=1` incluso. */
+  queryExtra: string;
   onClassificar: (
     lancamento: LancamentoParaClassificar,
     categoriaId: string,
@@ -53,7 +60,15 @@ interface Props {
   onFechar: () => void;
 }
 
-export function ModoJogo({ lancamentos, categorias, onClassificar, onFechar }: Props) {
+export function ModoJogo({
+  lancamentos,
+  categorias,
+  dia,
+  situacoes,
+  queryExtra,
+  onClassificar,
+  onFechar,
+}: Props) {
   const [indice, setIndice] = useState(0);
   const [direcao, setDirecao] = useState<Direcao | null>(null);
   const [pagina, setPagina] = useState(0);
@@ -182,6 +197,10 @@ export function ModoJogo({ lancamentos, categorias, onClassificar, onFechar }: P
         onFechar();
         return;
       }
+
+      // Fila vazia: as setas e o enter passam a ser da fita de datas, que a
+      // essa altura e a unica coisa a fazer aqui.
+      if (!atual) return;
 
       if (evento.key.startsWith("Arrow")) {
         evento.preventDefault();
@@ -323,10 +342,37 @@ export function ModoJogo({ lancamentos, categorias, onClassificar, onFechar }: P
 
         {!atual ? (
           <div className="jogo-fim">
-            <strong>Acabou.</strong>
-            <span className="account-meta">Nenhuma despesa deste dia esta sem categoria.</span>
-            <button type="button" onClick={onFechar}>
-              Fechar
+            <strong>Dia limpo.</strong>
+            <span className="account-meta">
+              Nenhuma despesa deste dia esta sem categoria. Escolha outro para continuar — a
+              bolinha laranja diz onde ainda ha trabalho.
+            </span>
+
+            {/* A fita fica aqui, e nao um botao "fechar": quem acabou um dia
+                quer o proximo, nao a lista de tras. */}
+            <SpinnerDeDatas
+              dia={dia}
+              queryExtra={queryExtra}
+              situacoes={situacoes}
+              navegacaoPorTeclado
+            />
+
+            <div className="jogo-fim-legenda">
+              <span className="jogo-legenda">
+                <span className="spinner-bolha pendente" aria-hidden /> a classificar
+              </span>
+              <span className="jogo-legenda">
+                <span className="spinner-bolha pronto" aria-hidden /> tudo classificado
+              </span>
+              <span className="jogo-legenda">
+                <span className="spinner-bolha sem-dados" aria-hidden /> ainda nao recebido
+              </span>
+            </div>
+
+            <span className="account-meta">setas escolhem o dia · enter vai · esc sai</span>
+
+            <button type="button" className="jogo-sair" onClick={onFechar}>
+              voltar para a lista
             </button>
           </div>
         ) : (

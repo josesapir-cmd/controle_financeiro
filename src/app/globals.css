@@ -3561,6 +3561,13 @@ ul.produtos {
   cursor: default;
 }
 
+/* O desbotado da distancia vive nos textos, nao no botao: no botao ele levaria
+   a bolinha junto. */
+.spinner-data,
+.spinner-semana {
+  opacity: var(--desbotado, 1);
+}
+
 .spinner-data {
   font-size: 13px;
   font-weight: 500;
@@ -3569,6 +3576,42 @@ ul.produtos {
 .spinner-dia-atual .spinner-data {
   font-size: 16px;
   font-weight: 600;
+}
+
+/* --- Bolinha de situacao do dia ---
+   Tres estados que a fita precisa distinguir a distancia. A cor nao anda
+   sozinha: cada bolinha carrega a frase no `title` e no rotulo acessivel, e a
+   forma muda — sem dados e um anel vazado, nao um disco. */
+.spinner-bolha {
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin-top: 3px;
+  border-radius: 50%;
+  /* Desbota bem menos que o texto: e o que se procura ao varrer a fita atras
+     de um dia com trabalho pendente. */
+  opacity: calc(0.45 + var(--desbotado, 1) * 0.55);
+}
+
+/* `--away` e o laranja do tema; `--warning-dark` e marrom e nao se le como
+   laranja num disco de 6px. */
+.spinner-bolha.pendente {
+  background: var(--away);
+}
+
+.spinner-bolha.pronto {
+  background: var(--success-dark);
+}
+
+.spinner-bolha.sem-dados {
+  background: transparent;
+  border: 1.5px solid var(--text-soft);
+}
+
+/* Marca do teclado: o dia que o enter vai abrir, antes de abrir. */
+.spinner-dia-marcado {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 
 .spinner-semana {
@@ -4131,4 +4174,29 @@ ul.produtos {
   .jogo-alvo.recebeu {
     animation-duration: 1ms;
   }
+}
+
+/* Fim da fila: a fita de datas vira o assunto da modal. */
+.jogo-fim .spinner {
+  width: 100%;
+  margin: 6px 0;
+}
+
+.jogo-fim-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+}
+
+.jogo-legenda {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-sub);
+}
+
+.jogo-legenda .spinner-bolha {
+  margin-top: 0;
 }

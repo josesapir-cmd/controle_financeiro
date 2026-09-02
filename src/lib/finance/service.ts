@@ -10,6 +10,7 @@ import {
   listCounterpartyLinks,
   listTransactionLabels,
   listTransactionProducts,
+  ultimoDiaPorConta,
   listLabels,
   listTransactions,
   listarImportacoes,
@@ -41,9 +42,10 @@ import {
 } from "./counterparties";
 import { isUserInitiatedExpense } from "./automatic";
 import { maskDocument, normalizeName } from "./counterparties";
-import { currentMonthRange, currentYearRange, localDay, localTime } from "./dates";
+import { currentMonthRange, currentYearRange, localDay, localTime, shiftDay } from "./dates";
 import { netWorth, normalizeAmount, sumBy } from "./money";
 import { rotuloDoLancamento } from "./rotulo";
+import { fronteiraDeDados, situacaoDoDia, type SituacaoDoDia } from "./situacao";
 import {
   totalExpenses,
   totalIncome,
@@ -791,6 +793,90 @@ export interface ClassificacaoDoDia {
 }
 
 /**
+ * Chave pela qual um lancamento herda rotulo e generaliza regra.
+ *
+ * Contraparte quando a Pluggy mandou uma; a descricao normalizada quando nao,
+ * que e o caso de toda compra no cartao. Fica aqui, fora das telas, porque as
+ * duas que a usam — a lista do dia e a fita de situacao — precisam responder a
+ * mesma coisa: divergir faria a bolinha dizer "pronto" num dia que a lista
+ * mostra pendente.
+ */
+function chaveDeRegra(t: Transaction): string | null {
+  const contraparte = chaveIdentificada(t.counterparty?.key);
+  if (contraparte) return contraparte;
+
+  const pelaDescricao = normalizeName(t.description ?? "");
+  return pelaDescricao ? counterpartyFingerprint(pelaDescricao) : null;
+}
+
+/** Se o lancamento ja tem categoria, propria ou herdada da contraparte. */
+function jaClassificado(
+  t: Transaction,
+  rotulos: Map<string, { categoryId: string | null; costCenterId: string | null }>,
+  cadastro: CounterpartyRegistry,
+): boolean {
+  const proprio = rotulos.get(t.id);
+  if (proprio && (proprio.categoryId || proprio.costCenterId)) return true;
+
+  const chave = chaveDeRegra(t);
+  return Boolean(chave && cadastro[chave]?.category);
+}
+
+export interface SituacaoDaFita {
+  /** Por dia AAAA-MM-DD. */
+  dias: Record<string, SituacaoDoDia>;
+  /** Ate onde da para afirmar que o extrato esta completo. */
+  fronteira: string | null;
+}
+
+/**
+ * Situacao de cada dia da fita de datas.
+ *
+ * Uma consulta so para a janela inteira, e nao uma por dia: a fita mostra vinte
+ * e tres dias, e vinte e tres viagens ao banco por render seria trocar uma
+ * bolinha por uma tela lenta.
+ */
+export async function loadSituacaoDaFita(
+  de: string,
+  ate: string,
+  options: { accountIds?: string[]; hoje?: string } = {},
+): Promise<SituacaoDaFita> {
+  const hoje = options.hoje ?? localDay(new Date());
+  const accountIds = options.accountIds ?? [];
+
+  if (useMock()) return { dias: {}, fronteira: hoje };
+
+  const conexao = db();
+  const [{ contas, transacoes, registry, decisoes }, rotulos, ultimoDia] = await Promise.all([
+    carregar({ from: de, to: ate }, accountIds),
+    listTransactionLabels(conexao),
+    ultimoDiaPorConta(conexao, hoje),
+  ]);
+
+  const conciliado = conciliar(transacoes, decisoes);
+  const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
+  const porId = new Map(rotulos.map((r) => [r.transactionId, r]));
+
+  const pendentes: Record<string, number> = {};
+  for (const t of conciliado.transacoes) {
+    if (!isUserInitiatedExpense(t)) continue;
+    if (jaClassificado(t, porId, cadastro)) continue;
+
+    const dia = localDay(t.date);
+    pendentes[dia] = (pendentes[dia] ?? 0) + 1;
+  }
+
+  const fronteira = fronteiraDeDados(contas, ultimoDia, hoje);
+
+  const dias: Record<string, SituacaoDoDia> = {};
+  for (let dia = de; dia <= ate; dia = shiftDay(dia, 1)) {
+    dias[dia] = situacaoDoDia(dia, fronteira, pendentes);
+  }
+
+  return { dias, fronteira };
+}
+
+/**
  * Dados da tela de classificar arrastando.
  *
  * Traz o dia inteiro e o mes corrente: os blocos mostram o que ja caiu neles no
@@ -844,26 +930,10 @@ export async function loadClassificacaoDoDia(
     centros.map((c) => [`${c.categoryId}|${normalizeName(c.name)}`, c.id] as const),
   );
 
-  /**
-   * Chave que "aplicar a todos" grava, e pela qual o rotulo e herdado.
-   *
-   * Compra no cartao nao tem contraparte: a Pluggy so manda paymentData em
-   * transferencia, entao "99" e "AMAZON BR" chegam sem lado nenhum. Sem
-   * alternativa, a regra ampla ficava indisponivel justamente onde ela mais
-   * serve — o cartao e a maior parte do gasto.
-   *
-   * A alternativa e a descricao normalizada, que e a mesma identidade que a
-   * importacao de print ja usa para contraparte sem documento. Duas cobrancas
-   * escritas igual passam a ser a mesma coisa para efeito de regra, que e o
-   * que se quer dizer ao classificar "99" de uma vez.
-   */
-  const chaveDaRegra = (t: Transaction): string | null => {
-    const contraparte = chaveIdentificada(t.counterparty?.key);
-    if (contraparte) return contraparte;
-
-    const pelaDescricao = normalizeName(t.description ?? "");
-    return pelaDescricao ? counterpartyFingerprint(pelaDescricao) : null;
-  };
+  // A chave e a mesma que a fita de situacao usa (`chaveDeRegra`, no topo do
+  // arquivo): divergir faria a bolinha dizer "pronto" num dia que a lista
+  // mostra pendente.
+  const chaveDaRegra = chaveDeRegra;
 
   const frequencia = new Map<string, number>();
   for (const t of conciliado.transacoes) {

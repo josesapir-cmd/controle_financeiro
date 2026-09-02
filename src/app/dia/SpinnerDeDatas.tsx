@@ -3,6 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { localDay, shiftDay } from "@/lib/finance/dates";
+import type { SituacaoDoDia } from "@/lib/finance/situacao";
+
+/** A bolinha nunca fala sozinha: cada cor tem a frase que ela quer dizer. */
+const LEGENDA: Record<SituacaoDoDia, string> = {
+  pendente: "despesas sem categoria neste dia",
+  pronto: "tudo classificado neste dia",
+  "sem-dados": "o banco ainda nao mandou este dia",
+};
 
 /**
  * Seletor de dia em fita.
@@ -36,10 +44,22 @@ function rotulo(formatador: Intl.DateTimeFormat, data: Date): string {
 export function SpinnerDeDatas({
   dia,
   queryExtra,
+  situacoes = {},
+  navegacaoPorTeclado = false,
+  onIrPara,
 }: {
   dia: string;
   /** `nc=1`, contas — o que precisa sobreviver a troca de dia. */
   queryExtra: string;
+  /** Bolinha de cada dia: pendente, pronto ou sem dados. */
+  situacoes?: Record<string, SituacaoDoDia>;
+  /**
+   * Setas movem a marca e enter navega. So onde a fita e o assunto da tela —
+   * na aba Dia as setas pertencem ao modo jogo e a rolagem da pagina.
+   */
+  navegacaoPorTeclado?: boolean;
+  /** Chamado antes de navegar, para quem precisa preservar estado proprio. */
+  onIrPara?: (destino: string) => void;
 }) {
   const router = useRouter();
   const [, iniciar] = useTransition();
@@ -47,6 +67,10 @@ export function SpinnerDeDatas({
 
   const [selecionado, setSelecionado] = useState(dia);
   useEffect(() => setSelecionado(dia), [dia]);
+
+  /** Dia sob a marca do teclado, ainda sem navegar. */
+  const [focado, setFocado] = useState(dia);
+  useEffect(() => setFocado(dia), [dia]);
 
   /** Deslocamento em pixels enquanto a fita esta sendo arrastada. */
   const [puxando, setPuxando] = useState<{ inicioX: number; dx: number } | null>(null);
@@ -66,16 +90,46 @@ export function SpinnerDeDatas({
 
   function irPara(destino: string) {
     // Nunca adiante de hoje: dia futuro nao tem lancamento para mostrar.
-    if (destino === selecionado || destino > hoje || !dias.includes(destino)) return;
+    if (destino > hoje || !dias.includes(destino)) return;
+    if (destino === selecionado && !navegacaoPorTeclado) return;
 
     setSelecionado(destino);
+    onIrPara?.(destino);
     iniciar(() => {
       router.push(`/dia?${[`d=${destino}`, queryExtra].filter(Boolean).join("&")}`);
     });
   }
 
+  // Setas movem a marca; enter leva. Separar os dois passos e o que o modo jogo
+  // pede: ali a fita e uma escolha, nao um clique que ja aconteceu.
+  useEffect(() => {
+    if (!navegacaoPorTeclado) return;
+
+    function baixou(evento: KeyboardEvent) {
+      if (evento.key === "ArrowLeft" || evento.key === "ArrowRight") {
+        evento.preventDefault();
+        const passo = evento.key === "ArrowRight" ? 1 : -1;
+        setFocado((atual) => {
+          const i = dias.indexOf(atual);
+          const proximo = dias[Math.min(Math.max(i + passo, 0), dias.length - 1)] ?? atual;
+          return proximo > hoje ? atual : proximo;
+        });
+        return;
+      }
+
+      if (evento.key === "Enter") {
+        evento.preventDefault();
+        irPara(focado);
+      }
+    }
+
+    window.addEventListener("keydown", baixou);
+    return () => window.removeEventListener("keydown", baixou);
+  });
+
   /** Deslocamento aplicado a fita, ja somado ao arraste em curso. */
-  const deslocamento = indice * LARGURA + LARGURA / 2 - (puxando?.dx ?? 0);
+  const eixo = navegacaoPorTeclado ? Math.max(0, dias.indexOf(focado)) : indice;
+  const deslocamento = eixo * LARGURA + LARGURA / 2 - (puxando?.dx ?? 0);
 
   return (
     <div className="spinner">
@@ -134,10 +188,12 @@ export function SpinnerDeDatas({
       >
         <div className="spinner-fita" style={{ transform: `translateX(-${deslocamento}px)` }}>
           {dias.map((valor, i) => {
-            const distancia = Math.abs(i - indice);
+            const distancia = Math.abs(i - eixo);
             const atual = valor === selecionado;
+            const marcado = navegacaoPorTeclado && valor === focado;
             const futuro = valor > hoje;
             const data = comoData(valor);
+            const situacao = situacoes[valor];
 
             return (
               <button
@@ -153,16 +209,31 @@ export function SpinnerDeDatas({
                 className={[
                   "spinner-dia",
                   atual ? "spinner-dia-atual" : "",
+                  marcado ? "spinner-dia-marcado" : "",
                   futuro ? "spinner-dia-futuro" : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
                 // Os vizinhos desbotam com a distancia: a fita tem centro sem
-                // precisar de outra marca.
-                style={{ opacity: atual ? 1 : Math.max(0.28, 1 - distancia * 0.16) }}
+                // precisar de outra marca. O desbotado vai numa variavel, e nao
+                // no `opacity` do botao, porque a bolinha nao pode desbotar
+                // junto — ela e justamente o que se procura nos dias longe.
+                style={
+                  {
+                    "--desbotado": atual ? 1 : Math.max(0.28, 1 - distancia * 0.16),
+                  } as React.CSSProperties
+                }
               >
                 <span className="spinner-data">{rotulo(DIA_MES, data)}</span>
                 <span className="spinner-semana">{rotulo(SEMANA, data).slice(0, 3)}</span>
+                {situacao ? (
+                  <span
+                    className={`spinner-bolha ${situacao}`}
+                    title={LEGENDA[situacao]}
+                    aria-label={LEGENDA[situacao]}
+                    role="img"
+                  />
+                ) : null}
               </button>
             );
           })}
