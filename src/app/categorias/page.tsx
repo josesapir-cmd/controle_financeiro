@@ -4,7 +4,7 @@ import { AccountFilter } from "@/components/AccountFilter";
 import { Nav } from "@/components/Nav";
 import { TreemapCategorias } from "@/components/TreemapCategorias";
 import { Indice } from "./Indice";
-import { SpinnerDeMeses } from "./SpinnerDeMeses";
+import { SpinnerDeMeses } from "@/components/SpinnerDeMeses";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import { currentMonthRange } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";

@@ -35,11 +35,14 @@ export function SpinnerDeMeses({
   from,
   to,
   queryExtra,
+  rota = "/categorias",
 }: {
   from: string;
   to: string;
   /** contas — o que precisa sobreviver a troca de mes. */
   queryExtra: string;
+  /** Tela que a fita navega. A mesma fita serve o Painel e as Categorias. */
+  rota?: string;
 }) {
   const router = useRouter();
   const [, iniciar] = useTransition();
@@ -80,7 +83,7 @@ export function SpinnerDeMeses({
     const janela = monthRange(destino);
     iniciar(() => {
       router.push(
-        `/categorias?${[`from=${janela.from}`, `to=${janela.to}`, queryExtra]
+        `${rota}?${[`from=${janela.from}`, `to=${janela.to}`, queryExtra]
           .filter(Boolean)
           .join("&")}`,
       );

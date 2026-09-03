@@ -91,3 +91,124 @@ export function coresPorConta(
   for (const conta of contas) mapa[conta.id] = corDaInstituicao(conta.connectorName);
   return mapa;
 }
+
+/* ==========================================================================
+   Cor de grafico
+   ========================================================================== */
+
+/**
+ * A cor da marca serve para PASTILHA e PONTO, onde o nome esta do lado. Num
+ * grafico de area empilhada a cor e a unica identidade, e ai a marca nao passa:
+ * o azul-marinho do Personnalite fica quase preto como preenchimento, e o
+ * laranja do Inter nao alcanca contraste com o fundo.
+ *
+ * Entao o grafico usa a MESMA MATIZ com claridade e croma fixos. A cor continua
+ * reconhecivel — matiz e o que carrega marca — e passa nas contagens que a
+ * leitura exige. Os valores saem da validacao de paleta do `dataviz`: dentro da
+ * banda de claridade, acima do piso de croma, e com contraste acima de 3:1.
+ */
+const CLARIDADE = 0.6;
+const CROMA = 0.15;
+
+/** Matiz de uma cor, em graus. Serve tanto a marca quanto o passo de grafico. */
+export function matizDe(cor: string): number | null {
+  const oklch = cor.match(/^oklch\([\d.]+\s+[\d.]+\s+([\d.]+)\)$/);
+  if (oklch) return Number(oklch[1]);
+
+  const hex = cor.match(/^#([0-9a-f]{6})$/i);
+  if (!hex) return null;
+
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const v = parseInt(hex[1].slice(i, i + 2), 16) / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const q = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  const A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * q;
+  const B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * q;
+
+  return ((Math.atan2(B, A) * 180) / Math.PI + 360) % 360;
+}
+
+/** Passo de grafico da instituicao: mesma matiz da marca, claridade fixa. */
+export function corDeGrafico(connectorName: string): string {
+  const matiz = matizDe(corDaInstituicao(connectorName)) ?? 250;
+  return `oklch(${CLARIDADE} ${CROMA} ${matiz.toFixed(1)})`;
+}
+
+/**
+ * Ordem das faixas numa area empilhada.
+ *
+ * Numa pilha so as faixas VIZINHAS se tocam, e a ordem e escolha nossa. Duas
+ * matizes proximas — o azul do Personnalite e o do BTG — sao indistinguiveis
+ * encostadas e perfeitamente distinguiveis separadas por uma terceira. Entao em
+ * vez de inventar cor nova para um banco, afastamos as parecidas na pilha.
+ *
+ * Guloso a partir da matiz mais "sozinha": a cada passo entra a que estiver mais
+ * longe da ultima colocada. Para meia duzia de contas isso encontra a mesma
+ * ordem que a busca exaustiva, e nao cresce fatorialmente.
+ */
+export function ordenarParaContraste<T>(
+  itens: T[],
+  matizDe: (item: T) => number,
+): T[] {
+  if (itens.length <= 2) return [...itens];
+
+  const distancia = (a: number, b: number) => {
+    const bruta = Math.abs(a - b) % 360;
+    // Da a volta no circulo: 350 e 10 estao a 20 graus, nao a 340.
+    return bruta > 180 ? 360 - bruta : bruta;
+  };
+
+  /** O par vizinho mais parecido de uma ordem — e ele que decide se ela serve. */
+  const piorVizinhanca = (ordem: T[]) =>
+    Math.min(
+      ...ordem.slice(1).map((item, i) => distancia(matizDe(ordem[i]), matizDe(item))),
+    );
+
+  // Ate sete contas, a busca exaustiva cabe (5040 ordens) e devolve o otimo. O
+  // guloso erra justamente no caso pequeno: ele poe a matiz isolada na ponta e
+  // deixa as duas parecidas juntas no fim.
+  if (itens.length <= 7) {
+    let melhor = itens;
+    let melhorPior = -1;
+
+    const permutar = (restantes: T[], montada: T[]) => {
+      if (restantes.length === 0) {
+        const pior = piorVizinhanca(montada);
+        if (pior > melhorPior) {
+          melhorPior = pior;
+          melhor = montada;
+        }
+        return;
+      }
+      restantes.forEach((item, i) => {
+        permutar([...restantes.slice(0, i), ...restantes.slice(i + 1)], [...montada, item]);
+      });
+    };
+
+    permutar(itens, []);
+    return melhor;
+  }
+
+  // Muitas contas: guloso, que nao cresce fatorialmente. A cada passo entra a
+  // que estiver mais longe da ultima colocada.
+  const restantes = [...itens];
+  let atual = restantes.shift() as T;
+  const ordem: T[] = [atual];
+
+  while (restantes.length > 0) {
+    const proxima = restantes.reduce((melhor, item) =>
+      distancia(matizDe(item), matizDe(atual)) > distancia(matizDe(melhor), matizDe(atual))
+        ? item
+        : melhor,
+    );
+    restantes.splice(restantes.indexOf(proxima), 1);
+    ordem.push(proxima);
+    atual = proxima;
+  }
+
+  return ordem;
+}

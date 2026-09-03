@@ -11,6 +11,7 @@ import {
   listTransactionLabels,
   listTransactionProducts,
   ultimoDiaPorConta,
+  type CategoriaRow,
   listLabels,
   listTransactions,
   listarImportacoes,
@@ -46,6 +47,7 @@ import { currentMonthRange, currentYearRange, localDay, localTime, shiftDay } fr
 import { netWorth, normalizeAmount, sumBy } from "./money";
 import { rotuloDoLancamento } from "./rotulo";
 import { fronteiraDeDados, situacaoDoDia, type SituacaoDoDia } from "./situacao";
+import { corDeGrafico, matizDe, ordenarParaContraste } from "./cores-de-conta";
 import {
   totalExpenses,
   totalIncome,
@@ -874,6 +876,281 @@ export async function loadSituacaoDaFita(
   }
 
   return { dias, fronteira };
+}
+
+/**
+ * Despesas do periodo que ainda esperam categoria, para o modo jogo do painel.
+ *
+ * Irma de `loadClassificacaoDoDia`, com duas diferencas: a janela e o periodo
+ * inteiro em vez de um dia, e so vem o que falta classificar — no painel a
+ * lista nao e para conferir o mes, e para despachar o que sobrou.
+ */
+export async function loadPendentesDoPeriodo(
+  period: Period,
+  options: { accountIds?: string[] } = {},
+): Promise<ClassificacaoDoDia> {
+  const accountIds = options.accountIds ?? [];
+  const conexao = db();
+
+  const [{ contas, transacoes, registry, decisoes }, categorias, centros, rotulos, produtos] =
+    await Promise.all([
+      carregar(period, accountIds),
+      listCategorias(conexao),
+      listCentrosDeCusto(conexao),
+      listTransactionLabels(conexao),
+      listTransactionProducts(conexao).catch(() => []),
+    ]);
+
+  const conciliado = conciliar(transacoes, decisoes);
+  const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
+  const porId = new Map(rotulos.map((r) => [r.transactionId, r]));
+
+  const produtosPorTransacao = new Map<string, string[]>();
+  for (const produto of produtos) {
+    const lista = produtosPorTransacao.get(produto.transactionId) ?? [];
+    lista.push(produto.name);
+    produtosPorTransacao.set(produto.transactionId, lista);
+  }
+
+  const nomeDaConta: Record<string, string> = {};
+  for (const conta of contas) nomeDaConta[conta.id] = conta.marketingName || conta.name;
+
+  const frequencia = new Map<string, number>();
+  for (const t of conciliado.transacoes) {
+    const chave = chaveDeRegra(t);
+    if (chave) frequencia.set(chave, (frequencia.get(chave) ?? 0) + 1);
+  }
+
+  const nomeDaParte = (t: Transaction): string | null => {
+    const chave = chaveDeRegra(t);
+    return (chave ? cadastro[chave]?.alias : null) || t.counterparty?.name || null;
+  };
+
+  const pendentes = conciliado.transacoes
+    .filter((t) => isUserInitiatedExpense(t) && !jaClassificado(t, porId, cadastro))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const lancamentos: LancamentoParaClassificar[] = pendentes.map((t) => {
+    const rotulo = rotuloDoLancamento(t, nomeDaParte(t));
+    const proprio = porId.get(t.id);
+
+    return {
+      id: t.id,
+      hora: localTime(t.date),
+      descricao: rotulo,
+      valor: t.amount,
+      conta: nomeDaConta[t.accountId] ?? "",
+      contraparte: nomeDaParte(t),
+      contraparteKey: chaveDeRegra(t),
+      alvoDaRegra: nomeDaParte(t) || t.description?.trim() || null,
+      detalhes: [],
+      produtos: produtosPorTransacao.get(t.id) ?? [],
+      classificavel: true,
+      frequencia: frequencia.get(chaveDeRegra(t) ?? "") ?? 1,
+      categoriaId: null,
+      centroId: null,
+      comentario: proprio?.note ?? null,
+      herdada: false,
+    };
+  });
+
+  return {
+    dia: period.to,
+    lancamentos,
+    // Os totais por categoria nao entram: a bussola do jogo mostra nome e
+    // icone, e somar o mes inteiro por categoria aqui seria trabalho para um
+    // numero que ninguem le.
+    categorias: categorias
+      .filter((c) => c.kind === "despesa")
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        hue: c.hue,
+        hint: c.hint,
+        noDia: 0,
+        noMes: 0,
+        lancamentosNoDia: 0,
+        centros: centros
+          .filter((centro) => centro.categoryId === c.id)
+          .map((centro) => ({ id: centro.id, name: centro.name })),
+      })),
+  };
+}
+
+export interface DespesaPorConta {
+  id: string;
+  nome: string;
+  connectorName: string;
+  total: number;
+  /** Passo de grafico da instituicao: mesma matiz da marca, claridade fixa. */
+  cor: string;
+}
+
+export interface DespesaPorCategoria {
+  id: string | null;
+  nome: string;
+  hue: number;
+  total: number;
+  contagem: number;
+}
+
+export interface PainelDeDespesas {
+  period: Period;
+  /** Contas ja na ordem em que as faixas devem ser empilhadas. */
+  contas: DespesaPorConta[];
+  /** Um ponto por dia do periodo, com o acumulado de cada conta ate ali. */
+  acumulado: { dia: string; porConta: Record<string, number> }[];
+  categorias: DespesaPorCategoria[];
+  semCategoria: { total: number; contagem: number };
+  /** Soma das despesas do periodo, com e sem categoria. */
+  total: number;
+  accountOptions: AccountOption[];
+  selectedAccountIds: string[];
+  isMock: boolean;
+  /**
+   * Conexoes que falharam na ultima sincronizacao.
+   *
+   * Viaja junto com os numeros de proposito: um total que ignora uma conta que
+   * nao respondeu esta errado, e a tela precisa poder dizer isso ao lado dele.
+   */
+  failures: { itemId: string; message: string }[];
+  syncedAt: Date | null;
+}
+
+/**
+ * Despesas do periodo por conta e por categoria.
+ *
+ * Uma leitura so para as tres visoes — acumulado, tabela por conta e
+ * distribuicao por categoria — porque as tres somam as MESMAS transacoes. Ler
+ * em tres lugares abriria a porta para tres totais diferentes na mesma tela.
+ */
+export async function loadPainelDeDespesas(
+  period: Period,
+  options: { accountIds?: string[] } = {},
+): Promise<PainelDeDespesas> {
+  const accountIds = options.accountIds ?? [];
+  const conexao = db();
+
+  const [
+    { contas, todasAsContas, transacoes, registry, decisoes, status },
+    categorias,
+    centros,
+    rotulos,
+  ] = await Promise.all([
+      carregar(period, accountIds),
+      listCategorias(conexao),
+      listCentrosDeCusto(conexao),
+      listTransactionLabels(conexao),
+    ]);
+
+  const conciliado = conciliar(transacoes, decisoes);
+  const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
+  const porId = new Map(rotulos.map((r) => [r.transactionId, r]));
+  const centroPorId = new Map(centros.map((c) => [c.id, c]));
+  const categoriaPorNome = new Map(categorias.map((c) => [normalizeName(c.name), c] as const));
+  const categoriaPorId = new Map(categorias.map((c) => [c.id, c] as const));
+
+  /** A categoria que vale para o lancamento: a propria, senao a da contraparte. */
+  const categoriaDe = (t: Transaction): CategoriaRow | null => {
+    const proprio = porId.get(t.id);
+    if (proprio?.costCenterId) {
+      const centro = centroPorId.get(proprio.costCenterId);
+      if (centro) return categoriaPorId.get(centro.categoryId) ?? null;
+    }
+    if (proprio?.categoryId) return categoriaPorId.get(proprio.categoryId) ?? null;
+
+    const chave = chaveDeRegra(t);
+    const herdada = chave ? cadastro[chave]?.category : null;
+    return herdada ? (categoriaPorNome.get(normalizeName(herdada)) ?? null) : null;
+  };
+
+  const despesas = conciliado.transacoes.filter((t) => classify(t) === "expense");
+
+  const nomeDaConta = new Map(contas.map((c) => [c.id, c.name] as const));
+  const bancoDaConta = new Map(contas.map((c) => [c.id, c.connectorName] as const));
+
+  const totalPorConta = new Map<string, number>();
+  const totalPorCategoria = new Map<string, { total: number; contagem: number }>();
+  let semCategoria = { total: 0, contagem: 0 };
+  let total = 0;
+
+  for (const t of despesas) {
+    const valor = -t.amount;
+    total += valor;
+    totalPorConta.set(t.accountId, (totalPorConta.get(t.accountId) ?? 0) + valor);
+
+    const categoria = categoriaDe(t);
+    if (!categoria) {
+      semCategoria = { total: semCategoria.total + valor, contagem: semCategoria.contagem + 1 };
+      continue;
+    }
+
+    const atual = totalPorCategoria.get(categoria.id) ?? { total: 0, contagem: 0 };
+    totalPorCategoria.set(categoria.id, {
+      total: atual.total + valor,
+      contagem: atual.contagem + 1,
+    });
+  }
+
+  // A ordem da pilha nao e a do valor: numa area empilhada so as faixas
+  // vizinhas se tocam, e matizes parecidas encostadas sao indistinguiveis.
+  const semOrdem: DespesaPorConta[] = [...totalPorConta.entries()].map(([id, valor]) => {
+    const banco = bancoDaConta.get(id) ?? "";
+    return {
+      id,
+      nome: nomeDaConta.get(id) ?? banco,
+      connectorName: banco,
+      total: valor,
+      cor: corDeGrafico(banco),
+    };
+  });
+
+  const empilhadas = ordenarParaContraste(semOrdem, (conta) => matizDe(conta.cor) ?? 0);
+
+  // Acumulado dia a dia: a linha de cada conta so sobe, entao o grafico responde
+  // "quando o mes ficou caro" e nao so "quanto custou".
+  const porDia = new Map<string, Map<string, number>>();
+  for (const t of despesas) {
+    const dia = localDay(t.date);
+    const doDia = porDia.get(dia) ?? new Map<string, number>();
+    doDia.set(t.accountId, (doDia.get(t.accountId) ?? 0) + -t.amount);
+    porDia.set(dia, doDia);
+  }
+
+  const acumulado: { dia: string; porConta: Record<string, number> }[] = [];
+  const somaCorrente = new Map<string, number>();
+  for (let dia = period.from; dia <= period.to; dia = shiftDay(dia, 1)) {
+    const doDia = porDia.get(dia);
+    for (const conta of empilhadas) {
+      const anterior = somaCorrente.get(conta.id) ?? 0;
+      somaCorrente.set(conta.id, anterior + (doDia?.get(conta.id) ?? 0));
+    }
+    acumulado.push({ dia, porConta: Object.fromEntries(somaCorrente) });
+  }
+
+  return {
+    period,
+    contas: empilhadas,
+    acumulado,
+    categorias: [...totalPorCategoria.entries()]
+      .map(([id, dados]) => {
+        const categoria = categoriaPorId.get(id);
+        return {
+          id,
+          nome: categoria?.name ?? "Categoria",
+          hue: categoria?.hue ?? 250,
+          ...dados,
+        };
+      })
+      .sort((a, b) => b.total - a.total),
+    semCategoria,
+    total,
+    accountOptions: opcoes(todasAsContas),
+    selectedAccountIds: accountIds,
+    isMock: useMock(),
+    failures: falhas(status),
+    syncedAt: sincronizadoEm(status),
+  };
 }
 
 /**

@@ -4229,3 +4229,317 @@ ul.produtos {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* ==========================================================================
+   Linha de corte do jogo — so as despesas que valem o esforco
+   ========================================================================== */
+
+.jogo-corte {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.jogo-corte input {
+  width: 84px;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-xs);
+}
+
+/* O que o corte deixou de fora nao some da tela: um corte silencioso viraria
+   um jeito de esquecer dinheiro. */
+.jogo-abaixo {
+  margin: -6px 0 0;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+/* ==========================================================================
+   Painel — as tres leituras do mes
+   ========================================================================== */
+
+.painel-abas {
+  display: flex;
+  gap: 4px;
+  /* O respiro no topo separa a barra do trilho da fita: sao dois blocos
+     cinzas, e encostados eles viram um so. */
+  margin: 16px 0;
+  padding: 3px;
+  background: var(--bg-weak);
+  border-radius: var(--radius);
+  /* No celular a barra rola em vez de quebrar os rotulos em duas linhas. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.painel-abas::-webkit-scrollbar {
+  display: none;
+}
+
+.painel-aba {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: none;
+  height: 34px;
+  white-space: nowrap;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-sub);
+  background: none;
+  border: none;
+  border-radius: var(--radius-xs);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.painel-aba.ativa {
+  color: var(--text-strong);
+  background: var(--bg-white);
+  box-shadow: var(--shadow-xs);
+}
+
+.painel-aba:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.painel-aba-nota {
+  font-size: 11px;
+  font-weight: 400;
+}
+
+/* O bloco do que falta classificar. Fica antes dos graficos porque e ele que
+   diz o quanto da para confiar neles. */
+.sem-categoria {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.sem-categoria .jogo-abrir {
+  width: auto;
+  min-width: 220px;
+  margin-bottom: 0;
+}
+
+/* Lado a lado onde couber: as duas tabelas respondem a mesma pergunta por
+   recortes diferentes, e compara-las exige ve-las juntas. */
+.painel-par {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1100px) {
+  .painel-par {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+/* ==========================================================================
+   Graficos do painel
+   Marcas finas, grade recuada, e a cor so onde ela CODIFICA alguma coisa: a
+   faixa da area e a bolinha ao lado do nome. Numero e rotulo usam tinta de
+   texto, nunca a cor da serie.
+   ========================================================================== */
+
+/* `min-width: 0` nao e detalhe: sem ele o quadro cresce ate o min-content da
+   tabela e estoura a coluna do grid no celular, em vez de deixar a tabela
+   rolar dentro dele. */
+.gr {
+  min-width: 0;
+  margin: 0 0 16px;
+  padding: 16px;
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+
+.gr-titulo {
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.gr-titulo strong {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
+/* O grafico rola dentro do proprio quadro; a pagina nunca rola de lado. */
+.gr-plot {
+  overflow-x: auto;
+}
+
+.gr-plot svg {
+  display: block;
+  width: 100%;
+  min-width: 460px;
+  height: auto;
+}
+
+.gr-grade {
+  stroke: var(--gridline);
+  stroke-width: 1;
+}
+
+.gr-eixo {
+  font-size: 10px;
+  fill: var(--text-soft);
+}
+
+/* 2px de superficie entre as faixas: sem a folga, duas areas empilhadas viram
+   uma mancha so na fronteira. */
+.gr-faixa {
+  stroke: var(--bg-white);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.gr-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.gr-legenda li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gr-marca {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+/* Dentro da tabela a marca nao esta num flex: o respiro ate o nome precisa
+   vir dela mesma. */
+.gr-tabela .gr-marca {
+  margin-right: 8px;
+}
+
+/* A tabela rola dentro do proprio quadro; a pagina nunca rola de lado. */
+.gr-rolagem {
+  overflow-x: auto;
+}
+
+.gr-ponto {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: oklch(0.6 0.15 var(--cat-h, 250));
+  flex: none;
+}
+
+.gr-tabela {
+  width: 100%;
+  min-width: 300px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.gr-tabela th,
+.gr-tabela td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--stroke-soft);
+}
+
+.gr-tabela thead th {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-soft);
+  background: var(--bg-weak);
+}
+
+.gr-tabela tbody th {
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+.gr-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.gr-tabela .gr-total th,
+.gr-tabela .gr-total td {
+  font-weight: 600;
+  border-bottom: none;
+}
+
+/* Aperto de celular. Sai a barra — e a mesma informacao da coluna de
+   participacao, e mante-la empurraria os numeros para fora da tela. A
+   contagem de lancamentos desce para a segunda linha, que e o que estreita a
+   primeira coluna o bastante para a tabela caber sem rolagem lateral. */
+@media (max-width: 760px) {
+  .gr {
+    padding: 14px 12px;
+  }
+
+  .gr-so-largo {
+    display: none;
+  }
+
+  .gr-tabela th,
+  .gr-tabela td {
+    padding: 8px 6px;
+  }
+
+  .gr-tabela thead th {
+    font-size: 10px;
+  }
+
+  .gr-tabela .account-meta {
+    display: block;
+  }
+}
+
+/* Barra fina, canto arredondado so na ponta do dado, ancorada na linha de base
+   a esquerda. Uma matiz so: o nome ja diz de quem e a linha. */
+.gr-barra {
+  display: block;
+  width: 100%;
+  min-width: 90px;
+  height: 8px;
+  background: var(--bg-weak);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.gr-barra > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 0 4px 4px 0;
+}

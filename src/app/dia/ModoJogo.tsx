@@ -65,11 +65,22 @@ interface Voo {
 interface Props {
   lancamentos: LancamentoParaClassificar[];
   categorias: CategoriaParaClassificar[];
-  /** Dia da tela: e de onde a fita de datas parte quando a fila acaba. */
-  dia: string;
-  situacoes: Record<string, SituacaoDoDia>;
+  /**
+   * Dia da tela: e de onde a fita de datas parte quando a fila acaba. Ausente
+   * quando o jogo cobre um mes inteiro, e nao um dia — ai nao ha para onde
+   * navegar ao acabar.
+   */
+  dia?: string;
+  situacoes?: Record<string, SituacaoDoDia>;
   /** O que precisa sobreviver a troca de dia, `jogo=1` incluso. */
-  queryExtra: string;
+  queryExtra?: string;
+  /**
+   * Ordena da maior para a menor despesa. No painel do mes e o que faz sentido:
+   * classificar primeiro o que move o total.
+   */
+  porValor?: boolean;
+  /** Total gasto no periodo, para dizer quanto cada faixa representa. */
+  totalDoPeriodo?: number;
   onClassificar: (
     lancamento: LancamentoParaClassificar,
     categoriaId: string,
@@ -91,6 +102,8 @@ export function ModoJogo({
   dia,
   situacoes,
   queryExtra,
+  porValor = false,
+  totalDoPeriodo = 0,
   onClassificar,
   onComentar,
   onFechar,
@@ -161,7 +174,24 @@ export function ModoJogo({
   const porDirecao = new Map<Direcao, CategoriaParaClassificar>();
   daVolta.forEach((categoria, i) => porDirecao.set(PREENCHIMENTO[i], categoria));
 
-  const fila = lancamentos.filter((l) => !despachados.has(l.id));
+  /**
+   * Linha de corte: so entram na fila as despesas acima dela.
+   *
+   * Existe porque classificar cem cafes rende menos que classificar tres
+   * despesas grandes. O corte deixa escolher onde comeca "vale a pena".
+   */
+  const [corte, setCorte] = useState(0);
+
+  const naFila = lancamentos.filter((l) => !despachados.has(l.id));
+  const acima = naFila.filter((l) => Math.abs(l.valor) >= corte);
+  const abaixo = naFila.filter((l) => Math.abs(l.valor) < corte);
+
+  const somar = (itens: LancamentoParaClassificar[]) =>
+    itens.reduce((total, l) => total + Math.abs(l.valor), 0);
+
+  const fila = porValor
+    ? [...acima].sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor))
+    : acima;
   // O indice da a volta: quem foi pulado reaparece no fim, em vez de sumir.
   const atual = fila.length ? fila[indice % fila.length] : undefined;
   const escolhida = direcao ? porDirecao.get(direcao) : undefined;
@@ -469,6 +499,12 @@ export function ModoJogo({
 
   const restam = fila.length;
 
+  /** Quanto uma soma representa do gasto do periodo. */
+  function fatia(valor: number): string {
+    if (totalDoPeriodo <= 0) return "";
+    return `${((valor / totalDoPeriodo) * 100).toFixed(1)}%`;
+  }
+
   return (
     <div className="jogo-fundo" role="dialog" aria-modal="true" aria-label="Classificar no teclado">
       {voo ? (
@@ -498,31 +534,66 @@ export function ModoJogo({
       <div className="jogo" ref={caixa} tabIndex={-1}>
         <div className="jogo-topo">
           <span className="jogo-contador">
-            <strong>{diaPorExtenso(dia)}</strong> — {restam}{" "}
-            {restam === 1 ? "despesa" : "despesas"} sem categoria
+            {dia ? <strong>{diaPorExtenso(dia)}</strong> : <strong>No periodo</strong>}
+            {" — "}
+            {restam} {restam === 1 ? "despesa" : "despesas"} sem categoria
+            {corte > 0 ? ` acima de ${formatBRL(corte)}` : ""}
+            {totalDoPeriodo > 0 ? `, ${fatia(somar(acima))} do gasto` : ""}
           </span>
+
+          {porValor ? (
+            <label className="jogo-corte">
+              a partir de
+              <input
+                type="number"
+                min={0}
+                step={100}
+                value={corte || ""}
+                placeholder="0"
+                aria-label="Valor minimo da despesa a classificar"
+                onChange={(evento) => setCorte(Math.max(0, Number(evento.target.value) || 0))}
+              />
+            </label>
+          ) : null}
+
           <button type="button" className="jogo-sair" onClick={onFechar}>
             sair (esc)
           </button>
         </div>
 
+        {/* O que ficou de fora do corte continua existindo, e a tela diz quanto
+            e — senao o corte viraria um jeito de esquecer dinheiro. */}
+        {porValor && corte > 0 && abaixo.length > 0 ? (
+          <p className="jogo-abaixo">
+            {abaixo.length} {abaixo.length === 1 ? "despesa" : "despesas"} abaixo do corte
+            {totalDoPeriodo > 0 ? `, ${fatia(somar(abaixo))} do gasto` : ""} ·{" "}
+            {formatBRL(somar(abaixo))}
+          </p>
+        ) : null}
+
         {!atual ? (
           <div className="jogo-fim">
-            <strong>Dia limpo.</strong>
+            <strong>{dia ? "Dia limpo." : corte > 0 ? "Faixa limpa." : "Periodo limpo."}</strong>
             <span className="account-meta">
-              Nenhuma despesa deste dia esta sem categoria. Escolha outro para continuar — a
-              bolinha laranja diz onde ainda ha trabalho.
+              {dia
+                ? "Nenhuma despesa deste dia esta sem categoria. Escolha outro para continuar — a bolinha laranja diz onde ainda ha trabalho."
+                : corte > 0
+                  ? `Nada acima de ${formatBRL(corte)} esta sem categoria. Baixe o corte para continuar.`
+                  : "Nenhuma despesa do periodo esta sem categoria."}
             </span>
 
             {/* A fita fica aqui, e nao um botao "fechar": quem acabou um dia
                 quer o proximo, nao a lista de tras. */}
-            <SpinnerDeDatas
-              dia={dia}
-              queryExtra={queryExtra}
-              situacoes={situacoes}
-              navegacaoPorTeclado
-            />
+            {dia ? (
+              <SpinnerDeDatas
+                dia={dia}
+                queryExtra={queryExtra ?? ""}
+                situacoes={situacoes}
+                navegacaoPorTeclado
+              />
+            ) : null}
 
+            {dia ? (
             <div className="jogo-fim-legenda">
               <span className="jogo-legenda">
                 <span className="spinner-bolha pendente" aria-hidden /> a classificar
@@ -534,8 +605,11 @@ export function ModoJogo({
                 <span className="spinner-bolha sem-dados" aria-hidden /> ainda nao recebido
               </span>
             </div>
+            ) : null}
 
-            <span className="account-meta">setas escolhem o dia · enter vai · esc sai</span>
+            {dia ? (
+              <span className="account-meta">setas escolhem o dia · enter vai · esc sai</span>
+            ) : null}
 
             <button type="button" className="jogo-sair" onClick={onFechar}>
               voltar para a lista

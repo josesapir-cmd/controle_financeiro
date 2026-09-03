@@ -1,17 +1,24 @@
-import { AccountsList } from "@/components/AccountsList";
-import { CategoryBars } from "@/components/CategoryBars";
-import { StatTile } from "@/components/StatTile";
-import { TransactionsTable } from "@/components/TransactionsTable";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guard";
+import { AccountFilter } from "@/components/AccountFilter";
+import { AcumuladoPorConta } from "@/components/AcumuladoPorConta";
+import { DespesasPorCategoria } from "@/components/DespesasPorCategoria";
+import { DespesasPorConta } from "@/components/DespesasPorConta";
 import { Nav } from "@/components/Nav";
 import { SairButton } from "@/components/SairButton";
-import { AccountFilter } from "@/components/AccountFilter";
-import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
-import { formatBRL } from "@/lib/finance/money";
-import { loadDashboard, type DashboardData } from "@/lib/finance/service";
+import { SpinnerDeMeses } from "@/components/SpinnerDeMeses";
+import { ClassificarNoPeriodo } from "./ClassificarNoPeriodo";
+import { accountQuery, parseAccountIds } from "@/lib/finance/account-selection";
+import { currentMonthRange } from "@/lib/finance/dates";
+import {
+  loadPainelDeDespesas,
+  loadPendentesDoPeriodo,
+  type PainelDeDespesas,
+} from "@/lib/finance/service";
 
 export const dynamic = "force-dynamic";
+
+const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 const sincronizacao = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
@@ -20,10 +27,37 @@ const sincronizacao = new Intl.DateTimeFormat("pt-BR", {
   minute: "2-digit",
 });
 
-function formatarPeriodo(period: { from: string; to: string }): string {
-  const formatar = (iso: string) =>
-    new Date(`${iso}T12:00:00Z`).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" });
-  return `${formatar(period.from)} a ${formatar(period.to)}`;
+function lerPeriodo(params: { from?: string; to?: string }) {
+  const padrao = currentMonthRange();
+  const from = params.from && DATA_ISO.test(params.from) ? params.from : padrao.from;
+  const to = params.to && DATA_ISO.test(params.to) ? params.to : padrao.to;
+  return from <= to ? { from, to } : { from: to, to: from };
+}
+
+/**
+ * As tres leituras do mes.
+ *
+ * Receitas e Investimentos ficam desabilitadas de proposito e nao escondidas:
+ * a barra e o mapa da tela, e um mapa que so mostra a estrada ja percorrida
+ * nao diz para onde isto vai. `aria-disabled` num botao inerte, e nao um link
+ * morto, para quem navega por teclado nao cair num destino que nao existe.
+ */
+function Abas() {
+  return (
+    <div className="painel-abas" role="tablist" aria-label="Visoes do painel">
+      <button type="button" role="tab" aria-selected className="painel-aba ativa">
+        Despesas
+      </button>
+      <button type="button" role="tab" aria-selected={false} className="painel-aba" disabled>
+        Receitas
+        <span className="painel-aba-nota">em breve</span>
+      </button>
+      <button type="button" role="tab" aria-selected={false} className="painel-aba" disabled>
+        Investimentos
+        <span className="painel-aba-nota">em breve</span>
+      </button>
+    </div>
+  );
 }
 
 function Setup({ mensagem }: { mensagem: string }) {
@@ -57,44 +91,62 @@ function Setup({ mensagem }: { mensagem: string }) {
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ contas?: string | string[] }>;
+  searchParams: Promise<{ from?: string; to?: string; contas?: string | string[] }>;
 }) {
   await requireSession();
 
-  const accountIds = parseAccountIds((await searchParams).contas);
-  let dados: DashboardData;
+  const params = await searchParams;
+  const periodo = lerPeriodo(params);
+  const accountIds = parseAccountIds(params.contas);
+
+  let dados: PainelDeDespesas;
+  let pendentes: Awaited<ReturnType<typeof loadPendentesDoPeriodo>>;
 
   try {
-    dados = await loadDashboard(new Date(), { accountIds });
+    // As duas leituras juntas: a fila do jogo e os totais somam as mesmas
+    // transacoes, e o "ainda sem categoria" do topo tem que bater com o que o
+    // modal abre.
+    [dados, pendentes] = await Promise.all([
+      loadPainelDeDespesas(periodo, { accountIds }),
+      loadPendentesDoPeriodo(periodo, { accountIds }),
+    ]);
   } catch (error) {
     return <Setup mensagem={error instanceof Error ? error.message : "Erro ao carregar dados."} />;
   }
 
-  if (dados.accounts.length === 0 && dados.failures.length === 0) {
+  if (dados.accountOptions.length === 0 && dados.failures.length === 0) {
     return <Setup mensagem="Nenhuma conexao cadastrada." />;
   }
 
-  const saldo = dados.income - dados.expenses;
   const contasQuery = accountQuery(dados.selectedAccountIds);
+  const aClassificar = pendentes.lancamentos.filter((l) => l.classificavel && !l.categoriaId);
 
   return (
     <main className="page">
       <div className="masthead">
-        <h1>Controle Financeiro</h1>
+        <h1>Painel</h1>
         <span className="period">
-          {dados.syncedAt ? `Atualizado em ${sincronizacao.format(dados.syncedAt)} · ` : ""}
-          {formatarPeriodo(dados.period)}
+          {dados.syncedAt ? `Atualizado em ${sincronizacao.format(dados.syncedAt)}` : "Sem sincronizacao"}
           <SairButton />
         </span>
       </div>
 
       <Nav atual="/" contasQuery={contasQuery} />
 
-      <div className="filtros">
+      {/* Fora dos outros controles: no celular a fita gruda no alto da tela, e
+          um `sticky` so anda dentro do proprio pai. */}
+      <div className="spinner-barra">
+        <SpinnerDeMeses from={periodo.from} to={periodo.to} queryExtra={contasQuery} rota="/" />
+      </div>
+
+      <Abas />
+
+      <div className="period-controls">
         <AccountFilter
           options={dados.accountOptions}
           selected={dados.selectedAccountIds}
           action="/"
+          hidden={{ from: periodo.from, to: periodo.to }}
         />
       </div>
 
@@ -105,78 +157,37 @@ export default async function Home({
         </p>
       ) : null}
 
-      {dados.syncedAt ? null : (
-        <p className="banner">
-          <strong>Ainda nao sincronizado.</strong> As telas leem do banco, que sera populado na
-          primeira sincronizacao.
-        </p>
-      )}
-
-      {dados.importacoesPendentes > 0 ? (
-        <p className="banner">
-          <strong>
-            {dados.importacoesPendentes}{" "}
-            {dados.importacoesPendentes === 1 ? "leitura de print aguarda" : "leituras de print aguardam"}{" "}
-            conferencia.
-          </strong>{" "}
-          Sao despesas do saldo compartilhado que ainda nao entraram nos numeros acima:{" "}
-          <Link href="/importar">conferir</Link>.
-        </p>
-      ) : null}
-
       {dados.failures.length > 0 ? (
         <p className="banner">
           <strong>
             {dados.failures.length}{" "}
             {dados.failures.length === 1 ? "conexao falhou" : "conexoes falharam"}.
           </strong>{" "}
-          O restante do painel segue valido, mas incompleto: {dados.failures[0].message}
+          Os totais abaixo seguem validos, mas incompletos: {dados.failures[0].message}
         </p>
       ) : null}
 
-      <div className="tiles">
-        <StatTile
-          label="Patrimonio liquido"
-          value={dados.netWorth}
-          note="Saldos em conta menos faturas em aberto"
-          tone={dados.netWorth < 0 ? "negative" : "neutral"}
-        />
-        <StatTile label="Entradas no periodo" value={dados.income} tone="positive" />
-        <StatTile label="Saidas no periodo" value={dados.expenses} tone="negative" />
-        <StatTile
-          label="Resultado do periodo"
-          value={saldo}
-          note={saldo < 0 ? "Voce gastou mais do que recebeu" : "Sobrou no periodo"}
-          tone={saldo < 0 ? "negative" : "positive"}
-        />
-      </div>
+      {/* Antes dos numeros, e nao depois: o total sem categoria e o que decide
+          se da para confiar na distribuicao que vem em seguida. */}
+      <ClassificarNoPeriodo
+        lancamentos={aClassificar}
+        categorias={pendentes.categorias}
+        total={dados.semCategoria.total}
+        contagem={dados.semCategoria.contagem}
+        totalDoPeriodo={dados.total}
+      />
 
-      {dados.transfers > 0 ? (
-        <p className="banner">
-          <strong>{formatBRL(dados.transfers)} em movimentacoes</strong> no periodo — aplicacoes,
-          transferencias entre contas suas e pagamento de fatura. Nao entram nos gastos porque o
-          dinheiro mudou de lugar, nao foi consumido.
-        </p>
-      ) : null}
-
-      <section>
-        <h2>Contas</h2>
-        <AccountsList accounts={dados.accounts} />
-      </section>
-
-      <section>
-        <h2>Gastos por categoria</h2>
-        <div className="card">
-          <CategoryBars categories={dados.categories} />
-        </div>
-      </section>
-
-      <section>
-        <h2>Lancamentos</h2>
-        <div className="card">
-          <TransactionsTable transactions={dados.transactions} />
-        </div>
-      </section>
+      {dados.total === 0 ? (
+        <p className="empty">Nenhuma despesa neste periodo.</p>
+      ) : (
+        <>
+          <AcumuladoPorConta contas={dados.contas} acumulado={dados.acumulado} />
+          <div className="painel-par">
+            <DespesasPorConta contas={dados.contas} total={dados.total} />
+            <DespesasPorCategoria categorias={dados.categorias} total={dados.total} />
+          </div>
+        </>
+      )}
     </main>
   );
 }
