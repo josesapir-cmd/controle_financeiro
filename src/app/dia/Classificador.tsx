@@ -10,7 +10,7 @@ import type {
 } from "@/lib/finance/service";
 import type { SituacaoDoDia } from "@/lib/finance/situacao";
 import { ModoJogo } from "./ModoJogo";
-import { classificarLancamento, limparLancamento } from "./actions";
+import { classificarLancamento, comentarLancamento, limparLancamento } from "./actions";
 
 /**
  * Classificar gastos arrastando o cartao para o bloco da categoria.
@@ -170,13 +170,22 @@ export function Classificador({
   function classificar(
     lancamento: LancamentoParaClassificar,
     categoriaId: string,
-    aContraparteToda = false,
-    subcategoria?: string,
+    opcoes: {
+      aContraparteToda?: boolean;
+      subcategoria?: string;
+      comentario?: string;
+    } = {},
   ) {
+    const { aContraparteToda = false, subcategoria, comentario } = opcoes;
+
     const dados = new FormData();
     dados.set("transactionId", lancamento.id);
     dados.set("categoryId", categoriaId);
-    if (lancamento.comentario) dados.set("note", lancamento.comentario);
+
+    // O comentario escrito agora vence o que ja estava gravado; sem nenhum, o
+    // gravado e reenviado para nao ser apagado pela classificacao.
+    const nota = comentario ?? lancamento.comentario;
+    if (nota) dados.set("note", nota);
     // O servidor acha ou cria: o mesmo campo serve para escolher uma
     // subcategoria que ja existe e para inventar uma na hora.
     if (subcategoria?.trim()) dados.set("novaSubcategoria", subcategoria.trim());
@@ -216,9 +225,21 @@ export function Classificador({
           // `jogo=1` viaja junto: sem ele, trocar de dia dentro do jogo
           // devolveria a lista em vez de continuar classificando.
           queryExtra={[queryExtra, "jogo=1"].filter(Boolean).join("&")}
-          onClassificar={(lancamento, categoriaId, subcategoria, aContraparteToda) =>
-            classificar(lancamento, categoriaId, aContraparteToda ?? false, subcategoria)
+          onClassificar={(lancamento, categoriaId, opcoes) =>
+            classificar(lancamento, categoriaId, {
+              aContraparteToda: opcoes?.aContraparteToda ?? false,
+              subcategoria: opcoes?.subcategoria,
+              comentario: opcoes?.comentario,
+            })
           }
+          onComentar={(lancamento, texto) => {
+            const dados = new FormData();
+            dados.set("transactionId", lancamento.id);
+            dados.set("note", texto);
+            iniciar(() => {
+              void comentarLancamento(dados);
+            });
+          }}
           onFechar={() => setJogando(false)}
         />
       ) : null}
@@ -388,7 +409,7 @@ export function Classificador({
                           className="lanc-todos"
                           disabled={pendente}
                           title={`Todo lancamento de ${lancamento.alvoDaRegra ?? "mesma origem"} passa a ser ${categoria.name}`}
-                          onClick={() => classificar(lancamento, categoria.id, true)}
+                          onClick={() => classificar(lancamento, categoria.id, { aContraparteToda: true })}
                         >
                           aplicar a todos
                           {lancamento.frequencia > 1 ? ` (${lancamento.frequencia})` : ""}
@@ -488,7 +509,9 @@ export function Classificador({
                 // Ctrl (ou Cmd, no Mac) ao soltar: a categoria vale para a
                 // contraparte inteira, nao so para este lancamento.
                 if (lancamento) {
-                  classificar(lancamento, categoria.id, evento.ctrlKey || evento.metaKey);
+                  classificar(lancamento, categoria.id, {
+                    aContraparteToda: evento.ctrlKey || evento.metaKey,
+                  });
                 }
                 setArmado(null);
               }}

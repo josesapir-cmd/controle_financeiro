@@ -73,10 +73,15 @@ interface Props {
   onClassificar: (
     lancamento: LancamentoParaClassificar,
     categoriaId: string,
-    subcategoria?: string,
-    /** Vale para toda a contraparte, e nao so para este lancamento. */
-    aContraparteToda?: boolean,
+    opcoes?: {
+      subcategoria?: string;
+      /** Vale para toda a contraparte, e nao so para este lancamento. */
+      aContraparteToda?: boolean;
+      comentario?: string;
+    },
   ) => void;
+  /** Grava so o comentario, sem tocar na categoria. */
+  onComentar: (lancamento: LancamentoParaClassificar, comentario: string) => void;
   onFechar: () => void;
 }
 
@@ -87,6 +92,7 @@ export function ModoJogo({
   situacoes,
   queryExtra,
   onClassificar,
+  onComentar,
   onFechar,
 }: Props) {
   const [indice, setIndice] = useState(0);
@@ -120,6 +126,16 @@ export function ModoJogo({
   const [recebeu, setRecebeu] = useState<Direcao | null>(null);
   /** Recado de uma classificacao que passou de um lancamento so. */
   const [aviso, setAviso] = useState<string | null>(null);
+  /**
+   * Comentario em edicao. `null` com a caixa fechada.
+   *
+   * O texto sobrevive ao fechar a caixa e viaja junto com a classificacao: quem
+   * escreve o comentario antes de escolher a categoria nao devia perde-lo por
+   * ter apertado esc.
+   */
+  const [comentario, setComentario] = useState<string | null>(null);
+  const [comentarioPendente, setComentarioPendente] = useState<string | null>(null);
+  const caixaDeComentario = useRef<HTMLTextAreaElement>(null);
 
   /** Setas pressionadas neste instante, para reconhecer a diagonal. */
   const teclas = useRef(new Set<string>());
@@ -161,6 +177,10 @@ export function ModoJogo({
     if (subcategoria !== null) campo.current?.focus();
   }, [subcategoria !== null]);
 
+  useEffect(() => {
+    if (comentario !== null) caixaDeComentario.current?.focus();
+  }, [comentario !== null]);
+
   // A selecao do trecho completado so pode ser feita depois que o valor novo
   // esta no campo — antes disso os indices apontam para o texto velho.
   useEffect(() => {
@@ -174,6 +194,8 @@ export function ModoJogo({
     setDirecao(null);
     setSubcategoria(null);
     setDigitado("");
+    setComentario(null);
+    setComentarioPendente(null);
     // O painel e sobre AQUELA despesa: deixa-lo aberto mostraria os dados de
     // uma e o cartao de outra.
     setInformando(false);
@@ -225,7 +247,11 @@ export function ModoJogo({
     if (!atual || !escolhida || !direcao) return;
 
     levantarVoo(atual, direcao, escolhida.hue);
-    onClassificar(atual, escolhida.id, subcategoria ?? undefined, aContraparteToda);
+    onClassificar(atual, escolhida.id, {
+      subcategoria: subcategoria ?? undefined,
+      aContraparteToda,
+      comentario: (comentario ?? comentarioPendente) ?? undefined,
+    });
     setDespachados((atuais) => new Set(atuais).add(atual.id));
 
     if (aContraparteToda) {
@@ -243,9 +269,9 @@ export function ModoJogo({
 
   useEffect(() => {
     function baixou(evento: KeyboardEvent) {
-      // Com o campo aberto o teclado e dele: as setas escolhem sugestao, e nao
-      // categoria. Quem trata isso e o proprio campo.
-      if (subcategoria !== null) return;
+      // Com um campo de texto aberto o teclado e dele: as setas escolhem
+      // sugestao e as letras sao letras. Quem trata isso e o proprio campo.
+      if (subcategoria !== null || comentario !== null) return;
 
       if (evento.key === "Escape") {
         onFechar();
@@ -296,6 +322,14 @@ export function ModoJogo({
       if (evento.key === "i" || evento.key === "I") {
         evento.preventDefault();
         setInformando((aberto) => !aberto);
+        return;
+      }
+
+      // `c` de comentario. Abre com o que ja estava escrito — o do banco, ou o
+      // que se digitou e ainda nao foi salvo.
+      if (evento.key === "c" || evento.key === "C") {
+        evento.preventDefault();
+        setComentario(comentarioPendente ?? atual.comentario ?? "");
         return;
       }
 
@@ -352,6 +386,36 @@ export function ModoJogo({
     selecao.current = [Math.min(bruto.length, completo.length), completo.length];
   }
 
+  /**
+   * Teclas da caixa de comentario.
+   *
+   * Enter quebra linha, como em qualquer caixa de texto. Ctrl+enter grava
+   * agora, sem esperar a classificacao — comentar e classificar sao coisas
+   * independentes, e ha despesa que se quer comentar sem categorizar.
+   */
+  function naCaixaDeComentario(evento: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (evento.key === "Escape") {
+      evento.preventDefault();
+      // Guarda o texto em vez de descarta-lo: ele vai junto na classificacao.
+      setComentarioPendente(comentario);
+      setComentario(null);
+      caixa.current?.focus();
+      return;
+    }
+
+    if (evento.key === "Enter" && (evento.metaKey || evento.ctrlKey)) {
+      evento.preventDefault();
+      if (!atual) return;
+
+      onComentar(atual, comentario ?? "");
+      setComentarioPendente(comentario);
+      setComentario(null);
+      caixa.current?.focus();
+      setAviso("Comentario salvo");
+      window.setTimeout(() => setAviso(null), 2500);
+    }
+  }
+
   /** Teclas do campo de subcategoria, enquanto ele esta aberto. */
   function noCampo(evento: React.KeyboardEvent<HTMLInputElement>) {
     if (evento.key === "Escape") {
@@ -385,7 +449,11 @@ export function ModoJogo({
 
       if (!atual || !escolhida || !direcao) return;
       levantarVoo(atual, direcao, escolhida.hue);
-      onClassificar(atual, escolhida.id, escolha || undefined, aTodos);
+      onClassificar(atual, escolhida.id, {
+        subcategoria: escolha || undefined,
+        aContraparteToda: aTodos,
+        comentario: comentarioPendente ?? undefined,
+      });
       setDespachados((atuais) => new Set(atuais).add(atual.id));
 
       if (aTodos) {
@@ -525,7 +593,30 @@ export function ModoJogo({
                   {[atual.contraparte, atual.conta].filter(Boolean).join(" · ")}
                 </span>
 
-                {subcategoria !== null && escolhida ? (
+                {/* Comentario que ja existe, quando a caixa esta fechada: sem
+                    isto, `c` pareceria abrir uma caixa vazia sobre um gasto que
+                    ja tinha nota. */}
+                {comentario === null && (comentarioPendente ?? atual.comentario) ? (
+                  <span className="jogo-nota">{comentarioPendente ?? atual.comentario}</span>
+                ) : null}
+
+                {comentario !== null ? (
+                  <div className="jogo-sub jogo-comentario">
+                    <textarea
+                      ref={caixaDeComentario}
+                      rows={3}
+                      value={comentario}
+                      placeholder="o que foi este gasto"
+                      aria-label="Comentario"
+                      onChange={(evento) => setComentario(evento.target.value)}
+                      onKeyDown={naCaixaDeComentario}
+                    />
+                    <span className="account-meta">
+                      ctrl+enter grava agora · esc guarda e volta, e o texto vai junto na
+                      classificacao
+                    </span>
+                  </div>
+                ) : subcategoria !== null && escolhida ? (
                   <div className="jogo-sub">
                     <input
                       ref={campo}
@@ -596,7 +687,7 @@ export function ModoJogo({
             <div className="jogo-rodape">
               <span className="account-meta">
                 setas miram · duas juntas fazem a diagonal · enter classifica · shift+enter vale
-                para toda a contraparte · espaco abre a subcategoria · i mostra o que se sabe ·
+                para toda a contraparte · espaco abre a subcategoria · c comenta · i mostra o que se sabe ·
                 backspace pula
                 {paginas > 1 ? ` · tab troca de volta (${pagina + 1}/${paginas})` : ""}
               </span>

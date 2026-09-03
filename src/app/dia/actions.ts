@@ -9,6 +9,7 @@ import {
   listCategorias,
   setLabel,
   setTransactionLabel,
+  setTransactionNote,
   vincularCentroDeCusto,
 } from "@/lib/db/repository";
 
@@ -78,4 +79,26 @@ export async function limparLancamento(formData: FormData): Promise<void> {
   });
 
   for (const rota of ["/dia", "/categorias", "/contrapartes", "/"]) revalidatePath(rota);
+}
+
+/**
+ * Comentario de um lancamento, sozinho.
+ *
+ * Separado de `classificarLancamento` porque comentar nao e classificar: no
+ * modo jogo o comentario e escrito antes de haver categoria, e passar pelo
+ * outro caminho apagaria a classificacao de quem ja tem uma.
+ */
+export async function comentarLancamento(formData: FormData): Promise<void> {
+  await requireSession();
+
+  const transactionId = String(formData.get("transactionId") ?? "");
+  if (!transactionId) return;
+
+  await setTransactionNote(
+    fromPostgres(getSql()),
+    transactionId,
+    String(formData.get("note") ?? ""),
+  );
+
+  revalidatePath("/dia");
 }

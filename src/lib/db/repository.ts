@@ -1146,6 +1146,48 @@ export async function salvarProdutosDoPedido(
   return gravados;
 }
 
+/**
+ * Grava so o comentario, sem tocar na categoria.
+ *
+ * Existe separado de `setTransactionLabel` porque aquele escreve os tres campos
+ * de uma vez: usa-lo para comentar apagaria a categoria de um lancamento ja
+ * classificado. Comentar e classificar sao acoes independentes, e no modo jogo
+ * a primeira acontece antes da segunda.
+ */
+export async function setTransactionNote(
+  db: Db,
+  transactionId: string,
+  note: string | null,
+): Promise<void> {
+  if (!transactionId) return;
+
+  const texto = note?.trim() || null;
+
+  if (!texto) {
+    // Sem comentario a linha pode nao ter mais razao de existir — mas so sai se
+    // tambem nao guardar classificacao.
+    await db.query(
+      `DELETE FROM transaction_labels
+        WHERE transaction_id = $1 AND category_id IS NULL AND cost_center_id IS NULL`,
+      [transactionId],
+    );
+    await db.query(
+      `UPDATE transaction_labels SET note_enc = NULL, updated_at = now()
+        WHERE transaction_id = $1`,
+      [transactionId],
+    );
+    return;
+  }
+
+  await db.query(
+    `INSERT INTO transaction_labels (transaction_id, note_enc, updated_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (transaction_id) DO UPDATE
+       SET note_enc = EXCLUDED.note_enc, updated_at = now()`,
+    [transactionId, encryptOptional(texto)],
+  );
+}
+
 /** Desfaz uma associacao: o produto sai, a cobranca continua. */
 export async function apagarProdutoDoPedido(db: Db, id: string): Promise<void> {
   if (!UUID.test(id)) return;

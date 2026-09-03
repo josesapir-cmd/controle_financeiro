@@ -4199,3 +4199,33 @@ ul.produtos {
   background: var(--text-strong);
   border-radius: var(--radius-sm);
 }
+
+/* Comentario dentro do jogo. Reaproveita a caixa da subcategoria e troca o
+   campo de uma linha por um de varias: comentario e frase, nao nome. */
+.jogo-comentario textarea {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+  color: var(--text-strong);
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+}
+
+/* O que ja esta escrito, com a caixa fechada: sem isto, `c` pareceria abrir
+   uma caixa vazia sobre um gasto que ja tinha nota. */
+.jogo-nota {
+  margin-top: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  color: var(--text-sub);
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
