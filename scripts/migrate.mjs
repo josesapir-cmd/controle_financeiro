@@ -32,6 +32,8 @@ async function lerEnv() {
 
 await lerEnv();
 
+const soEstado = process.argv.includes("--estado");
+
 const banco = await abrirBanco();
 
 // `migrate` fala `unsafe(texto)`, que e o formato do postgres.js. Por HTTPS a
@@ -43,6 +45,42 @@ const executor = {
 };
 
 try {
+  if (soEstado) {
+    // "Nada pendente" tem duas causas que se parecem: o banco esta em dia, ou
+    // os arquivos nao estao aqui. A lista separa as duas.
+    const { readdir } = await import("node:fs/promises");
+    const diretorio = path.join(process.cwd(), "src", "lib", "db", "migrations");
+    const arquivos = (await readdir(diretorio)).filter((n) => n.endsWith(".sql")).sort();
+
+    await banco.query(
+      `CREATE TABLE IF NOT EXISTS schema_migrations (
+         name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`,
+    );
+    const linhas = await banco.query("SELECT name, applied_at FROM schema_migrations");
+    const aplicadas = new Map(linhas.map((l) => [l.name, l.applied_at]));
+
+    console.log(`arquivos em src/lib/db/migrations: ${arquivos.length}`);
+    console.log(`registradas no banco: ${aplicadas.size}\n`);
+
+    for (const arquivo of arquivos) {
+      const quando = aplicadas.get(arquivo);
+      console.log(
+        `  ${quando ? "aplicada " : "PENDENTE "} ${arquivo}${
+          quando ? `  ${new Date(quando).toLocaleString("pt-BR")}` : ""
+        }`,
+      );
+    }
+
+    const orfas = [...aplicadas.keys()].filter((nome) => !arquivos.includes(nome));
+    if (orfas.length) {
+      console.log("\n  Registradas no banco sem arquivo correspondente aqui:");
+      for (const nome of orfas) console.log(`    ${nome}`);
+      console.log("  Isso quer dizer que este clone esta atras do banco — falta um git pull.");
+    }
+
+    process.exit(0);
+  }
+
   const novas = await migrate(executor, (m) => console.log(m));
   console.log(novas.length ? `${novas.length} migracao(oes) aplicada(s).` : "Nada pendente.");
 } catch (erro) {
