@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { localDay, shiftDay } from "@/lib/finance/dates";
+import { diaCurto, localDay, shiftDay } from "@/lib/finance/dates";
 import type { SituacaoDoDia } from "@/lib/finance/situacao";
 
 /** A bolinha nunca fala sozinha: cada cor tem a frase que ela quer dizer. */
@@ -33,7 +33,6 @@ const LARGURA = 70;
 /** Abaixo disso o ponteiro andou de menos para ser arraste: e clique. */
 const LIMIAR = 4;
 
-const MES_CURTO = new Intl.DateTimeFormat("pt-BR", { month: "short", timeZone: "UTC" });
 const SEMANA = new Intl.DateTimeFormat("pt-BR", { weekday: "short", timeZone: "UTC" });
 
 /** As contas selecionadas, tiradas da query que a fita ja carrega. */
@@ -45,19 +44,6 @@ function contasDaQuery(query: string): string[] {
 /** Meio-dia UTC: longe das duas viradas, entao o rotulo nunca cai no dia errado. */
 function comoData(dia: string): Date {
   return new Date(`${dia}T12:00:00Z`);
-}
-
-/**
- * "13/ago", montado a mao.
- *
- * `Intl` com dia e mes juntos devolve "13 de ago." em pt-BR, que nao cabe nos
- * 70px da celula e quebra em duas linhas. So o mes vem do `Intl`, que e o unico
- * pedaco que depende do idioma.
- */
-function rotuloDoDia(dia: string): string {
-  const data = comoData(dia);
-  const mes = MES_CURTO.format(data).replace(".", "");
-  return `${String(data.getUTCDate()).padStart(2, "0")}/${mes}`;
 }
 
 function rotuloDaSemana(dia: string): string {
@@ -302,7 +288,7 @@ export function SpinnerDeDatas({
                   } as React.CSSProperties
                 }
               >
-                <span className="spinner-data">{rotuloDoDia(valor)}</span>
+                <span className="spinner-data">{diaCurto(valor)}</span>
                 <span className="spinner-semana">{rotuloDaSemana(valor)}</span>
                 {situacao ? (
                   <span

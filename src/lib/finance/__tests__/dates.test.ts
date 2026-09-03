@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  diaCurto,
   localDay,
   localMonth,
   localTime,
@@ -125,5 +126,20 @@ describe("monthRange", () => {
   it("o mes corrente para em hoje", () => {
     // Prometer ate o dia 30 num mes que esta no dia 10 nao traz nada a mais.
     expect(monthRange("2026-09", hoje)).toEqual({ from: "2026-09-01", to: "2026-09-10" });
+  });
+});
+
+describe("diaCurto", () => {
+  it("escreve dia e mes sem o 'de' nem o ponto do Intl", () => {
+    expect(diaCurto("2026-08-13")).toBe("13/ago");
+  });
+
+  it("preenche o dia com zero para os rotulos ficarem do mesmo tamanho", () => {
+    expect(diaCurto("2026-01-05")).toBe("05/jan");
+  });
+
+  it("le a data como UTC, entao nao escorrega para o dia anterior", () => {
+    expect(diaCurto("2026-03-01")).toBe("01/mar");
+    expect(diaCurto("2026-12-31")).toBe("31/dez");
   });
 });

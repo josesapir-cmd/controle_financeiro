@@ -122,3 +122,19 @@ export function noonAt(day: string): Date {
     Date.parse(`${localDay(candidato)}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`);
   return desvio === 0 ? candidato : new Date(candidato.getTime() - desvio);
 }
+
+const MES_CURTO = new Intl.DateTimeFormat("pt-BR", { month: "short", timeZone: "UTC" });
+
+/**
+ * "13/ago" — dia e mes curtos, para onde o ano ja e obvio.
+ *
+ * `Intl` com dia e mes juntos devolve "13 de ago." em pt-BR: longo demais para
+ * uma celula de fita ou um rotulo de eixo, e com um ponto final que nao e
+ * pontuacao. So o mes vem do `Intl`, que e o unico pedaco que depende do
+ * idioma.
+ */
+export function diaCurto(dia: string): string {
+  const data = new Date(`${dia}T12:00:00Z`);
+  const mes = MES_CURTO.format(data).replace(".", "");
+  return `${String(data.getUTCDate()).padStart(2, "0")}/${mes}`;
+}

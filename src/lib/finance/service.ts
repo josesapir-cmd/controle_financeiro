@@ -746,6 +746,14 @@ export interface CategoriaParaClassificar {
 
 export interface LancamentoParaClassificar {
   id: string;
+  /**
+   * Dia local do lancamento, AAAA-MM-DD.
+   *
+   * A lista do dia nao precisa dele — ali todo mundo e do mesmo dia, e a hora
+   * basta. O jogo do painel percorre um mes inteiro, e ali a hora sozinha nao
+   * situa nada.
+   */
+  dia: string;
   hora: string;
   descricao: string;
   valor: number;
@@ -936,6 +944,7 @@ export async function loadPendentesDoPeriodo(
 
     return {
       id: t.id,
+      dia: localDay(t.date),
       hora: localTime(t.date),
       descricao: rotulo,
       valor: t.amount,
@@ -1304,6 +1313,7 @@ export async function loadClassificacaoDoDia(
 
     return {
       id: t.id,
+      dia: localDay(t.date),
       hora: localTime(t.date),
       descricao: rotulo,
       valor: t.amount,

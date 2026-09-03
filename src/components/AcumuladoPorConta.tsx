@@ -1,3 +1,4 @@
+import { diaCurto } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
 import type { DespesaPorConta } from "@/lib/finance/service";
 
@@ -21,12 +22,7 @@ const TOPO = 14;
 const ESQUERDA = 58;
 const BAIXO = 22;
 
-const DIA = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", timeZone: "UTC" });
 const COMPACTO = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
-
-function rotuloDoDia(dia: string): string {
-  return DIA.format(new Date(`${dia}T12:00:00Z`)).replace(".", "");
-}
 
 export function AcumuladoPorConta({
   contas,
@@ -72,7 +68,7 @@ export function AcumuladoPorConta({
     <figure className="gr">
       <figcaption className="gr-titulo">
         Gasto acumulado no periodo · <strong>{formatBRL(teto)}</strong> ate{" "}
-        {rotuloDoDia(acumulado[acumulado.length - 1].dia)}
+        {diaCurto(acumulado[acumulado.length - 1].dia)}
       </figcaption>
 
       <div className="gr-plot">
@@ -109,7 +105,7 @@ export function AcumuladoPorConta({
                 // dia fica metade fora do quadro e aparece cortado.
                 textAnchor={i === 0 ? "start" : i === acumulado.length - 1 ? "end" : "middle"}
               >
-                {rotuloDoDia(ponto.dia)}
+                {diaCurto(ponto.dia)}
               </text>
             ) : null,
           )}

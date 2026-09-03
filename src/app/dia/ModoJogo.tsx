@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { IconeDeCategoria } from "@/components/IconeDeCategoria";
+import { diaCurto } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
 import type {
   CategoriaParaClassificar,
@@ -660,7 +661,12 @@ export function ModoJogo({
                   escolhida ? ({ "--cat-h": escolhida.hue } as React.CSSProperties) : undefined
                 }
               >
-                <span className="jogo-hora">{atual.hora}</span>
+                {/* No jogo do dia a data seria repeticao: a tela inteira e
+                    aquele dia. No do painel ela e o que situa a despesa, entao
+                    entra junto com a hora. */}
+                <span className="jogo-hora">
+                  {dia ? atual.hora : `${diaCurto(atual.dia)} · ${atual.hora}`}
+                </span>
                 <span className="jogo-desc">{atual.descricao}</span>
                 <span className="jogo-valor">{formatBRL(atual.valor)}</span>
                 <span className="account-meta">
