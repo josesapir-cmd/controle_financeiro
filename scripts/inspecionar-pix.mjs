@@ -22,8 +22,7 @@
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import postgres from "postgres";
-import { normalizeConnectionString } from "../src/lib/db/connection-string.mjs";
+import { abrirBanco } from "./conectar.mjs";
 import { morrerComExplicacao } from "./erro-de-banco.mjs";
 
 async function lerEnv() {
@@ -93,11 +92,15 @@ function ehPix(t) {
   return /\bpix\b/.test(texto) || t.paymentData?.paymentMethod === "PIX";
 }
 
-const sql = postgres(normalizeConnectionString(process.env.DATABASE_URL), { max: 1, ssl: "require" });
+// Pelo transporte que a rede permitir: em rede que fecha a 5432 este script
+// nunca chegava a perguntar nada ao banco.
+const banco = await abrirBanco();
 
 let conexoes;
 try {
-  conexoes = await sql`SELECT item_id, connector_name FROM connections ORDER BY connector_name`;
+  conexoes = await banco.query(
+    "SELECT item_id, connector_name FROM connections ORDER BY connector_name",
+  );
 } catch (erro) {
   morrerComExplicacao(erro);
 }
@@ -189,4 +192,4 @@ if (semNome > 0) {
   console.log(`  ou em algum campo que o app ainda nao le.`);
 }
 
-await sql.end();
+await banco.fim();
