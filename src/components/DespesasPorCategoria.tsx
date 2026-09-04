@@ -41,7 +41,10 @@ export function DespesasPorCategoria({
               Valor
             </th>
             <th scope="col" className="gr-num">
-              Participacao
+              {/* No celular o rotulo por extenso empurra os numeros para fora
+                  da tela, e os valores da coluna ja sao porcentagens. */}
+              <span className="gr-so-largo">Participacao</span>
+              <span className="gr-so-estreito">%</span>
             </th>
             <th scope="col" className="gr-so-largo">
               Distribuicao

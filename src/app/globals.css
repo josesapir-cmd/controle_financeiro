@@ -4336,21 +4336,6 @@ ul.produtos {
   margin-bottom: 0;
 }
 
-/* Lado a lado onde couber: as duas tabelas respondem a mesma pergunta por
-   recortes diferentes, e compara-las exige ve-las juntas. */
-.painel-par {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: 1fr;
-}
-
-@media (min-width: 1100px) {
-  .painel-par {
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
-  }
-}
-
 /* ==========================================================================
    Graficos do painel
    Marcas finas, grade recuada, e a cor so onde ela CODIFICA alguma coisa: a
@@ -4487,15 +4472,28 @@ ul.produtos {
   color: var(--text-strong);
 }
 
-.gr-num {
+.gr-tabela .gr-num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* As colunas de numero encolhem ate o conteudo; a do nome fica com a sobra.
+   Sem isto, numa tabela de largura cheia o valor fica longe do nome a que
+   pertence e o olho precisa atravessar a tela. */
+.gr-tabela .gr-num {
+  width: 1%;
+  white-space: nowrap;
 }
 
 .gr-tabela .gr-total th,
 .gr-tabela .gr-total td {
   font-weight: 600;
   border-bottom: none;
+}
+
+/* Aparece so no aperto do celular, onde o rotulo por extenso nao cabe. */
+.gr-so-estreito {
+  display: none;
 }
 
 /* Aperto de celular. Sai a barra — e a mesma informacao da coluna de
@@ -4522,6 +4520,10 @@ ul.produtos {
 
   .gr-tabela .account-meta {
     display: block;
+  }
+
+  .gr-so-estreito {
+    display: inline;
   }
 }
 

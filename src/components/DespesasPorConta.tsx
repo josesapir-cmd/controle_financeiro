@@ -4,12 +4,10 @@ import type { DespesaPorConta } from "@/lib/finance/service";
 /**
  * Total por conta, em tabela.
  *
- * A mesma cor do grafico acumulado em cada linha: e o que liga a faixa da area
- * ao numero exato, sem obrigar a medir a faixa no olho.
+ * A cor da instituicao em cada linha e orientacao, nao codificacao: o nome do
+ * banco esta ao lado, entao a marca serve so para achar a linha rapido.
  *
- * A ordem aqui e a do VALOR, nao a da pilha. Sao perguntas diferentes: a pilha
- * ordena para as cores nao se confundirem, a tabela ordena para responder
- * "quem gastou mais".
+ * Ordenada pelo valor, que e a pergunta: quem gastou mais.
  */
 export function DespesasPorConta({
   contas,
@@ -21,6 +19,7 @@ export function DespesasPorConta({
   if (contas.length === 0) return null;
 
   const porValor = [...contas].sort((a, b) => b.total - a.total);
+  const maior = Math.max(...porValor.map((c) => c.total));
 
   return (
     <figure className="gr">
@@ -37,7 +36,13 @@ export function DespesasPorConta({
               Valor
             </th>
             <th scope="col" className="gr-num">
-              Participacao
+              {/* No celular o rotulo por extenso empurra os numeros para fora
+                  da tela, e os valores da coluna ja sao porcentagens. */}
+              <span className="gr-so-largo">Participacao</span>
+              <span className="gr-so-estreito">%</span>
+            </th>
+            <th scope="col" className="gr-so-largo">
+              Distribuicao
             </th>
           </tr>
         </thead>
@@ -52,12 +57,18 @@ export function DespesasPorConta({
               <td className="gr-num">
                 {total > 0 ? ((conta.total / total) * 100).toFixed(1) : "0.0"}%
               </td>
+              <td className="gr-so-largo">
+                <span className="gr-barra" aria-hidden>
+                  <span style={{ width: `${Math.max(1, (conta.total / maior) * 100)}%` }} />
+                </span>
+              </td>
             </tr>
           ))}
           <tr className="gr-total">
             <th scope="row">Total</th>
             <td className="gr-num">{formatBRL(total)}</td>
             <td className="gr-num">100.0%</td>
+            <td className="gr-so-largo" />
           </tr>
         </tbody>
         </table>

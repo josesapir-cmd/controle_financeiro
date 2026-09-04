@@ -47,7 +47,7 @@ import { currentMonthRange, currentYearRange, localDay, localTime, shiftDay } fr
 import { netWorth, normalizeAmount, sumBy } from "./money";
 import { rotuloDoLancamento } from "./rotulo";
 import { fronteiraDeDados, situacaoDoDia, type SituacaoDoDia } from "./situacao";
-import { corDeGrafico, matizDe, ordenarParaContraste } from "./cores-de-conta";
+import { corDeGrafico } from "./cores-de-conta";
 import {
   totalExpenses,
   totalIncome,
@@ -1005,10 +1005,7 @@ export interface DespesaPorCategoria {
 
 export interface PainelDeDespesas {
   period: Period;
-  /** Contas ja na ordem em que as faixas devem ser empilhadas. */
   contas: DespesaPorConta[];
-  /** Um ponto por dia do periodo, com o acumulado de cada conta ate ali. */
-  acumulado: { dia: string; porConta: Record<string, number> }[];
   categorias: DespesaPorCategoria[];
   semCategoria: { total: number; contagem: number };
   /** Soma das despesas do periodo, com e sem categoria. */
@@ -1029,9 +1026,9 @@ export interface PainelDeDespesas {
 /**
  * Despesas do periodo por conta e por categoria.
  *
- * Uma leitura so para as tres visoes — acumulado, tabela por conta e
- * distribuicao por categoria — porque as tres somam as MESMAS transacoes. Ler
- * em tres lugares abriria a porta para tres totais diferentes na mesma tela.
+ * Uma leitura so para as duas tabelas — por conta e por categoria — porque as
+ * duas somam as MESMAS transacoes. Ler em dois lugares abriria a porta para
+ * dois totais diferentes na mesma tela.
  */
 export async function loadPainelDeDespesas(
   period: Period,
@@ -1101,9 +1098,7 @@ export async function loadPainelDeDespesas(
     });
   }
 
-  // A ordem da pilha nao e a do valor: numa area empilhada so as faixas
-  // vizinhas se tocam, e matizes parecidas encostadas sao indistinguiveis.
-  const semOrdem: DespesaPorConta[] = [...totalPorConta.entries()].map(([id, valor]) => {
+  const porConta: DespesaPorConta[] = [...totalPorConta.entries()].map(([id, valor]) => {
     const banco = bancoDaConta.get(id) ?? "";
     return {
       id,
@@ -1114,33 +1109,9 @@ export async function loadPainelDeDespesas(
     };
   });
 
-  const empilhadas = ordenarParaContraste(semOrdem, (conta) => matizDe(conta.cor) ?? 0);
-
-  // Acumulado dia a dia: a linha de cada conta so sobe, entao o grafico responde
-  // "quando o mes ficou caro" e nao so "quanto custou".
-  const porDia = new Map<string, Map<string, number>>();
-  for (const t of despesas) {
-    const dia = localDay(t.date);
-    const doDia = porDia.get(dia) ?? new Map<string, number>();
-    doDia.set(t.accountId, (doDia.get(t.accountId) ?? 0) + -t.amount);
-    porDia.set(dia, doDia);
-  }
-
-  const acumulado: { dia: string; porConta: Record<string, number> }[] = [];
-  const somaCorrente = new Map<string, number>();
-  for (let dia = period.from; dia <= period.to; dia = shiftDay(dia, 1)) {
-    const doDia = porDia.get(dia);
-    for (const conta of empilhadas) {
-      const anterior = somaCorrente.get(conta.id) ?? 0;
-      somaCorrente.set(conta.id, anterior + (doDia?.get(conta.id) ?? 0));
-    }
-    acumulado.push({ dia, porConta: Object.fromEntries(somaCorrente) });
-  }
-
   return {
     period,
-    contas: empilhadas,
-    acumulado,
+    contas: porConta,
     categorias: [...totalPorCategoria.entries()]
       .map(([id, dados]) => {
         const categoria = categoriaPorId.get(id);

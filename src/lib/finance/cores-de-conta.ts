@@ -111,7 +111,7 @@ const CLARIDADE = 0.6;
 const CROMA = 0.15;
 
 /** Matiz de uma cor, em graus. Serve tanto a marca quanto o passo de grafico. */
-export function matizDe(cor: string): number | null {
+function matizDe(cor: string): number | null {
   const oklch = cor.match(/^oklch\([\d.]+\s+[\d.]+\s+([\d.]+)\)$/);
   if (oklch) return Number(oklch[1]);
 
@@ -136,79 +136,4 @@ export function matizDe(cor: string): number | null {
 export function corDeGrafico(connectorName: string): string {
   const matiz = matizDe(corDaInstituicao(connectorName)) ?? 250;
   return `oklch(${CLARIDADE} ${CROMA} ${matiz.toFixed(1)})`;
-}
-
-/**
- * Ordem das faixas numa area empilhada.
- *
- * Numa pilha so as faixas VIZINHAS se tocam, e a ordem e escolha nossa. Duas
- * matizes proximas — o azul do Personnalite e o do BTG — sao indistinguiveis
- * encostadas e perfeitamente distinguiveis separadas por uma terceira. Entao em
- * vez de inventar cor nova para um banco, afastamos as parecidas na pilha.
- *
- * Guloso a partir da matiz mais "sozinha": a cada passo entra a que estiver mais
- * longe da ultima colocada. Para meia duzia de contas isso encontra a mesma
- * ordem que a busca exaustiva, e nao cresce fatorialmente.
- */
-export function ordenarParaContraste<T>(
-  itens: T[],
-  matizDe: (item: T) => number,
-): T[] {
-  if (itens.length <= 2) return [...itens];
-
-  const distancia = (a: number, b: number) => {
-    const bruta = Math.abs(a - b) % 360;
-    // Da a volta no circulo: 350 e 10 estao a 20 graus, nao a 340.
-    return bruta > 180 ? 360 - bruta : bruta;
-  };
-
-  /** O par vizinho mais parecido de uma ordem — e ele que decide se ela serve. */
-  const piorVizinhanca = (ordem: T[]) =>
-    Math.min(
-      ...ordem.slice(1).map((item, i) => distancia(matizDe(ordem[i]), matizDe(item))),
-    );
-
-  // Ate sete contas, a busca exaustiva cabe (5040 ordens) e devolve o otimo. O
-  // guloso erra justamente no caso pequeno: ele poe a matiz isolada na ponta e
-  // deixa as duas parecidas juntas no fim.
-  if (itens.length <= 7) {
-    let melhor = itens;
-    let melhorPior = -1;
-
-    const permutar = (restantes: T[], montada: T[]) => {
-      if (restantes.length === 0) {
-        const pior = piorVizinhanca(montada);
-        if (pior > melhorPior) {
-          melhorPior = pior;
-          melhor = montada;
-        }
-        return;
-      }
-      restantes.forEach((item, i) => {
-        permutar([...restantes.slice(0, i), ...restantes.slice(i + 1)], [...montada, item]);
-      });
-    };
-
-    permutar(itens, []);
-    return melhor;
-  }
-
-  // Muitas contas: guloso, que nao cresce fatorialmente. A cada passo entra a
-  // que estiver mais longe da ultima colocada.
-  const restantes = [...itens];
-  let atual = restantes.shift() as T;
-  const ordem: T[] = [atual];
-
-  while (restantes.length > 0) {
-    const proxima = restantes.reduce((melhor, item) =>
-      distancia(matizDe(item), matizDe(atual)) > distancia(matizDe(melhor), matizDe(atual))
-        ? item
-        : melhor,
-    );
-    restantes.splice(restantes.indexOf(proxima), 1);
-    ordem.push(proxima);
-    atual = proxima;
-  }
-
-  return ordem;
 }

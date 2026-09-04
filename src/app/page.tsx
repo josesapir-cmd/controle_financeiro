@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/guard";
 import { AccountFilter } from "@/components/AccountFilter";
-import { AcumuladoPorConta } from "@/components/AcumuladoPorConta";
 import { DespesasPorCategoria } from "@/components/DespesasPorCategoria";
 import { DespesasPorConta } from "@/components/DespesasPorConta";
 import { Nav } from "@/components/Nav";
@@ -181,11 +180,8 @@ export default async function Home({
         <p className="empty">Nenhuma despesa neste periodo.</p>
       ) : (
         <>
-          <AcumuladoPorConta contas={dados.contas} acumulado={dados.acumulado} />
-          <div className="painel-par">
-            <DespesasPorConta contas={dados.contas} total={dados.total} />
-            <DespesasPorCategoria categorias={dados.categorias} total={dados.total} />
-          </div>
+          <DespesasPorConta contas={dados.contas} total={dados.total} />
+          <DespesasPorCategoria categorias={dados.categorias} total={dados.total} />
         </>
       )}
     </main>
