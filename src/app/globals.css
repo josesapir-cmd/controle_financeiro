@@ -4903,3 +4903,215 @@ ul.produtos {
     padding-left: 38px;
   }
 }
+
+/* ==========================================================================
+   Compromissos — cadastro, lista de chamadas e liquidacao
+   ========================================================================== */
+
+.cp-novo {
+  flex: none;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+/* Rascunho: amarelo porque ainda nao existe. O bloco entra por cima da lista e
+   sai sem deixar rastro, entao ele nao pode parecer um dos cartoes salvos. */
+.cp-rascunho {
+  background: var(--warning-light);
+  border-color: color-mix(in oklab, var(--warning) 45%, var(--warning-light));
+}
+
+.cp-rascunho input[type="text"],
+.cp-rascunho input[type="date"] {
+  background: var(--bg-white);
+}
+
+.cp-rascunho-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cp-fechar {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-sub);
+  background: none;
+  border: none;
+  border-radius: var(--radius-xs);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.cp-fechar:hover:not(:disabled) {
+  color: var(--text-strong);
+  background: color-mix(in oklab, var(--warning) 20%, transparent);
+}
+
+/* A linha que resume as chamadas e o que se le sempre; a tabela e o detalhe de
+   quando alguma coisa nao bate. */
+.cp-sumario {
+  display: flex;
+  align-items: center;
+  /* O botao global centraliza o conteudo. Aqui a linha e texto corrido: ela
+     tem de comecar na margem, como as outras linhas do cartao. */
+  justify-content: flex-start;
+  gap: 2px;
+  width: 100%;
+  height: auto;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+  color: var(--text-sub);
+  background: var(--bg-weak);
+  border: none;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.cp-sumario:hover:not(:disabled) {
+  color: var(--text-strong);
+  background: var(--bg-soft);
+}
+
+.cp-sumario:disabled {
+  color: var(--text-soft);
+  cursor: default;
+}
+
+.cp-sumario strong {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
+.cp-pendente {
+  color: var(--away);
+}
+
+/* Quadradinho de conferir. Vazio enquanto a chamada nao foi paga: o contorno
+   sozinho ja e um convite a clicar, e a marca so aparece quando ha o que
+   marcar. */
+.cp-tique {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: transparent;
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-sub);
+  border-radius: var(--radius-xs);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.cp-tique:hover:not(:disabled) {
+  color: var(--text-soft);
+  background: var(--bg-weak);
+  border-color: var(--text-soft);
+}
+
+.cp-tique.feito {
+  color: var(--bg-white);
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.cp-tique.feito:hover:not(:disabled) {
+  color: var(--bg-white);
+  background: var(--success-dark);
+  border-color: var(--success-dark);
+}
+
+/* A chamada que ainda nao saiu e uma obrigacao com data marcada: a etiqueta
+   diz isso em texto, e nao so pela cor. */
+.cp-etiqueta {
+  margin-left: 8px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--warning-dark);
+  background: var(--warning-light);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.cp-aberta {
+  color: var(--text-sub);
+}
+
+.cp-editando > td {
+  padding: 12px 10px;
+  background: var(--bg-weak);
+}
+
+.cp-editando .cp-linha {
+  align-items: flex-end;
+}
+
+.cp-cancelar {
+  height: auto;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-soft);
+  background: none;
+  border: none;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.cp-cancelar:hover:not(:disabled) {
+  color: var(--text-strong);
+  background: none;
+}
+
+/* Apagar vai para a ponta oposta do salvar, e vermelho: e a unica acao da
+   linha que nao tem volta, e nao pode ficar ao lado do botao que se aperta sem
+   pensar. */
+.cp-x {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--error);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.cp-x:hover:not(:disabled) {
+  color: var(--bg-white);
+  background: var(--error);
+}
+
+/* Rotulo que so o leitor de tela ve: a coluna do tique nao tem titulo visivel,
+   mas a tabela nao pode ter uma coluna anonima. */
+.cp-oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+

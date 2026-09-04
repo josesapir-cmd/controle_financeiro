@@ -8,7 +8,9 @@ import {
   apagarChamada,
   criarCompromisso,
   encerrarCompromisso,
+  liquidarChamada,
   registrarChamada,
+  salvarChamada,
   salvarCompromisso,
 } from "@/lib/db/repository";
 
@@ -109,6 +111,40 @@ export async function adicionarChamada(formData: FormData): Promise<void> {
     note: texto(formData.get("note")),
   });
 
+  revalidar();
+}
+
+export async function editarChamada(formData: FormData): Promise<void> {
+  await requireSession();
+
+  const id = String(formData.get("id") ?? "");
+  const valor = dinheiro(formData.get("amount"));
+  const quando = data(formData.get("calledOn"));
+  if (!id || valor === null || !quando) return;
+
+  await salvarChamada(fromPostgres(getSql()), id, {
+    calledOn: quando,
+    amount: valor,
+    note: texto(formData.get("note")),
+  });
+
+  revalidar();
+}
+
+/**
+ * Marca a chamada como paga, ou desfaz.
+ *
+ * O estado alvo vem no formulario e nao e deduzido aqui: dois cliques rapidos
+ * na mesma linha alternariam duas vezes a partir de leituras diferentes, e o
+ * resultado dependeria da ordem em que os pedidos chegassem.
+ */
+export async function liquidar(formData: FormData): Promise<void> {
+  await requireSession();
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  await liquidarChamada(fromPostgres(getSql()), id, formData.get("desfazer") === null);
   revalidar();
 }
 

@@ -1244,6 +1244,13 @@ export interface ChamadaRow {
   calledOn: string;
   amount: number;
   note: string | null;
+  /**
+   * Se o dinheiro ja saiu.
+   *
+   * Registrar a chamada nao e paga-la: o gestor avisa e o pagamento sai dias
+   * depois. Entre um e outro ha uma obrigacao com data marcada.
+   */
+  liquidada: boolean;
 }
 
 export async function listCompromissos(
@@ -1276,7 +1283,7 @@ export async function listCompromissos(
  */
 export async function listChamadas(db: Db): Promise<ChamadaRow[]> {
   const linhas = await db.query<Record<string, unknown>>(
-    `SELECT id, commitment_id, called_on, amount, note
+    `SELECT id, commitment_id, called_on, amount, note, settled_at
        FROM capital_calls
       ORDER BY called_on DESC, created_at DESC`,
   );
@@ -1287,6 +1294,7 @@ export async function listChamadas(db: Db): Promise<ChamadaRow[]> {
     calledOn: dia(linha.called_on) ?? "",
     amount: numero(linha.amount),
     note: linha.note ? String(linha.note) : null,
+    liquidada: Boolean(linha.settled_at),
   }));
 }
 
@@ -1363,4 +1371,28 @@ export async function registrarChamada(
 export async function apagarChamada(db: Db, id: string): Promise<void> {
   if (!UUID.test(id)) return;
   await db.query(`DELETE FROM capital_calls WHERE id = $1`, [id]);
+}
+
+export async function salvarChamada(
+  db: Db,
+  id: string,
+  dados: { calledOn: string; amount: number; note?: string | null },
+): Promise<void> {
+  if (!UUID.test(id)) return;
+  if (!(dados.amount > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(dados.calledOn)) return;
+
+  await db.query(
+    `UPDATE capital_calls SET called_on = $2, amount = $3, note = $4 WHERE id = $1`,
+    [id, dados.calledOn, dados.amount, dados.note?.trim() || null],
+  );
+}
+
+/** Marca a chamada como paga, ou desmarca. */
+export async function liquidarChamada(db: Db, id: string, liquidar = true): Promise<void> {
+  if (!UUID.test(id)) return;
+
+  await db.query(
+    `UPDATE capital_calls SET settled_at = ${liquidar ? "now()" : "NULL"} WHERE id = $1`,
+    [id],
+  );
 }

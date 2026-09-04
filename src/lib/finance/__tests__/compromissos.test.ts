@@ -6,8 +6,14 @@ function fundo(id: string, nome: string, comprometido: number): CompromissoRow {
   return { id, name: nome, committed: comprometido, signedOn: null, note: null, closed: false };
 }
 
-function chamada(id: string, fundoId: string, data: string, valor: number): ChamadaRow {
-  return { id, commitmentId: fundoId, calledOn: data, amount: valor, note: null };
+function chamada(
+  id: string,
+  fundoId: string,
+  data: string,
+  valor: number,
+  liquidada = true,
+): ChamadaRow {
+  return { id, commitmentId: fundoId, calledOn: data, amount: valor, note: null, liquidada };
 }
 
 describe("montarCarteira", () => {
@@ -76,7 +82,14 @@ describe("montarCarteira", () => {
 
   it("carteira vazia soma zero em vez de dividir por zero", () => {
     const carteira = montarCarteira([], []);
-    expect(carteira).toEqual({ fundos: [], comprometido: 0, chamado: 0, aChamar: 0 });
+    expect(carteira).toEqual({
+      fundos: [],
+      comprometido: 0,
+      chamado: 0,
+      liquidado: 0,
+      aLiquidar: 0,
+      aChamar: 0,
+    });
   });
 
   it("compromisso zerado nao produz NaN na fatia", () => {
@@ -127,5 +140,55 @@ describe("acumulado das chamadas", () => {
     ).fundos;
 
     expect(alfa.chamadas.map((c) => c.acumulado)).toEqual([30000, 50000]);
+  });
+});
+
+describe("liquidacao na carteira", () => {
+  it("separa o que foi chamado do que ja saiu", () => {
+    // "Chamado" e a obrigacao; "liquidado" e o dinheiro que de fato esta la. A
+    // diferenca entre os dois e a conta a pagar que a tela precisa mostrar.
+    const carteira = montarCarteira(
+      [fundo("a", "Alfa", 500000)],
+      [
+        chamada("1", "a", "2026-04-10", 50000, true),
+        chamada("2", "a", "2026-08-02", 30000, false),
+      ],
+    );
+
+    const [alfa] = carteira.fundos;
+    expect(alfa.chamado).toBe(80000);
+    expect(alfa.liquidado).toBe(50000);
+    expect(alfa.aLiquidar).toBe(30000);
+    expect(carteira.liquidado).toBe(50000);
+    expect(carteira.aLiquidar).toBe(30000);
+  });
+
+  it("chamada pendente continua abatendo o que falta chamar", () => {
+    // O gestor ja pediu: aquele dinheiro nao pode ser contado duas vezes como
+    // "ainda pode ser chamado de surpresa".
+    const [alfa] = montarCarteira(
+      [fundo("a", "Alfa", 500000)],
+      [chamada("1", "a", "2026-04-10", 50000, false)],
+    ).fundos;
+
+    expect(alfa.aChamar).toBe(450000);
+  });
+
+  it("ordena os fundos do maior compromisso para o menor", () => {
+    const carteira = montarCarteira(
+      [fundo("a", "Alfa", 100000), fundo("b", "Beta", 900000), fundo("c", "Gama", 400000)],
+      [],
+    );
+
+    expect(carteira.fundos.map((f) => f.nome)).toEqual(["Beta", "Gama", "Alfa"]);
+  });
+
+  it("compromissos de mesmo tamanho saem em ordem alfabetica, e nao ao acaso", () => {
+    const carteira = montarCarteira(
+      [fundo("a", "Zeta", 100000), fundo("b", "Alfa", 100000)],
+      [],
+    );
+
+    expect(carteira.fundos.map((f) => f.nome)).toEqual(["Alfa", "Zeta"]);
   });
 });

@@ -9,7 +9,9 @@ import {
   encerrarCompromisso,
   listChamadas,
   listCompromissos,
+  liquidarChamada,
   registrarChamada,
+  salvarChamada,
   salvarCompromisso,
 } from "../repository";
 
@@ -164,5 +166,80 @@ describe("compromissos de capital", () => {
     await expect(salvarCompromisso(db, "abc", { name: "x", committed: 1 })).resolves.toBeUndefined();
     await expect(encerrarCompromisso(db, "abc")).resolves.toBeUndefined();
     await expect(apagarChamada(db, "abc")).resolves.toBeUndefined();
+  });
+});
+
+describe("liquidacao das chamadas", () => {
+  it("chamada nova nasce pendente: registrar nao e pagar", async () => {
+    const id = (await criarCompromisso(db, { name: "Fundo Alfa", committed: 500000 }))!;
+    await registrarChamada(db, { commitmentId: id, calledOn: "2026-04-10", amount: 50000 });
+
+    const [chamada] = await listChamadas(db);
+    expect(chamada.liquidada).toBe(false);
+  });
+
+  it("liquidar marca e desmarca", async () => {
+    const id = (await criarCompromisso(db, { name: "Fundo Alfa", committed: 500000 }))!;
+    const chamada = (await registrarChamada(db, {
+      commitmentId: id,
+      calledOn: "2026-04-10",
+      amount: 50000,
+    }))!;
+
+    await liquidarChamada(db, chamada);
+    expect((await listChamadas(db))[0].liquidada).toBe(true);
+
+    await liquidarChamada(db, chamada, false);
+    expect((await listChamadas(db))[0].liquidada).toBe(false);
+  });
+
+  it("editar troca data, valor e nota da chamada", async () => {
+    const id = (await criarCompromisso(db, { name: "Fundo Alfa", committed: 500000 }))!;
+    const chamada = (await registrarChamada(db, {
+      commitmentId: id,
+      calledOn: "2026-04-10",
+      amount: 50000,
+    }))!;
+
+    await salvarChamada(db, chamada, {
+      calledOn: "2026-04-22",
+      amount: 61500,
+      note: "call 1 revisada",
+    });
+
+    const [depois] = await listChamadas(db);
+    expect(depois.calledOn).toBe("2026-04-22");
+    expect(depois.amount).toBe(61500);
+    expect(depois.note).toBe("call 1 revisada");
+  });
+
+  it("editar recusa valor ou data invalidos em vez de gravar lixo", async () => {
+    const id = (await criarCompromisso(db, { name: "Fundo Alfa", committed: 500000 }))!;
+    const chamada = (await registrarChamada(db, {
+      commitmentId: id,
+      calledOn: "2026-04-10",
+      amount: 50000,
+    }))!;
+
+    await salvarChamada(db, chamada, { calledOn: "22/04/2026", amount: 61500 });
+    await salvarChamada(db, chamada, { calledOn: "2026-04-22", amount: 0 });
+
+    const [depois] = await listChamadas(db);
+    expect(depois.calledOn).toBe("2026-04-10");
+    expect(depois.amount).toBe(50000);
+  });
+
+  it("editar nao mexe na liquidacao ja registrada", async () => {
+    const id = (await criarCompromisso(db, { name: "Fundo Alfa", committed: 500000 }))!;
+    const chamada = (await registrarChamada(db, {
+      commitmentId: id,
+      calledOn: "2026-04-10",
+      amount: 50000,
+    }))!;
+
+    await liquidarChamada(db, chamada);
+    await salvarChamada(db, chamada, { calledOn: "2026-04-22", amount: 61500 });
+
+    expect((await listChamadas(db))[0].liquidada).toBe(true);
   });
 });

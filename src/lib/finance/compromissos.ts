@@ -12,8 +12,12 @@ export interface CompromissoComChamadas {
   id: string;
   nome: string;
   comprometido: number;
-  /** Soma das chamadas ja registradas. */
+  /** Soma de todas as chamadas registradas, pagas ou nao. */
   chamado: number;
+  /** Soma so das chamadas ja pagas. E o dinheiro que de fato esta no fundo. */
+  liquidado: number;
+  /** Chamado e ainda nao pago: obrigacao com data marcada. */
+  aLiquidar: number;
   /** O que o gestor ainda pode pedir. Nunca negativo: ver `montarCarteira`. */
   aChamar: number;
   /** Quanto do compromisso ja foi chamado, de 0 a 1. */
@@ -35,6 +39,7 @@ export interface CompromissoComChamadas {
     data: string;
     valor: number;
     nota: string | null;
+    liquidada: boolean;
     /** Soma desta chamada e de todas as anteriores. */
     acumulado: number;
   }[];
@@ -44,6 +49,8 @@ export interface CarteiraDeCompromissos {
   fundos: CompromissoComChamadas[];
   comprometido: number;
   chamado: number;
+  liquidado: number;
+  aLiquidar: number;
   aChamar: number;
 }
 
@@ -73,6 +80,7 @@ export function montarCarteira(
       a.calledOn === b.calledOn ? a.id.localeCompare(b.id) : a.calledOn.localeCompare(b.calledOn),
     );
     const chamado = suas.reduce((soma, c) => soma + c.amount, 0);
+    const liquidado = suas.reduce((soma, c) => soma + (c.liquidada ? c.amount : 0), 0);
     let corrente = 0;
 
     return {
@@ -80,6 +88,8 @@ export function montarCarteira(
       nome: fundo.name,
       comprometido: fundo.committed,
       chamado,
+      liquidado,
+      aLiquidar: chamado - liquidado,
       // Piso em zero: o que sobra para chamar nao pode ser negativo, e o
       // excesso vira aviso proprio em vez de um numero sem sentido.
       aChamar: Math.max(0, fundo.committed - chamado),
@@ -90,15 +100,30 @@ export function montarCarteira(
       encerrado: fundo.closed,
       chamadas: suas.map((c) => {
         corrente += c.amount;
-        return { id: c.id, data: c.calledOn, valor: c.amount, nota: c.note, acumulado: corrente };
+        return {
+          id: c.id,
+          data: c.calledOn,
+          valor: c.amount,
+          nota: c.note,
+          liquidada: c.liquidada,
+          acumulado: corrente,
+        };
       }),
     };
   });
 
   return {
-    fundos,
+    // Do maior compromisso para o menor: e a ordem da exposicao, e o fundo
+    // grande e o que muda a conta de caixa.
+    fundos: fundos.sort((a, b) =>
+      b.comprometido === a.comprometido
+        ? a.nome.localeCompare(b.nome, "pt-BR")
+        : b.comprometido - a.comprometido,
+    ),
     comprometido: fundos.reduce((s, f) => s + f.comprometido, 0),
     chamado: fundos.reduce((s, f) => s + f.chamado, 0),
+    liquidado: fundos.reduce((s, f) => s + f.liquidado, 0),
+    aLiquidar: fundos.reduce((s, f) => s + f.aLiquidar, 0),
     // Somado dos fundos, e nao `comprometido - chamado`: um fundo que estourou
     // o compromisso nao pode abater a exposicao dos outros.
     aChamar: fundos.reduce((s, f) => s + f.aChamar, 0),
