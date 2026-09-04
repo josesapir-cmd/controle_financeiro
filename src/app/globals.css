@@ -4507,6 +4507,12 @@ ul.produtos {
 .gr-tabela tbody th {
   font-weight: 500;
   color: var(--text-strong);
+  /* O `th` global pinta o fundo de cinza e proibe quebra de linha porque foi
+     escrito para cabecalho de tabela. Numa coluna de nomes o cinza vira uma
+     faixa no meio do cartao, e o nowrap empurra a tabela para fora da tela no
+     celular em vez de deixar o nome quebrar. */
+  background: none;
+  white-space: normal;
 }
 
 .gr-tabela .gr-num {
@@ -4759,5 +4765,141 @@ ul.produtos {
 
   .cp-numeros {
     gap: 16px;
+  }
+}
+
+/* ==========================================================================
+   Arvore da tabela de categorias
+   Categoria abre em subcategorias, subcategoria abre nas despesas. O recuo e a
+   unica marca de nivel: zebrar as linhas dentro de uma arvore vira ruido.
+   ========================================================================== */
+
+.gr-abrir {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  height: auto;
+  padding: 0;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gr-abrir:hover:not(:disabled) {
+  color: var(--primary);
+  background: none;
+}
+
+/* Triangulo desenhado em borda: nao depende de fonte de icone nem de emoji, e
+   gira sem trocar de glifo.
+   O triangulo mora num pseudo-elemento dentro de uma caixa de 10px, e nao no
+   proprio span: um elemento de largura zero tem a origem da rotacao no canto
+   da caixa de borda, e o giro sai torto — o mesmo estado apontava para baixo
+   numa largura de tela e para o lado em outra. */
+.gr-seta {
+  position: relative;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  transition: transform 120ms ease;
+}
+
+.gr-seta::before {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--text-soft);
+}
+
+.gr-seta.aberta {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gr-seta {
+    transition: none;
+  }
+}
+
+/* O numero de lancamentos e contexto, nao dado da linha: entra como etiqueta
+   discreta em vez de continuar a frase do nome. */
+.gr-badge {
+  margin-left: 8px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-sub);
+  background: var(--bg-weak);
+  border-radius: 999px;
+}
+
+/* A categoria aberta vira cabecalho do proprio grupo: e o que amarra o bloco
+   recuado abaixo dela ao titulo que o abriu. */
+.gr-arvore tbody.aberto > tr:first-child > th,
+.gr-arvore tbody.aberto > tr:first-child > td {
+  background: var(--bg-weak);
+}
+
+/* O realce de linha inteira do app so pinta os `td`. Aqui a primeira celula e
+   um `th`, e sem isto ela fica branca enquanto o resto da linha acende. */
+.gr-arvore tbody tr:hover > th {
+  background: var(--bg-weak);
+}
+
+.gr-arvore .gr-nivel-2 > th {
+  padding-left: 28px;
+  font-weight: 400;
+  color: var(--text-sub);
+}
+
+.gr-arvore .gr-nivel-3 > th {
+  padding-left: 54px;
+  font-weight: 400;
+}
+
+.gr-arvore .gr-nivel-2 > td,
+.gr-arvore .gr-nivel-3 > td {
+  color: var(--text-sub);
+}
+
+/* Traco mais leve dentro do grupo: o bloco aberto se le como um bloco, e nao
+   como mais linhas soltas da tabela. */
+.gr-arvore .gr-nivel-2 > th,
+.gr-arvore .gr-nivel-2 > td,
+.gr-arvore .gr-nivel-3 > th,
+.gr-arvore .gr-nivel-3 > td {
+  border-bottom-color: color-mix(in oklab, var(--stroke-soft) 50%, var(--bg-white));
+}
+
+/* Descricao em cima, data e conta embaixo: a linha da despesa e a mais estreita
+   da arvore por causa do recuo, e tudo numa linha so estouraria a coluna. */
+.gr-folha {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.gr-folha .account-meta {
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .gr-arvore .gr-nivel-2 > th {
+    padding-left: 20px;
+  }
+
+  .gr-arvore .gr-nivel-3 > th {
+    padding-left: 38px;
   }
 }

@@ -14,6 +14,7 @@ import {
   listTransactionProducts,
   ultimoDiaPorConta,
   type CategoriaRow,
+  type CentroDeCustoRow,
   listLabels,
   listTransactions,
   listarImportacoes,
@@ -998,12 +999,37 @@ export interface DespesaPorConta {
   cor: string;
 }
 
+/** Uma despesa dentro da arvore da categoria. So o que a linha mostra. */
+export interface DespesaDaCategoria {
+  id: string;
+  dia: string;
+  descricao: string;
+  valor: number;
+  conta: string;
+}
+
+export interface SubcategoriaDeDespesa {
+  /** `null` no balde das despesas que estao na categoria sem centro de custo. */
+  id: string | null;
+  nome: string;
+  total: number;
+  lancamentos: DespesaDaCategoria[];
+}
+
 export interface DespesaPorCategoria {
   id: string | null;
   nome: string;
   hue: number;
   total: number;
   contagem: number;
+  /**
+   * A categoria aberta: os centros de custo e, dentro deles, os lancamentos.
+   *
+   * Vem tudo junto e nao sob demanda porque sao as mesmas transacoes que ja
+   * foram lidas para somar a linha — buscar de novo a cada clique seria uma ida
+   * ao servidor para dados que ja estao na memoria.
+   */
+  centros: SubcategoriaDeDespesa[];
 }
 
 export interface PainelDeDespesas {
@@ -1075,13 +1101,33 @@ export async function loadPainelDeDespesas(
 
   const despesas = conciliado.transacoes.filter((t) => classify(t) === "expense");
 
+  const nomeDaContraparte = (t: Transaction): string | null => {
+    const chave = chaveDeRegra(t);
+    return (chave ? cadastro[chave]?.alias : null) || t.counterparty?.name || null;
+  };
+
   const nomeDaConta = new Map(contas.map((c) => [c.id, c.name] as const));
   const bancoDaConta = new Map(contas.map((c) => [c.id, c.connectorName] as const));
 
   const totalPorConta = new Map<string, number>();
   const totalPorCategoria = new Map<string, { total: number; contagem: number }>();
+  /** categoria -> centro (ou "" para o balde sem centro) -> despesas. */
+  const arvore = new Map<string, Map<string, DespesaDaCategoria[]>>();
   let semCategoria = { total: 0, contagem: 0 };
   let total = 0;
+
+  /** O centro de custo do lancamento, proprio ou herdado da contraparte. */
+  const centroDe = (t: Transaction): CentroDeCustoRow | null => {
+    const proprio = porId.get(t.id);
+    if (proprio?.costCenterId) return centroPorId.get(proprio.costCenterId) ?? null;
+
+    const chave = chaveDeRegra(t);
+    const herdado = chave ? cadastro[chave] : null;
+    if (!herdado?.subcategory) return null;
+
+    const alvo = normalizeName(herdado.subcategory);
+    return centros.find((c) => normalizeName(c.name) === alvo) ?? null;
+  };
 
   for (const t of despesas) {
     const valor = -t.amount;
@@ -1099,6 +1145,24 @@ export async function loadPainelDeDespesas(
       total: atual.total + valor,
       contagem: atual.contagem + 1,
     });
+
+    const centro = centroDe(t);
+    // O centro so vale se for DESTA categoria: um centro herdado da contraparte
+    // pode ter sido movido de categoria depois, e pendura-lo aqui somaria uma
+    // subcategoria que nao pertence a linha.
+    const chaveDoCentro = centro && centro.categoryId === categoria.id ? centro.id : "";
+
+    const daCategoria = arvore.get(categoria.id) ?? new Map<string, DespesaDaCategoria[]>();
+    const doCentro = daCategoria.get(chaveDoCentro) ?? [];
+    doCentro.push({
+      id: t.id,
+      dia: localDay(t.date),
+      descricao: rotuloDoLancamento(t, nomeDaContraparte(t)),
+      valor,
+      conta: nomeDaConta.get(t.accountId) ?? "",
+    });
+    daCategoria.set(chaveDoCentro, doCentro);
+    arvore.set(categoria.id, daCategoria);
   }
 
   const porConta: DespesaPorConta[] = [...totalPorConta.entries()].map(([id, valor]) => {
@@ -1118,11 +1182,27 @@ export async function loadPainelDeDespesas(
     categorias: [...totalPorCategoria.entries()]
       .map(([id, dados]) => {
         const categoria = categoriaPorId.get(id);
+        const daCategoria = arvore.get(id) ?? new Map<string, DespesaDaCategoria[]>();
+
+        const centrosDaCategoria: SubcategoriaDeDespesa[] = [...daCategoria.entries()]
+          .map(([centroId, lancamentos]) => ({
+            id: centroId || null,
+            nome: centroId
+              ? (centroPorId.get(centroId)?.name ?? "Subcategoria")
+              : "Sem subcategoria",
+            total: lancamentos.reduce((soma, l) => soma + l.valor, 0),
+            // Do maior para o menor: quem abre a categoria quer saber o que
+            // pesou nela, e nao em que ordem as compras aconteceram.
+            lancamentos: [...lancamentos].sort((a, b) => b.valor - a.valor),
+          }))
+          .sort((a, b) => b.total - a.total);
+
         return {
           id,
           nome: categoria?.name ?? "Categoria",
           hue: categoria?.hue ?? 250,
           ...dados,
+          centros: centrosDaCategoria,
         };
       })
       .sort((a, b) => b.total - a.total),
