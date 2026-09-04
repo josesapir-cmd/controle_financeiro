@@ -190,13 +190,15 @@ export default async function Home({
 
       <Nav atual="/" contasQuery={contasQuery} />
 
+      {/* Antes da fita: a aba decide QUAL pergunta a tela responde, e o mes
+          e so um recorte dentro dela. Investimentos nem usa a fita. */}
+      <Abas atual={aba} query={contasQuery} />
+
       {/* Fora dos outros controles: no celular a fita gruda no alto da tela, e
           um `sticky` so anda dentro do proprio pai. */}
       <div className="spinner-barra">
         <SpinnerDeMeses from={periodo.from} to={periodo.to} queryExtra={contasQuery} rota="/" />
       </div>
-
-      <Abas atual={aba} query={contasQuery} />
 
       <div className="period-controls">
         <AccountFilter

@@ -4267,16 +4267,18 @@ ul.produtos {
    Painel — as tres leituras do mes
    ========================================================================== */
 
+/* Abas do painel: sublinhado, nao pastilha.
+   A pastilha cinza competia com a fita de meses logo abaixo — dois blocos
+   cinzas empilhados, cada um com um pedaco branco dentro, e nenhum dos dois
+   lendo como "o que voce esta vendo". O sublinhado tem peso visual de titulo,
+   que e o que estas abas sao: elas trocam a pergunta da tela inteira, enquanto
+   a fita so escolhe o mes dentro dela. */
 .painel-abas {
   display: flex;
-  gap: 4px;
-  /* O respiro no topo separa a barra do trilho da fita: sao dois blocos
-     cinzas, e encostados eles viram um so. */
-  margin: 16px 0;
-  padding: 3px;
-  background: var(--bg-weak);
-  border-radius: var(--radius);
-  /* No celular a barra rola em vez de quebrar os rotulos em duas linhas. */
+  gap: 28px;
+  margin: 4px 0 0;
+  padding: 0;
+  border-bottom: 1px solid var(--stroke-soft);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -4287,26 +4289,36 @@ ul.produtos {
 
 .painel-aba {
   display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   flex: none;
-  height: 34px;
-  white-space: nowrap;
-  padding: 0 14px;
-  font-size: 13px;
+  height: 40px;
+  padding: 0;
+  font-size: 15px;
   font-weight: 500;
-  color: var(--text-sub);
+  white-space: nowrap;
+  color: var(--text-soft);
   background: none;
   border: none;
-  border-radius: var(--radius-xs);
+  /* O -1px come a hairline do container: o traco da aba ativa fica na MESMA
+     linha da borda, e nao 1px abaixo dela. */
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  border-radius: 0;
   box-shadow: none;
+  text-decoration: none;
   cursor: pointer;
+}
+
+.painel-aba:hover:not(:disabled) {
+  color: var(--text-strong);
+  background: none;
+  text-decoration: none;
 }
 
 .painel-aba.ativa {
   color: var(--text-strong);
-  background: var(--bg-white);
-  box-shadow: var(--shadow-xs);
+  border-bottom-color: var(--primary);
 }
 
 .painel-aba:disabled {
@@ -4314,9 +4326,34 @@ ul.produtos {
   cursor: default;
 }
 
+/* Na largura do celular a etiqueta e o que faz a terceira aba nao caber, e uma
+   aba pela metade parece coisa quebrada. O rotulo apagado ja diz que a aba nao
+   esta disponivel. */
+@media (max-width: 560px) {
+  .painel-abas {
+    gap: 20px;
+  }
+
+  .painel-aba {
+    font-size: 14px;
+  }
+
+  .painel-aba-nota {
+    display: none;
+  }
+}
+
+/* "em breve" nao pode ter o mesmo peso do nome da aba: e etiqueta de estado,
+   nao rotulo. */
 .painel-aba-nota {
-  font-size: 11px;
-  font-weight: 400;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  background: var(--bg-weak);
+  border-radius: 999px;
 }
 
 /* O bloco do que falta classificar. Fica antes dos graficos porque e ele que
