@@ -208,6 +208,38 @@ for (const { item_id, connector_name } of conexoes) {
       }
     }
   }
+
+  // No Open Finance, credito nao e uma coisa so: emprestimo, financiamento,
+  // adiantamento a depositante e direitos creditorios sao COLECOES separadas.
+  // /loans pode cobrir so a primeira. Perguntar as outras e a unica forma de
+  // saber — a rota que nao existe responde 404, e isso ja e resposta.
+  const outras = [];
+  for (const rota of [
+    "financings",
+    "credit-operations",
+    "unarranged-accounts-overdraft",
+    "invoice-financings",
+  ]) {
+    const resposta = await fetch(`${API}/${rota}?itemId=${item_id}`, { headers: cabecalho });
+    if (resposta.status === 404) continue;
+
+    if (!resposta.ok) {
+      outras.push(`${rota}: HTTP ${resposta.status}`);
+      continue;
+    }
+
+    const corpo = await resposta.json().catch(() => null);
+    const lista = corpo?.results ?? [];
+    outras.push(`${rota}: ${lista.length}`);
+    for (const item of lista) {
+      console.log(`    · [${rota}] ${item.productName ?? item.type ?? "(sem nome)"}`);
+    }
+    if (lista.length > 0) console.log(`    campos de ${rota}: ${campos(lista)}`);
+  }
+
+  console.log(
+    `  outras rotas de credito: ${outras.length ? outras.join(" · ") : "nenhuma existe (404)"}`,
+  );
 }
 
 await banco.fim();
