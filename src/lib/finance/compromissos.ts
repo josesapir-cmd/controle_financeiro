@@ -20,6 +20,15 @@ export interface CompromissoComChamadas {
   aLiquidar: number;
   /** O que o gestor ainda pode pedir. Nunca negativo: ver `montarCarteira`. */
   aChamar: number;
+  /**
+   * Tudo o que ainda vai sair: o que nao foi chamado mais o que foi chamado e
+   * nao liquidou.
+   *
+   * E o numero que decide quanto caixa deixar parado. Olhar so o "a chamar"
+   * esquece a conta que ja chegou; olhar so o "a liquidar" esquece a que pode
+   * chegar amanha.
+   */
+  aPagar: number;
   /** Quanto do compromisso ja foi chamado, de 0 a 1. */
   fatiaChamada: number;
   /**
@@ -52,6 +61,7 @@ export interface CarteiraDeCompromissos {
   liquidado: number;
   aLiquidar: number;
   aChamar: number;
+  aPagar: number;
 }
 
 /**
@@ -93,6 +103,7 @@ export function montarCarteira(
       // Piso em zero: o que sobra para chamar nao pode ser negativo, e o
       // excesso vira aviso proprio em vez de um numero sem sentido.
       aChamar: Math.max(0, fundo.committed - chamado),
+      aPagar: Math.max(0, fundo.committed - chamado) + (chamado - liquidado),
       fatiaChamada: fundo.committed > 0 ? Math.min(1, chamado / fundo.committed) : 0,
       excedido: chamado > fundo.committed,
       assinadoEm: fundo.signedOn,
@@ -127,5 +138,6 @@ export function montarCarteira(
     // Somado dos fundos, e nao `comprometido - chamado`: um fundo que estourou
     // o compromisso nao pode abater a exposicao dos outros.
     aChamar: fundos.reduce((s, f) => s + f.aChamar, 0),
+    aPagar: fundos.reduce((s, f) => s + f.aPagar, 0),
   };
 }

@@ -89,6 +89,7 @@ describe("montarCarteira", () => {
       liquidado: 0,
       aLiquidar: 0,
       aChamar: 0,
+      aPagar: 0,
     });
   });
 
@@ -190,5 +191,53 @@ describe("liquidacao na carteira", () => {
     );
 
     expect(carteira.fundos.map((f) => f.nome)).toEqual(["Alfa", "Zeta"]);
+  });
+});
+
+describe("total a pagar", () => {
+  it("soma o que falta chamar com o que foi chamado e nao liquidou", () => {
+    // E o numero de caixa: os dois pedacos vao sair, so nao se sabe quando o
+    // primeiro. Olhar so um deles subestima a obrigacao.
+    const carteira = montarCarteira(
+      [fundo("a", "Alfa", 500000)],
+      [
+        chamada("1", "a", "2026-04-10", 100000, true),
+        chamada("2", "a", "2026-08-02", 40000, false),
+      ],
+    );
+
+    expect(carteira.aChamar).toBe(360000);
+    expect(carteira.aLiquidar).toBe(40000);
+    expect(carteira.aPagar).toBe(400000);
+  });
+
+  it("com tudo liquidado, o a pagar e so o que falta chamar", () => {
+    const carteira = montarCarteira(
+      [fundo("a", "Alfa", 500000)],
+      [chamada("1", "a", "2026-04-10", 100000, true)],
+    );
+
+    expect(carteira.aPagar).toBe(carteira.aChamar);
+  });
+
+  it("compromisso inteiro chamado e liquidado nao deixa nada a pagar", () => {
+    const carteira = montarCarteira(
+      [fundo("a", "Alfa", 500000)],
+      [chamada("1", "a", "2026-04-10", 500000, true)],
+    );
+
+    expect(carteira.aPagar).toBe(0);
+  });
+
+  it("chamada acima do compromisso e pendente continua sendo conta a pagar", () => {
+    // O "a chamar" e zero porque o compromisso ja estourou, mas o dinheiro da
+    // chamada pendente ainda tem de sair.
+    const carteira = montarCarteira(
+      [fundo("a", "Alfa", 100000)],
+      [chamada("1", "a", "2026-04-10", 120000, false)],
+    );
+
+    expect(carteira.aChamar).toBe(0);
+    expect(carteira.aPagar).toBe(120000);
   });
 });

@@ -117,39 +117,37 @@ export function Compromissos({ carteira }: { carteira: CarteiraDeCompromissos })
 
   return (
     <>
-      {/* O total primeiro: e o numero de exposicao, e ele muda a decisao de
-          quanto caixa deixar parado. */}
+      {/* O total primeiro, e ele e o de PAGAR: e esse que decide quanto caixa
+          deixar parado. Olhar so o que falta chamar esquece a conta que ja
+          chegou; olhar so o que falta liquidar esquece a que chega amanha. */}
       <section className="card cp-resumo">
-        <div>
-          <div className="tile-label">Ainda a chamar</div>
-          <div className="tile-value">{formatBRL(carteira.aChamar)}</div>
-          <div className="tile-note">
-            {fundos.length} {fundos.length === 1 ? "fundo" : "fundos"} ·{" "}
-            {formatBRL(carteira.chamado)} ja chamado de {formatBRL(carteira.comprometido)} (
-            {porcento(chamadoTotal)})
-            {carteira.aLiquidar > 0
-              ? ` · ${formatBRL(carteira.aLiquidar)} aguardando liquidacao`
-              : ""}
-          </div>
+        <div className="cp-resumo-topo">
+          <div className="tile-label">Total a pagar</div>
+          <button
+            type="button"
+            className="cp-novo"
+            onClick={() => setCadastrando(true)}
+            disabled={cadastrando}
+          >
+            Novo compromisso
+          </button>
         </div>
 
-        <div className="cp-resumo-barra">
-          <Barra
-            liquidado={carteira.liquidado}
-            aLiquidar={carteira.aLiquidar}
-            comprometido={carteira.comprometido}
-            excedido={false}
-          />
-        </div>
+        <div className="tile-value">{formatBRL(carteira.aPagar)}</div>
 
-        <button
-          type="button"
-          className="cp-novo"
-          onClick={() => setCadastrando(true)}
-          disabled={cadastrando}
-        >
-          Novo compromisso
-        </button>
+        <Barra
+          liquidado={carteira.liquidado}
+          aLiquidar={carteira.aLiquidar}
+          comprometido={carteira.comprometido}
+          excedido={false}
+        />
+
+        <div className="tile-note">
+          <span className="cp-pendente">{formatBRL(carteira.aLiquidar)}</span> chamado e ainda nao
+          liquidado · {formatBRL(carteira.aChamar)} ainda nao chamado · {fundos.length}{" "}
+          {fundos.length === 1 ? "fundo" : "fundos"}, {formatBRL(carteira.comprometido)}{" "}
+          comprometidos ({porcento(chamadoTotal)} chamados)
+        </div>
       </section>
 
       {/* Fundo amarelo e o que diz "isto e um rascunho, ainda nao existe": o

@@ -4596,18 +4596,26 @@ ul.produtos {
    que o extrato ja conta.
    ========================================================================== */
 
+/* Empilhado, e nao em linha: com o detalhamento embaixo o texto ocupa a
+   largura toda, e numa linha so o botao caia para baixo dele — parecendo
+   solto. Assim ele fica onde foi pedido, no alto a direita. */
 .cp-resumo {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 10px;
   margin-bottom: 16px;
 }
 
-.cp-resumo-barra {
-  flex: 1;
-  min-width: 220px;
+.cp-resumo-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cp-resumo .tile-value,
+.cp-resumo .tile-note {
+  margin: 0;
 }
 
 /* Medidor em duas partes: o que ja saiu e faixa cheia, o que foi chamado e
