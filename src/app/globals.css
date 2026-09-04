@@ -4970,6 +4970,47 @@ ul.produtos {
   background: color-mix(in oklab, var(--warning) 20%, transparent);
 }
 
+.cp-sumario-linha {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+/* O `+` e a unica acao permanente da linha; registrar chamada e o que se faz
+   nesta tela toda semana, mas o formulario aberto o tempo todo enchia o cartao
+   de campos vazios. */
+.cp-mais {
+  flex: none;
+  width: 34px;
+  padding: 0;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--text-sub);
+  background: var(--bg-weak);
+  border: none;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.cp-mais:hover:not(:disabled) {
+  color: var(--bg-white);
+  background: var(--primary);
+}
+
+.cp-mais[aria-expanded="true"] {
+  color: var(--text-strong);
+  background: var(--bg-soft);
+}
+
+/* Recuo e traco a esquerda: o formulario pertence a linha que o abriu, e nao e
+   mais um bloco solto no fim do cartao. */
+.cp-nova {
+  padding-left: 12px;
+  border-left: 2px solid var(--primary);
+}
+
 /* A linha que resume as chamadas e o que se le sempre; a tabela e o detalhe de
    quando alguma coisa nao bate. */
 .cp-sumario {
@@ -4979,7 +5020,8 @@ ul.produtos {
      tem de comecar na margem, como as outras linhas do cartao. */
   justify-content: flex-start;
   gap: 2px;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   height: auto;
   padding: 8px 10px;
   font-size: 13px;

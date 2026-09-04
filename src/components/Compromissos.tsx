@@ -100,6 +100,12 @@ export function Compromissos({ carteira }: { carteira: CarteiraDeCompromissos })
   const [abertos, setAbertos] = useState<ReadonlySet<string>>(new Set());
   /** Chamada em edicao. Uma por vez: duas linhas abertas nao ajudam ninguem. */
   const [editando, setEditando] = useState<string | null>(null);
+  /** Fundo com o formulario de nova chamada aberto. */
+  const [registrando, setRegistrando] = useState<string | null>(null);
+
+  function alternarNova(id: string) {
+    setRegistrando((atual) => (atual === id ? null : id));
+  }
 
   function alternarLista(id: string) {
     setAbertos((atuais) => {
@@ -251,13 +257,14 @@ export function Compromissos({ carteira }: { carteira: CarteiraDeCompromissos })
               </p>
             ) : null}
 
-            <button
-              type="button"
-              className="cp-sumario"
-              onClick={() => alternarLista(fundo.id)}
-              aria-expanded={aberto}
-              disabled={fundo.chamadas.length === 0}
-            >
+            <div className="cp-sumario-linha">
+              <button
+                type="button"
+                className="cp-sumario"
+                onClick={() => alternarLista(fundo.id)}
+                aria-expanded={aberto}
+                disabled={fundo.chamadas.length === 0}
+              >
               <span className={aberto ? "gr-seta aberta" : "gr-seta"} aria-hidden />
               {fundo.chamadas.length === 0 ? (
                 <span>Nenhuma chamada registrada</span>
@@ -275,8 +282,23 @@ export function Compromissos({ carteira }: { carteira: CarteiraDeCompromissos })
                     </span>
                   ) : null}
                 </span>
-              )}
-            </button>
+                )}
+              </button>
+
+              {/* O `+` fica fora do botao do sumario porque ele funciona mesmo
+                  quando nao ha chamada nenhuma para listar — que e justamente
+                  quando mais se precisa dele. */}
+              <button
+                type="button"
+                className="cp-mais"
+                onClick={() => alternarNova(fundo.id)}
+                aria-expanded={registrando === fundo.id}
+                aria-label={`Registrar chamada em ${fundo.nome}`}
+                title="Registrar chamada"
+              >
+                {registrando === fundo.id ? "×" : "+"}
+              </button>
+            </div>
 
             {aberto && fundo.chamadas.length > 0 ? (
               <div className="gr-rolagem">
@@ -414,28 +436,35 @@ export function Compromissos({ carteira }: { carteira: CarteiraDeCompromissos })
               </div>
             ) : null}
 
-            <form action={adicionarChamada} className="cp-linha">
-              <input type="hidden" name="commitmentId" value={fundo.id} />
-              <label>
-                Data
-                <input type="date" name="calledOn" defaultValue={hoje} required />
-              </label>
-              <label>
-                Valor
-                <input
-                  type="text"
-                  name="amount"
-                  inputMode="decimal"
-                  placeholder="50.000,00"
-                  required
-                />
-              </label>
-              <label className="cp-cresce">
-                Nota
-                <input type="text" name="note" placeholder="opcional" />
-              </label>
-              <button type="submit">Registrar chamada</button>
-            </form>
+            {registrando === fundo.id ? (
+              <form
+                action={adicionarChamada}
+                className="cp-linha cp-nova"
+                onSubmit={() => setRegistrando(null)}
+              >
+                <input type="hidden" name="commitmentId" value={fundo.id} />
+                <label>
+                  Data
+                  <input type="date" name="calledOn" defaultValue={hoje} required />
+                </label>
+                <label>
+                  Valor
+                  <input
+                    type="text"
+                    name="amount"
+                    inputMode="decimal"
+                    placeholder="50.000,00"
+                    required
+                    autoFocus
+                  />
+                </label>
+                <label className="cp-cresce">
+                  Nota
+                  <input type="text" name="note" placeholder="opcional" />
+                </label>
+                <button type="submit">Registrar chamada</button>
+              </form>
+            ) : null}
 
             {/* Editar e encerrar ficam fechados: sao raros perto de registrar
                 chamada, que e o que se faz nesta tela toda semana. */}
