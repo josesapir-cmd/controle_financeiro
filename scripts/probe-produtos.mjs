@@ -135,6 +135,34 @@ for (const { item_id, connector_name } of conexoes) {
   const status = item.dados?.status;
   if (status && status !== "UPDATED") console.log(`  status do item: ${status}`);
 
+  // Os campos do proprio item: e onde apareceria um `products` ou `consent`
+  // dizendo o que ESTE vinculo autorizou, que nao e o mesmo que o conector
+  // sabe fazer. Uma lista vazia por falta de escopo e indistinguivel de uma
+  // lista vazia por nao ter o produto, e as duas exigem acoes opostas.
+  console.log(`  campos do item: ${Object.keys(item.dados ?? {}).sort().join(", ")}`);
+  if (Array.isArray(item.dados?.products)) {
+    console.log(`  produtos autorizados: ${item.dados.products.join(", ") || "(vazio)"}`);
+  }
+
+  // Financiamento pode nao estar em /loans: no Open Finance ele as vezes chega
+  // como CONTA, com subtipo proprio. Como o app so entende BANK e CREDIT, uma
+  // conta de financiamento estaria sendo ignorada em silencio.
+  const contas = await pedir(`/accounts?itemId=${item_id}`);
+  if (contas.erro) {
+    console.log(`  contas: ${contas.erro}`);
+  } else {
+    const lista = contas.dados?.results ?? [];
+    console.log(`  contas: ${lista.length}`);
+    for (const conta of lista) {
+      console.log(
+        `    · ${conta.type ?? "?"}/${conta.subtype ?? "-"} — ${conta.name ?? "(sem nome)"}` +
+          (conta.marketingName && conta.marketingName !== conta.name
+            ? ` (${conta.marketingName})`
+            : ""),
+      );
+    }
+  }
+
   for (const [rotulo, caminho, chaves] of [
     ["investimentos", `/investments?itemId=${item_id}`, ["type", "subtype"]],
     // Sem palpite de nome aqui: as chaves saem da propria resposta, na linha
