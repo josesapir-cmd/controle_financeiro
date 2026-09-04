@@ -84,6 +84,20 @@ async function pedir(caminho) {
   return { dados: await resposta.json() };
 }
 
+/**
+ * Os nomes dos campos do primeiro registro, sem os valores.
+ *
+ * A primeira versao deste script contou `productType` em /loans e imprimiu
+ * "(sem productType) x11" — que nao quer dizer "o banco nao informou", quer
+ * dizer "eu chutei o nome do campo". Listar as chaves e o unico jeito de
+ * descobrir a forma da resposta sem abrir o conteudo dela.
+ */
+function campos(itens) {
+  const primeiro = itens[0];
+  if (!primeiro || typeof primeiro !== "object") return "";
+  return Object.keys(primeiro).sort().join(", ");
+}
+
 /** Conta por chave, para o resumo caber numa linha. */
 function contar(itens, chave) {
   const mapa = new Map();
@@ -121,9 +135,11 @@ for (const { item_id, connector_name } of conexoes) {
   const status = item.dados?.status;
   if (status && status !== "UPDATED") console.log(`  status do item: ${status}`);
 
-  for (const [rotulo, caminho, campos] of [
+  for (const [rotulo, caminho, chaves] of [
     ["investimentos", `/investments?itemId=${item_id}`, ["type", "subtype"]],
-    ["emprestimos", `/loans?itemId=${item_id}`, ["productType", "productSubType"]],
+    // Sem palpite de nome aqui: as chaves saem da propria resposta, na linha
+    // `campos:` abaixo.
+    ["emprestimos", `/loans?itemId=${item_id}`, ["type", "subtype", "productType"]],
   ]) {
     const resposta = await pedir(caminho);
     if (resposta.erro) {
@@ -138,10 +154,16 @@ for (const { item_id, connector_name } of conexoes) {
     }
 
     console.log(`  ${rotulo}: ${lista.length}`);
-    for (const campo of campos) {
+
+    // Contamos so os campos que EXISTEM: um nome chutado devolveria
+    // "(sem X) xN", que se le como "o banco nao informou" e nao e isso.
+    for (const campo of chaves) {
+      if (!(campo in lista[0])) continue;
       const resumo = contar(lista, campo);
       if (resumo) console.log(`    ${campo}: ${resumo}`);
     }
+
+    console.log(`    campos: ${campos(lista)}`);
   }
 }
 
