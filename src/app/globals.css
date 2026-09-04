@@ -4610,10 +4610,11 @@ ul.produtos {
   min-width: 220px;
 }
 
-/* Medidor de uma matiz so: o comprimento e a informacao, e a cor nao codifica
-   nada aqui — todo fundo e a mesma coisa medida. */
+/* Medidor em duas partes: o que ja saiu e faixa cheia, o que foi chamado e
+   ainda nao saiu e pontilhado. O comprimento continua sendo a informacao
+   principal; a textura separa promessa de pagamento. */
 .cp-barra {
-  display: block;
+  display: flex;
   width: 100%;
   height: 10px;
   background: var(--bg-weak);
@@ -4625,13 +4626,28 @@ ul.produtos {
 .cp-barra > span {
   display: block;
   height: 100%;
+  min-width: 2px;
+}
+
+.cp-pago {
   background: var(--primary);
-  border-radius: 0 5px 5px 0;
+}
+
+/* Pontilhado laranja sobre um laranja bem lavado: le como "prometido, nao
+   entregue" mesmo para quem nao separa as duas cores, e o valor aparece
+   escrito na linha de resumo — a informacao nunca esta so na cor.
+   O `box-shadow` e a folga de 2px entre preenchimentos vizinhos: sem ela as
+   duas faixas encostam e a fronteira some. */
+.cp-aguardando {
+  background-color: color-mix(in oklab, var(--away) 16%, var(--bg-white));
+  background-image: radial-gradient(var(--away) 42%, transparent 46%);
+  background-size: 5px 5px;
+  box-shadow: inset 2px 0 0 var(--bg-white);
 }
 
 /* Estourado o compromisso, a barra vira estado — e ai a cor comunica, e vem
-   sempre acompanhada do aviso em texto logo abaixo. */
-.cp-barra.excedida > span {
+   sempre acompanhada do aviso em texto logo acima. */
+.cp-barra.excedida .cp-pago {
   background: var(--error);
 }
 

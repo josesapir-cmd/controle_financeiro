@@ -35,10 +35,38 @@ function porcento(fracao: number): string {
   return `${(fracao * 100).toFixed(0)}%`;
 }
 
-function Barra({ fracao, excedido }: { fracao: number; excedido: boolean }) {
+/**
+ * A barra do compromisso, em dois pedacos.
+ *
+ * O que ja foi pago e faixa cheia; o que foi chamado e ainda nao saiu e
+ * pontilhado laranja — a textura diz "prometido, nao entregue" sem depender de
+ * distinguir duas cores, e o valor aparece escrito na linha de resumo logo
+ * abaixo, entao a informacao nunca esta so na cor.
+ *
+ * A base e o maior entre compromisso e chamado: quando as chamadas passam do
+ * compromisso a barra enche por inteiro, e as duas partes continuam
+ * proporcionais entre si em vez de uma delas sumir no arredondamento.
+ */
+function Barra({
+  liquidado,
+  aLiquidar,
+  comprometido,
+  excedido,
+}: {
+  liquidado: number;
+  aLiquidar: number;
+  comprometido: number;
+  excedido: boolean;
+}) {
+  const base = Math.max(comprometido, liquidado + aLiquidar, 1);
+  const largura = (valor: number) => `${(valor / base) * 100}%`;
+
   return (
     <span className={excedido ? "cp-barra excedida" : "cp-barra"} aria-hidden>
-      <span style={{ width: `${Math.max(1, fracao * 100)}%` }} />
+      {liquidado > 0 ? <span className="cp-pago" style={{ width: largura(liquidado) }} /> : null}
+      {aLiquidar > 0 ? (
+        <span className="cp-aguardando" style={{ width: largura(aLiquidar) }} />
+      ) : null}
     </span>
   );
 }
@@ -100,7 +128,12 @@ export function Compromissos({ carteira }: { carteira: CarteiraDeCompromissos })
         </div>
 
         <div className="cp-resumo-barra">
-          <Barra fracao={chamadoTotal} excedido={false} />
+          <Barra
+            liquidado={carteira.liquidado}
+            aLiquidar={carteira.aLiquidar}
+            comprometido={carteira.comprometido}
+            excedido={false}
+          />
         </div>
 
         <button
@@ -201,7 +234,12 @@ export function Compromissos({ carteira }: { carteira: CarteiraDeCompromissos })
               </div>
             </header>
 
-            <Barra fracao={fundo.fatiaChamada} excedido={fundo.excedido} />
+            <Barra
+              liquidado={fundo.liquidado}
+              aLiquidar={fundo.aLiquidar}
+              comprometido={fundo.comprometido}
+              excedido={fundo.excedido}
+            />
 
             {/* Estourar o compromisso acontece de verdade (taxa cobrada acima
                 dele, ou valor digitado errado) e precisa ser dito, nao escondido
