@@ -132,8 +132,19 @@ for (const { item_id, connector_name } of conexoes) {
   const produtos = item.dados?.connector?.products ?? [];
   console.log(`  produtos do conector: ${produtos.length ? produtos.join(", ") : "(nao informado)"}`);
 
-  const status = item.dados?.status;
-  if (status && status !== "UPDATED") console.log(`  status do item: ${status}`);
+  // Sempre, e nao so quando esta ruim: um item UPDATED com executionStatus
+  // PARTIAL_SUCCESS coletou parte dos produtos e falhou no resto — a lista
+  // curta seria de coleta incompleta, nao de carteira pequena. E a data da
+  // ultima coleta separa "nao tenho" de "ainda nao buscou".
+  console.log(
+    `  status: ${item.dados?.status ?? "?"}` +
+      ` · execucao: ${item.dados?.executionStatus ?? "?"}` +
+      ` · coletado em: ${String(item.dados?.lastUpdatedAt ?? "nunca").slice(0, 19)}`,
+  );
+  if (item.dados?.statusDetail) {
+    // Detalhe por produto: e aqui que aparece "investimentos falhou".
+    console.log(`  detalhe: ${JSON.stringify(item.dados.statusDetail)}`);
+  }
 
   // Os campos do proprio item: e onde apareceria um `products` ou `consent`
   // dizendo o que ESTE vinculo autorizou, que nao e o mesmo que o conector
@@ -182,6 +193,17 @@ for (const { item_id, connector_name } of conexoes) {
     }
 
     console.log(`  ${rotulo}: ${lista.length}`);
+
+    // Um a um quando sao poucos: com uma lista curta, a pergunta deixa de ser
+    // "quantos" e passa a ser "esses sao todos?" — e so o nome responde.
+    if (rotulo === "investimentos" && lista.length <= 12) {
+      for (const papel of lista) {
+        console.log(
+          `    · ${papel.type}/${papel.subtype ?? "-"} — ${papel.name ?? "(sem nome)"}` +
+            (papel.institution?.name ? ` @ ${papel.institution.name}` : ""),
+        );
+      }
+    }
 
     // Contamos so os campos que EXISTEM: um nome chutado devolveria
     // "(sem X) xN", que se le como "o banco nao informou" e nao e isso.
