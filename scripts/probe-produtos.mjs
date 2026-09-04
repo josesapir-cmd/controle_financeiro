@@ -164,6 +164,21 @@ for (const { item_id, connector_name } of conexoes) {
     }
 
     console.log(`    campos: ${campos(lista)}`);
+
+    // A garantia e o que separa financiamento imobiliario de credito pessoal:
+    // o imovel entra em `warranties`. Sem ela, o contrato e sem garantia real,
+    // qualquer que seja o nome comercial do produto.
+    if (rotulo === "emprestimos") {
+      for (const contrato of lista) {
+        const garantias = Array.isArray(contrato.warranties) ? contrato.warranties : [];
+        const tipos = garantias.map((g) => g?.type ?? "(sem tipo)").join(", ");
+        console.log(
+          `    · ${contrato.productName ?? contrato.type ?? "(sem nome)"}` +
+            ` — ${garantias.length ? `garantia: ${tipos}` : "sem garantia"}` +
+            (contrato.contractDate ? ` — contratado em ${String(contrato.contractDate).slice(0, 10)}` : ""),
+        );
+      }
+    }
   }
 }
 
