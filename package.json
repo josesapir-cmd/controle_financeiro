@@ -20,7 +20,8 @@
     "apagar-conta": "node scripts/apagar-conta.mjs",
     "pix": "node scripts/inspecionar-pix.mjs",
     "zerar-categorias": "node scripts/zerar-categorias.mjs",
-    "banco": "node scripts/testar-banco.mjs"
+    "banco": "node scripts/testar-banco.mjs",
+    "produtos": "node scripts/probe-produtos.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
