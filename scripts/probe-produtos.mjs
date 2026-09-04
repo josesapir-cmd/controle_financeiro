@@ -219,12 +219,18 @@ for (const { item_id, connector_name } of conexoes) {
     "credit-operations",
     "unarranged-accounts-overdraft",
     "invoice-financings",
+    // Controle. Esta rota nao existe, e e para isso que ela serve: sem ela,
+    // um 403 nas quatro de cima pode ser "existe e voce nao tem acesso" ou
+    // "e assim que a API responde a qualquer caminho desconhecido". As duas
+    // leituras levam a acoes opostas — pedir o produto a Pluggy, ou desistir.
+    "rota-que-nao-existe-controle",
   ]) {
     const resposta = await fetch(`${API}/${rota}?itemId=${item_id}`, { headers: cabecalho });
-    if (resposta.status === 404) continue;
 
     if (!resposta.ok) {
-      outras.push(`${rota}: HTTP ${resposta.status}`);
+      const corpo = await resposta.json().catch(() => null);
+      const recado = corpo?.message || corpo?.code || corpo?.error || "";
+      outras.push(`${rota}: HTTP ${resposta.status}${recado ? ` — ${recado}` : ""}`);
       continue;
     }
 
@@ -237,9 +243,8 @@ for (const { item_id, connector_name } of conexoes) {
     if (lista.length > 0) console.log(`    campos de ${rota}: ${campos(lista)}`);
   }
 
-  console.log(
-    `  outras rotas de credito: ${outras.length ? outras.join(" · ") : "nenhuma existe (404)"}`,
-  );
+  console.log("  outras rotas de credito:");
+  for (const linha of outras) console.log(`    ${linha}`);
 }
 
 await banco.fim();
