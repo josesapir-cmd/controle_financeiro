@@ -6,10 +6,13 @@ import { DespesasPorConta } from "@/components/DespesasPorConta";
 import { Nav } from "@/components/Nav";
 import { SairButton } from "@/components/SairButton";
 import { SpinnerDeMeses } from "@/components/SpinnerDeMeses";
+import { Compromissos } from "@/components/Compromissos";
 import { ClassificarNoPeriodo } from "./ClassificarNoPeriodo";
 import { accountQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import { currentMonthRange } from "@/lib/finance/dates";
+import type { CarteiraDeCompromissos } from "@/lib/finance/compromissos";
 import {
+  loadCompromissos,
   loadPainelDeDespesas,
   loadPendentesDoPeriodo,
   type PainelDeDespesas,
@@ -33,28 +36,46 @@ function lerPeriodo(params: { from?: string; to?: string }) {
   return from <= to ? { from, to } : { from: to, to: from };
 }
 
+type Aba = "despesas" | "investimentos";
+
+function lerAba(valor: string | undefined): Aba {
+  return valor === "investimentos" ? "investimentos" : "despesas";
+}
+
 /**
- * As tres leituras do mes.
+ * As tres leituras do painel.
  *
- * Receitas e Investimentos ficam desabilitadas de proposito e nao escondidas:
- * a barra e o mapa da tela, e um mapa que so mostra a estrada ja percorrida
- * nao diz para onde isto vai. `aria-disabled` num botao inerte, e nao um link
- * morto, para quem navega por teclado nao cair num destino que nao existe.
+ * Sao links, e nao estado de cliente: a aba entra na URL, entao recarregar,
+ * voltar e compartilhar caem no mesmo lugar, e a pagina continua inteira no
+ * servidor. Receitas segue desabilitada de proposito e nao escondida — a barra
+ * e o mapa da tela, e um mapa que so mostra a estrada percorrida nao diz para
+ * onde isto vai.
  */
-function Abas() {
+function Abas({ atual, query }: { atual: Aba; query: string }) {
+  const destino = (aba: Aba) => `/?${[`aba=${aba}`, query].filter(Boolean).join("&")}`;
+
   return (
     <div className="painel-abas" role="tablist" aria-label="Visoes do painel">
-      <button type="button" role="tab" aria-selected className="painel-aba ativa">
+      <Link
+        href={destino("despesas")}
+        role="tab"
+        aria-selected={atual === "despesas"}
+        className={atual === "despesas" ? "painel-aba ativa" : "painel-aba"}
+      >
         Despesas
-      </button>
+      </Link>
       <button type="button" role="tab" aria-selected={false} className="painel-aba" disabled>
         Receitas
         <span className="painel-aba-nota">em breve</span>
       </button>
-      <button type="button" role="tab" aria-selected={false} className="painel-aba" disabled>
+      <Link
+        href={destino("investimentos")}
+        role="tab"
+        aria-selected={atual === "investimentos"}
+        className={atual === "investimentos" ? "painel-aba ativa" : "painel-aba"}
+      >
         Investimentos
-        <span className="painel-aba-nota">em breve</span>
-      </button>
+      </Link>
     </div>
   );
 }
@@ -90,13 +111,50 @@ function Setup({ mensagem }: { mensagem: string }) {
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string; contas?: string | string[] }>;
+  searchParams: Promise<{
+    from?: string;
+    to?: string;
+    contas?: string | string[];
+    aba?: string;
+  }>;
 }) {
   await requireSession();
 
   const params = await searchParams;
   const periodo = lerPeriodo(params);
   const accountIds = parseAccountIds(params.contas);
+  const aba = lerAba(params.aba);
+
+  // Compromisso de capital nao pertence a um mes nem a uma conta: a aba tem
+  // leitura propria e nao carrega o painel de despesas junto.
+  if (aba === "investimentos") {
+    const query = accountQuery(accountIds);
+    let carteira: CarteiraDeCompromissos;
+
+    try {
+      carteira = await loadCompromissos();
+    } catch (error) {
+      return (
+        <Setup mensagem={error instanceof Error ? error.message : "Erro ao carregar dados."} />
+      );
+    }
+
+    return (
+      <main className="page">
+        <div className="masthead">
+          <h1>Painel</h1>
+          <span className="period">
+            Compromissos de capital
+            <SairButton />
+          </span>
+        </div>
+
+        <Nav atual="/" contasQuery={query} />
+        <Abas atual={aba} query={query} />
+        <Compromissos carteira={carteira} />
+      </main>
+    );
+  }
 
   let dados: PainelDeDespesas;
   let pendentes: Awaited<ReturnType<typeof loadPendentesDoPeriodo>>;
@@ -138,7 +196,7 @@ export default async function Home({
         <SpinnerDeMeses from={periodo.from} to={periodo.to} queryExtra={contasQuery} rota="/" />
       </div>
 
-      <Abas />
+      <Abas atual={aba} query={contasQuery} />
 
       <div className="period-controls">
         <AccountFilter

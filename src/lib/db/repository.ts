@@ -1224,3 +1224,143 @@ export async function setTransactionLabel(
     [transactionId, categoria, centro, encryptOptional(nota)],
   );
 }
+
+/* ==========================================================================
+   Compromissos de capital em fundos
+   ========================================================================== */
+
+export interface CompromissoRow {
+  id: string;
+  name: string;
+  committed: number;
+  signedOn: string | null;
+  note: string | null;
+  closed: boolean;
+}
+
+export interface ChamadaRow {
+  id: string;
+  commitmentId: string;
+  calledOn: string;
+  amount: number;
+  note: string | null;
+}
+
+export async function listCompromissos(
+  db: Db,
+  incluirEncerrados = false,
+): Promise<CompromissoRow[]> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, name, committed, signed_on, note, closed_at
+       FROM fund_commitments
+      ${incluirEncerrados ? "" : "WHERE closed_at IS NULL"}
+      ORDER BY name`,
+  );
+
+  return linhas.map((linha) => ({
+    id: String(linha.id),
+    name: String(linha.name),
+    committed: numero(linha.committed),
+    signedOn: dia(linha.signed_on),
+    note: linha.note ? String(linha.note) : null,
+    closed: Boolean(linha.closed_at),
+  }));
+}
+
+/**
+ * Todas as chamadas, de todos os compromissos, da mais recente para a mais
+ * antiga dentro de cada um.
+ *
+ * Uma consulta so, e nao uma por fundo: sao dezenas de linhas no total, e uma
+ * consulta por card seria N+1 para economizar nada.
+ */
+export async function listChamadas(db: Db): Promise<ChamadaRow[]> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, commitment_id, called_on, amount, note
+       FROM capital_calls
+      ORDER BY called_on DESC, created_at DESC`,
+  );
+
+  return linhas.map((linha) => ({
+    id: String(linha.id),
+    commitmentId: String(linha.commitment_id),
+    calledOn: dia(linha.called_on) ?? "",
+    amount: numero(linha.amount),
+    note: linha.note ? String(linha.note) : null,
+  }));
+}
+
+/**
+ * Cria o compromisso, ou devolve o que ja existe com esse nome.
+ *
+ * `DO UPDATE` em vez de `DO NOTHING` so para o RETURNING devolver a linha
+ * tambem no caso do conflito — sem isso, submeter o mesmo nome duas vezes
+ * pareceria uma falha silenciosa em vez de "esse fundo ja esta na lista".
+ */
+export async function criarCompromisso(
+  db: Db,
+  dados: { name: string; committed: number; signedOn?: string | null; note?: string | null },
+): Promise<string | null> {
+  const nome = dados.name.trim();
+  if (!nome || !(dados.committed > 0)) return null;
+
+  const linhas = await db.query<{ id: string }>(
+    `INSERT INTO fund_commitments (name, committed, signed_on, note)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (lower(name)) DO UPDATE SET name = fund_commitments.name
+     RETURNING id`,
+    [nome, dados.committed, dados.signedOn || null, dados.note?.trim() || null],
+  );
+
+  return linhas[0]?.id ?? null;
+}
+
+export async function salvarCompromisso(
+  db: Db,
+  id: string,
+  dados: { name: string; committed: number; signedOn?: string | null; note?: string | null },
+): Promise<void> {
+  if (!UUID.test(id)) return;
+
+  const nome = dados.name.trim();
+  if (!nome || !(dados.committed > 0)) return;
+
+  await db.query(
+    `UPDATE fund_commitments
+        SET name = $2, committed = $3, signed_on = $4, note = $5
+      WHERE id = $1`,
+    [id, nome, dados.committed, dados.signedOn || null, dados.note?.trim() || null],
+  );
+}
+
+/** Encerra ou reabre. Encerrar nao apaga chamada nenhuma. */
+export async function encerrarCompromisso(db: Db, id: string, encerrar = true): Promise<void> {
+  if (!UUID.test(id)) return;
+
+  await db.query(
+    `UPDATE fund_commitments SET closed_at = ${encerrar ? "now()" : "NULL"} WHERE id = $1`,
+    [id],
+  );
+}
+
+export async function registrarChamada(
+  db: Db,
+  dados: { commitmentId: string; calledOn: string; amount: number; note?: string | null },
+): Promise<string | null> {
+  if (!UUID.test(dados.commitmentId)) return null;
+  if (!(dados.amount > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(dados.calledOn)) return null;
+
+  const linhas = await db.query<{ id: string }>(
+    `INSERT INTO capital_calls (commitment_id, called_on, amount, note)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id`,
+    [dados.commitmentId, dados.calledOn, dados.amount, dados.note?.trim() || null],
+  );
+
+  return linhas[0]?.id ?? null;
+}
+
+export async function apagarChamada(db: Db, id: string): Promise<void> {
+  if (!UUID.test(id)) return;
+  await db.query(`DELETE FROM capital_calls WHERE id = $1`, [id]);
+}

@@ -4545,3 +4545,182 @@ ul.produtos {
   background: var(--primary);
   border-radius: 0 4px 4px 0;
 }
+
+/* ==========================================================================
+   Compromissos de capital
+   O compromisso e uma promessa de dinheiro que ainda nao saiu. A tela e
+   organizada em volta do que ainda pode ser chamado — nao do que ja foi pago,
+   que o extrato ja conta.
+   ========================================================================== */
+
+.cp-resumo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.cp-resumo-barra {
+  flex: 1;
+  min-width: 220px;
+}
+
+/* Medidor de uma matiz so: o comprimento e a informacao, e a cor nao codifica
+   nada aqui — todo fundo e a mesma coisa medida. */
+.cp-barra {
+  display: block;
+  width: 100%;
+  height: 10px;
+  background: var(--bg-weak);
+  border: 1px solid var(--stroke-soft);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.cp-barra > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 0 5px 5px 0;
+}
+
+/* Estourado o compromisso, a barra vira estado — e ai a cor comunica, e vem
+   sempre acompanhada do aviso em texto logo abaixo. */
+.cp-barra.excedida > span {
+  background: var(--error);
+}
+
+.cp-fundo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cp-cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.cp-nome {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cp-numeros {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.cp-numeros div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+}
+
+.cp-numeros strong {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* O que ainda pode ser chamado e o unico numero da linha que muda uma decisao;
+   os outros dois estao ali para dar contexto a ele. */
+.cp-destaque {
+  color: var(--primary);
+}
+
+.cp-aviso {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--error-dark);
+  background: var(--error-light);
+  border-radius: var(--radius-sm);
+}
+
+.cp-chamadas {
+  min-width: 280px;
+}
+
+.cp-acao {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.cp-remover {
+  height: auto;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-soft);
+  background: none;
+  border: none;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.cp-remover:hover:not(:disabled) {
+  color: var(--error-dark);
+  background: none;
+}
+
+.cp-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.cp-linha label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.cp-linha input {
+  width: 150px;
+}
+
+/* Nome e nota tomam a sobra; os campos de data e valor tem largura fixa porque
+   o conteudo deles tem tamanho conhecido. */
+.cp-cresce {
+  flex: 1;
+  min-width: 160px;
+}
+
+.cp-cresce input {
+  width: 100%;
+}
+
+.cp-editar summary {
+  font-size: 13px;
+  color: var(--text-sub);
+  cursor: pointer;
+}
+
+.cp-editar > * {
+  margin-top: 12px;
+}
+
+@media (max-width: 760px) {
+  .cp-cabecalho,
+  .cp-numeros div {
+    text-align: left;
+  }
+
+  .cp-numeros {
+    gap: 16px;
+  }
+}

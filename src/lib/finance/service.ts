@@ -5,6 +5,8 @@ import { getSql } from "@/lib/db/client";
 import {
   counterpartyFingerprint,
   listAccounts,
+  listChamadas,
+  listCompromissos,
   listCategorias,
   listCentrosDeCusto,
   listCounterpartyLinks,
@@ -48,6 +50,7 @@ import { netWorth, normalizeAmount, sumBy } from "./money";
 import { rotuloDoLancamento } from "./rotulo";
 import { fronteiraDeDados, situacaoDoDia, type SituacaoDoDia } from "./situacao";
 import { corDeGrafico } from "./cores-de-conta";
+import { montarCarteira, type CarteiraDeCompromissos } from "./compromissos";
 import {
   totalExpenses,
   totalIncome,
@@ -1342,4 +1345,21 @@ export async function loadClassificacaoDoDia(
           .map((centro) => ({ id: centro.id, name: centro.name })),
       })),
   };
+}
+
+/**
+ * A carteira de compromissos de capital.
+ *
+ * Nao depende de periodo nem de conta: um compromisso vive por anos e nao
+ * pertence a um mes. Por isso e uma leitura propria, e nao mais um campo do
+ * painel de despesas.
+ */
+export async function loadCompromissos(): Promise<CarteiraDeCompromissos> {
+  const conexao = db();
+  const [compromissos, chamadas] = await Promise.all([
+    listCompromissos(conexao),
+    listChamadas(conexao),
+  ]);
+
+  return montarCarteira(compromissos, chamadas);
 }

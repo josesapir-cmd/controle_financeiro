@@ -138,3 +138,15 @@ export function diaCurto(dia: string): string {
   const mes = MES_CURTO.format(data).replace(".", "");
   return `${String(data.getUTCDate()).padStart(2, "0")}/${mes}`;
 }
+
+/**
+ * "08/05/2025" — dia, mes e ano.
+ *
+ * Onde o ano importa, `diaCurto` mente por omissao: uma lista de chamadas de
+ * capital atravessa anos, e "08/mai" ao lado de "30/jun" nao diz qual veio
+ * primeiro.
+ */
+export function dataCompleta(dia: string): string {
+  const [ano, mes, resto] = dia.split("-");
+  return resto ? `${resto}/${mes}/${ano}` : dia;
+}

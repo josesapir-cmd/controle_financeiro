@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  dataCompleta,
   diaCurto,
   localDay,
   localMonth,
@@ -141,5 +142,20 @@ describe("diaCurto", () => {
   it("le a data como UTC, entao nao escorrega para o dia anterior", () => {
     expect(diaCurto("2026-03-01")).toBe("01/mar");
     expect(diaCurto("2026-12-31")).toBe("31/dez");
+  });
+});
+
+describe("dataCompleta", () => {
+  it("escreve na ordem de quem le em portugues", () => {
+    expect(dataCompleta("2025-05-08")).toBe("08/05/2025");
+  });
+
+  it("mantem o ano, que e o que diferencia duas chamadas do mesmo mes", () => {
+    expect(dataCompleta("2025-06-30")).not.toBe(dataCompleta("2026-06-30"));
+  });
+
+  it("devolve o que recebeu quando nao e uma data", () => {
+    expect(dataCompleta("")).toBe("");
+    expect(dataCompleta("hoje")).toBe("hoje");
   });
 });
