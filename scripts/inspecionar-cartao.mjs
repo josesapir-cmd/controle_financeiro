@@ -137,10 +137,26 @@ for (const { item_id, connector_name } of escolhidas) {
     console.log(`    campos da conta: ${Object.keys(conta).sort().join(", ")}`);
     if (conta.creditData) {
       console.log(`    creditData: ${Object.keys(conta.creditData).sort().join(", ")}`);
-      // `holderType` e `level` sao os campos onde titular x adicional apareceria.
       for (const campo of ["level", "brand", "holderType", "status"]) {
         if (conta.creditData[campo]) console.log(`      ${campo}: ${conta.creditData[campo]}`);
       }
+
+      // O cadastro dos adicionais, quando o banco manda: e o que liga os
+      // ultimos digitos que aparecem no lancamento a uma pessoa. Sem ele, da
+      // para separar os cartoes mas nao para saber de quem e cada um.
+      const adicionais = conta.creditData.additionalCards;
+      if (Array.isArray(adicionais) && adicionais.length > 0) {
+        console.log(`      additionalCards: ${adicionais.length}`);
+        for (const cartao of adicionais) {
+          console.log(`        · ${JSON.stringify(cartao)}`);
+        }
+      } else {
+        console.log(`      additionalCards: ${adicionais ? JSON.stringify(adicionais) : "vazio"}`);
+      }
+
+      // Limite por cartao: outra forma de o banco nomear cada plastico.
+      const limites = conta.creditData.disaggregatedCreditLimits;
+      if (limites) console.log(`      disaggregatedCreditLimits: ${JSON.stringify(limites)}`);
     }
 
     // Uma pagina de lancamentos basta: a pergunta e se o campo EXISTE e se ele
