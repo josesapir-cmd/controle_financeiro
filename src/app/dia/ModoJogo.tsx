@@ -705,6 +705,11 @@ export function ModoJogo({
                     entra junto com a hora. */}
                 <span className="jogo-hora">
                   {dia ? atual.hora : `${diaCurto(atual.dia)} · ${atual.hora}`}
+                  {/* A parcela muda o que o valor significa: e um pedaco de uma
+                      compra, e a decisao vale para a compra inteira. */}
+                  {atual.parcela ? (
+                    <span className="jogo-parcela">parcela {atual.parcela}</span>
+                  ) : null}
                 </span>
                 <span className="jogo-desc">{atual.descricao}</span>
                 <span className="jogo-valor">{formatBRL(atual.valor)}</span>

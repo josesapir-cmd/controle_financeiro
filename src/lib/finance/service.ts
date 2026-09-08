@@ -8,6 +8,8 @@ import {
   listChamadas,
   listCompromissos,
   listRegrasDeCartao,
+  listRotulosDeCompra,
+  purchaseFingerprint,
   listCategorias,
   listCentrosDeCusto,
   listCounterpartyLinks,
@@ -59,8 +61,9 @@ import { netWorth, normalizeAmount, sumBy } from "./money";
 import { rotuloDoLancamento } from "./rotulo";
 import { fronteiraDeDados, situacaoDoDia, type SituacaoDoDia } from "./situacao";
 import { corDeGrafico } from "./cores-de-conta";
-import { dadosDoCartao } from "./cartao";
+import { dadosDoCartao, rotuloDaParcela } from "./cartao";
 import { categoriaDoMcc } from "./mcc";
+import { chaveDaCompra } from "./parcelamento";
 import { classificar, estaClassificado, type Atribuicao } from "./classificacao";
 import { montarCarteira, type CarteiraDeCompromissos } from "./compromissos";
 import {
@@ -817,6 +820,14 @@ export interface LancamentoParaClassificar {
    * custa um enter, o erro custa uma seta.
    */
   sugestaoId: string | null;
+  /**
+   * "3/10" quando o lancamento e parcela de uma compra parcelada.
+   *
+   * Muda o que o numero na tela significa: dez parcelas sao um gasto, e nao
+   * dez. Sem isto, classificar a mesma compra dez vezes parece trabalho novo a
+   * cada mes.
+   */
+  parcela: string | null;
 }
 
 export interface ClassificacaoDoDia {
@@ -861,6 +872,34 @@ function indexarRegrasDeCartao(
   );
 }
 
+/** Indexa os rotulos de compra pela chave que ja vem cifrada do banco. */
+function indexarRotulosDeCompra(
+  rotulos: { purchaseKey: string; categoryId: string | null; costCenterId: string | null }[],
+): Map<string, Atribuicao> {
+  return new Map(
+    rotulos.map((r) => [
+      r.purchaseKey,
+      { categoryId: r.categoryId, costCenterId: r.costCenterId },
+    ]),
+  );
+}
+
+/**
+ * A classificacao da COMPRA a que esta parcela pertence.
+ *
+ * Uma compra parcelada e uma decisao so, tomada no mes em que ela aconteceu.
+ * As parcelas seguintes — inclusive as de anos a frente, que a fatura ja
+ * manda — herdam dela em vez de pedir classificacao de novo.
+ */
+function daCompra(
+  t: Transaction,
+  porCompra: Map<string, Atribuicao>,
+): Atribuicao | null {
+  const chave = chaveDaCompra(t.details, t.description);
+  if (!chave) return null;
+  return porCompra.get(purchaseFingerprint(chave)) ?? null;
+}
+
 /** A regra do cartao usado neste lancamento, se houver uma. */
 function regraDoCartao(
   t: Transaction,
@@ -892,11 +931,13 @@ function jaClassificado(
   rotulos: Map<string, { categoryId: string | null; costCenterId: string | null }>,
   cadastro: CounterpartyRegistry,
   porCartao: Map<string, Atribuicao> = new Map(),
+  porCompra: Map<string, Atribuicao> = new Map(),
 ): boolean {
   const chave = chaveDeRegra(t);
 
   return estaClassificado({
     proprio: rotulos.get(t.id) ?? null,
+    compra: daCompra(t, porCompra),
     cartao: regraDoCartao(t, porCartao),
     // Aqui basta saber que existe heranca; resolver o id sairia caro para
     // responder a uma pergunta de sim ou nao.
@@ -932,12 +973,13 @@ export async function loadSituacaoDaFita(
   if (useMock()) return { dias: {}, fronteira: hoje };
 
   const conexao = db();
-  const [{ contas, transacoes, registry, decisoes }, rotulos, ultimoDia, regras] =
+  const [{ contas, transacoes, registry, decisoes }, rotulos, ultimoDia, regras, compras] =
     await Promise.all([
       carregar({ from: de, to: ate }, accountIds),
       listTransactionLabels(conexao),
       ultimoDiaPorConta(conexao, hoje),
       listRegrasDeCartao(conexao).catch(() => []),
+      listRotulosDeCompra(conexao).catch(() => []),
     ]);
 
   const conciliado = conciliar(transacoes, decisoes);
@@ -947,11 +989,12 @@ export async function loadSituacaoDaFita(
   // divergencia entre as duas que fazia a bolinha dizer "pronto" num dia com
   // trabalho a fazer.
   const porCartao = indexarRegrasDeCartao(regras);
+  const porCompra = indexarRotulosDeCompra(compras);
 
   const pendentes: Record<string, number> = {};
   for (const t of conciliado.transacoes) {
     if (!isUserInitiatedExpense(t)) continue;
-    if (jaClassificado(t, porId, cadastro, porCartao)) continue;
+    if (jaClassificado(t, porId, cadastro, porCartao, porCompra)) continue;
 
     const dia = localDay(t.date);
     pendentes[dia] = (pendentes[dia] ?? 0) + 1;
@@ -988,6 +1031,7 @@ export async function loadPendentesDoPeriodo(
     rotulos,
     produtos,
     regras,
+    compras,
   ] = await Promise.all([
     carregar(period, accountIds),
     listCategorias(conexao),
@@ -995,9 +1039,11 @@ export async function loadPendentesDoPeriodo(
     listTransactionLabels(conexao),
     listTransactionProducts(conexao).catch(() => []),
     listRegrasDeCartao(conexao).catch(() => []),
+    listRotulosDeCompra(conexao).catch(() => []),
   ]);
 
   const porCartao = indexarRegrasDeCartao(regras);
+  const porCompra = indexarRotulosDeCompra(compras);
   const idPorNomeDaCategoria = new Map(
     categorias.map((c) => [normalizeName(c.name), c.id] as const),
   );
@@ -1040,7 +1086,9 @@ export async function loadPendentesDoPeriodo(
   };
 
   const pendentes = conciliado.transacoes
-    .filter((t) => isUserInitiatedExpense(t) && !jaClassificado(t, porId, cadastro, porCartao))
+    .filter(
+      (t) => isUserInitiatedExpense(t) && !jaClassificado(t, porId, cadastro, porCartao, porCompra),
+    )
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const lancamentos: LancamentoParaClassificar[] = pendentes.map((t) => {
@@ -1066,6 +1114,7 @@ export async function loadPendentesDoPeriodo(
       comentario: proprio?.note ?? null,
       herdada: false,
       sugestaoId: sugestaoDe(t),
+      parcela: rotuloDaParcela(dadosDoCartao(t.details)),
     };
   });
 
@@ -1174,15 +1223,18 @@ export async function loadPainelDeDespesas(
     centros,
     rotulos,
     regras,
+    compras,
   ] = await Promise.all([
     carregar(period, accountIds),
     listCategorias(conexao),
     listCentrosDeCusto(conexao),
     listTransactionLabels(conexao),
     listRegrasDeCartao(conexao).catch(() => []),
+    listRotulosDeCompra(conexao).catch(() => []),
   ]);
 
   const porCartao = indexarRegrasDeCartao(regras);
+  const porCompra = indexarRotulosDeCompra(compras);
 
   const conciliado = conciliar(transacoes, decisoes);
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
@@ -1197,6 +1249,7 @@ export async function loadPainelDeDespesas(
   const categoriaDe = (t: Transaction): CategoriaRow | null => {
     const decidida = classificar({
       proprio: porId.get(t.id) ?? null,
+      compra: daCompra(t, porCompra),
       cartao: regraDoCartao(t, porCartao),
       contraparte: daContraparte(t, cadastro, idPorNome),
     });
@@ -1236,6 +1289,11 @@ export async function loadPainelDeDespesas(
     const proprio = porId.get(t.id);
     if (proprio?.costCenterId) return centroPorId.get(proprio.costCenterId) ?? null;
     if (proprio?.categoryId) return null;
+
+    const daSuaCompra = daCompra(t, porCompra);
+    if (daSuaCompra) {
+      return daSuaCompra.costCenterId ? (centroPorId.get(daSuaCompra.costCenterId) ?? null) : null;
+    }
 
     const doCartao = regraDoCartao(t, porCartao);
     if (doCartao) {
@@ -1362,6 +1420,7 @@ export async function loadClassificacaoDoDia(
     rotulos,
     produtos,
     regras,
+    compras,
   ] = await Promise.all([
       carregar(janela, accountIds),
       listCategorias(conexao),
@@ -1374,12 +1433,14 @@ export async function loadClassificacaoDoDia(
       // Idem para a 014: sem a tabela, some a regra de cartao e o resto da
       // tela continua de pe.
       listRegrasDeCartao(conexao).catch(() => []),
+      listRotulosDeCompra(conexao).catch(() => []),
     ]);
 
   const conciliado = conciliar(transacoes, decisoes);
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
   const porId = new Map(rotulos.map((r) => [r.transactionId, r]));
   const porCartao = indexarRegrasDeCartao(regras);
+  const porCompra = indexarRotulosDeCompra(compras);
 
   // Produtos lidos de tela de pedido. Um pedido de tres itens cobrado de uma
   // vez tem tres produtos na mesma cobranca, entao a lista e por transacao.
@@ -1434,6 +1495,7 @@ export async function loadClassificacaoDoDia(
 
     const decidida = classificar({
       proprio: proprio ?? null,
+      compra: daCompra(t, porCompra),
       cartao: regraDoCartao(t, porCartao),
       contraparte: daParte,
     });
@@ -1462,9 +1524,9 @@ export async function loadClassificacaoDoDia(
       categoriaId: centro?.categoryId ?? decidida.categoryId,
       centroId: decidida.costCenterId,
       comentario,
-      // Regra de cartao e heranca tambem: nao foi uma decisao sobre ESTE
-      // lancamento, e a etiqueta na tela tem de dizer isso.
-      herdada: decidida.origem === "cartao",
+      // Regra de cartao e categoria da compra tambem sao heranca: nao foram
+      // decisoes sobre ESTE lancamento, e a etiqueta tem de dizer isso.
+      herdada: decidida.origem !== "proprio",
     };
   };
 
@@ -1542,6 +1604,7 @@ export async function loadClassificacaoDoDia(
       frequencia: frequencia.get(chaveDaRegra(t) ?? "") ?? 1,
       ...decidido,
       sugestaoId: sugestaoDe(t),
+      parcela: rotuloDaParcela(dadosDoCartao(t.details)),
       // Uma contraparte com categoria tambem manda dinheiro de volta: sem este
       // corte, um reembolso apareceria etiquetado como despesa dela.
       categoriaId: classificavel ? decidido.categoriaId : null,

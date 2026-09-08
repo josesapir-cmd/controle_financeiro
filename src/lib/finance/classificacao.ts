@@ -1,17 +1,20 @@
 /**
  * Quem manda quando mais de uma regra alcanca o mesmo lancamento.
  *
- * Tres coisas podem classificar uma despesa, e elas se sobrepoem:
+ * Quatro coisas podem classificar uma despesa, e elas se sobrepoem:
  *
  * 1. a decisao sobre AQUELE lancamento — arrastar o cartao, jogar, editar;
- * 2. a regra do CARTAO — "tudo o que sai do cartao do meu pai e transferencia";
- * 3. a heranca da CONTRAPARTE — "todo pagamento ao mercado X e alimentacao".
+ * 2. a decisao sobre a COMPRA, quando o lancamento e uma parcela dela;
+ * 3. a regra do CARTAO — "tudo o que sai do cartao do meu pai e transferencia";
+ * 4. a heranca da CONTRAPARTE — "todo pagamento ao mercado X e alimentacao".
  *
  * A ordem e essa, do mais especifico para o mais geral. A decisao individual
- * vence porque foi tomada olhando aquele gasto. A regra do cartao vence a da
- * contraparte porque fala de origem, e origem nao muda: uma compra de
- * supermercado no cartao do pai continua sendo gasto do pai, por mais que a
- * contraparte diga alimentacao.
+ * vence porque foi tomada olhando aquele gasto. A da compra vem logo depois
+ * porque tambem foi uma decisao, so que tomada na primeira parcela: dez
+ * parcelas sao um gasto, nao dez. E a regra do cartao vence a da contraparte
+ * porque fala de origem, e origem nao muda — uma compra de supermercado no
+ * cartao do pai continua sendo gasto do pai, por mais que a contraparte diga
+ * alimentacao.
  *
  * Isto vive num modulo proprio, e nao repetido em cada tela, porque ja houve o
  * caso de duas telas discordarem — a bolinha da fita dizia "dia pronto" e a
@@ -24,7 +27,7 @@ export interface Atribuicao {
   costCenterId: string | null;
 }
 
-export type OrigemDaClassificacao = "proprio" | "cartao" | "contraparte";
+export type OrigemDaClassificacao = "proprio" | "compra" | "cartao" | "contraparte";
 
 export interface Classificacao extends Atribuicao {
   /** `null` quando nada classificou o lancamento. */
@@ -38,11 +41,13 @@ function vale(atribuicao: Atribuicao | null | undefined): atribuicao is Atribuic
 
 export function classificar(candidatos: {
   proprio?: Atribuicao | null;
+  compra?: Atribuicao | null;
   cartao?: Atribuicao | null;
   contraparte?: Atribuicao | null;
 }): Classificacao {
   const ordem: [OrigemDaClassificacao, Atribuicao | null | undefined][] = [
     ["proprio", candidatos.proprio],
+    ["compra", candidatos.compra],
     ["cartao", candidatos.cartao],
     ["contraparte", candidatos.contraparte],
   ];
@@ -63,6 +68,7 @@ export function classificar(candidatos: {
 /** Se o lancamento ja tem categoria, venha ela de onde vier. */
 export function estaClassificado(candidatos: {
   proprio?: Atribuicao | null;
+  compra?: Atribuicao | null;
   cartao?: Atribuicao | null;
   contraparte?: Atribuicao | null;
 }): boolean {

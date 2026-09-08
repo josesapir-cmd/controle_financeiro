@@ -50,6 +50,7 @@ describe("migracoes", () => {
       "counterparty_links",
       "credentials",
       "fund_commitments",
+      "installment_labels",
       "schema_migrations",
       "sessions",
       "shared_imports",

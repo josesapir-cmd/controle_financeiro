@@ -5272,3 +5272,18 @@ ul.produtos {
   flex: 1;
   min-width: 160px;
 }
+
+/* A parcela ao lado da hora: diz que aquele valor e um pedaco de uma compra, e
+   que a categoria escolhida vale para todas as outras. */
+.jogo-parcela {
+  margin-left: 8px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-sub);
+  background: var(--bg-soft);
+  border-radius: 999px;
+  white-space: nowrap;
+}

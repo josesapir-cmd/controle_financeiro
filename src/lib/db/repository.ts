@@ -1480,3 +1480,89 @@ export async function apagarRegraDeCartao(
     cardNumber.trim(),
   ]);
 }
+
+/* ==========================================================================
+   Categoria da compra parcelada
+   ========================================================================== */
+
+export interface RotuloDeCompraRow {
+  purchaseKey: string;
+  categoryId: string | null;
+  costCenterId: string | null;
+}
+
+/** Fingerprint da compra, no mesmo esquema das contrapartes. */
+export function purchaseFingerprint(chave: string): string {
+  return fingerprint("purchase", chave);
+}
+
+/**
+ * Descricao e detalhes de um lancamento, decifrados.
+ *
+ * Serve a quem precisa reconstruir a identidade da compra a partir de uma
+ * parcela: a chave se monta com o bloco do cartao e o texto, e nenhum dos dois
+ * viaja para o cliente.
+ */
+export async function lerLancamento(
+  db: Db,
+  transactionId: string,
+): Promise<{ description: string | null; details: { label: string; value: string }[] } | null> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT description_enc, details_enc FROM transactions WHERE id = $1`,
+    [transactionId],
+  );
+
+  if (linhas.length === 0) return null;
+
+  const detalhes = decryptOptional(linhas[0].details_enc as string | null);
+  return {
+    description: decryptOptional(linhas[0].description_enc as string | null),
+    details: detalhes ? (JSON.parse(detalhes) as { label: string; value: string }[]) : [],
+  };
+}
+
+export async function listRotulosDeCompra(db: Db): Promise<RotuloDeCompraRow[]> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT purchase_key, category_id, cost_center_id FROM installment_labels`,
+  );
+
+  return linhas.map((linha) => ({
+    purchaseKey: String(linha.purchase_key),
+    categoryId: linha.category_id ? String(linha.category_id) : null,
+    costCenterId: linha.cost_center_id ? String(linha.cost_center_id) : null,
+  }));
+}
+
+/**
+ * Grava a categoria da compra inteira.
+ *
+ * Sem categoria e sem centro a linha sai: uma compra sem classificacao volta a
+ * herdar do cartao ou da contraparte, e uma linha vazia so faria a heranca
+ * parar sem dizer por que.
+ */
+export async function setRotuloDeCompra(
+  db: Db,
+  purchaseKey: string,
+  dados: { categoryId?: string | null; costCenterId?: string | null },
+): Promise<void> {
+  const chave = purchaseKey.trim();
+  if (!chave) return;
+
+  const categoria = dados.categoryId && UUID.test(dados.categoryId) ? dados.categoryId : null;
+  const centro = dados.costCenterId && UUID.test(dados.costCenterId) ? dados.costCenterId : null;
+
+  if (!categoria && !centro) {
+    await db.query(`DELETE FROM installment_labels WHERE purchase_key = $1`, [chave]);
+    return;
+  }
+
+  await db.query(
+    `INSERT INTO installment_labels (purchase_key, category_id, cost_center_id)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (purchase_key) DO UPDATE
+       SET category_id = EXCLUDED.category_id,
+           cost_center_id = EXCLUDED.cost_center_id,
+           updated_at = now()`,
+    [chave, categoria, centro],
+  );
+}

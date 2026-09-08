@@ -6,12 +6,16 @@ import { fromPostgres } from "@/lib/db/adapter";
 import { getSql } from "@/lib/db/client";
 import {
   acharOuCriarCentroDeCusto,
+  lerLancamento,
   listCategorias,
+  purchaseFingerprint,
   setLabel,
+  setRotuloDeCompra,
   setTransactionLabel,
   setTransactionNote,
   vincularCentroDeCusto,
 } from "@/lib/db/repository";
+import { chaveDaCompra } from "@/lib/finance/parcelamento";
 
 /**
  * Classificacao de um lancamento pela tela do dia.
@@ -46,6 +50,21 @@ export async function classificarLancamento(formData: FormData): Promise<void> {
     note: comentario,
   });
 
+  // Uma compra parcelada e uma decisao so. Gravar tambem na COMPRA faz as
+  // outras parcelas herdarem — inclusive as de anos a frente, que a fatura ja
+  // mandou e que de outro modo voltariam a pedir classificacao mes a mes.
+  const lancamento = await lerLancamento(db, transactionId);
+  const daCompra = lancamento
+    ? chaveDaCompra(lancamento.details, lancamento.description)
+    : null;
+
+  if (daCompra) {
+    await setRotuloDeCompra(db, purchaseFingerprint(daCompra), {
+      categoryId: categoriaId,
+      costCenterId: centroId,
+    });
+  }
+
   if (String(formData.get("aplicarATodos") ?? "") === "sim") {
     const contraparte = String(formData.get("counterpartyKey") ?? "");
     if (contraparte && categoriaId) {
@@ -72,11 +91,27 @@ export async function limparLancamento(formData: FormData): Promise<void> {
   const transactionId = String(formData.get("transactionId") ?? "");
   if (!transactionId) return;
 
-  await setTransactionLabel(fromPostgres(getSql()), transactionId, {
+  const db = fromPostgres(getSql());
+
+  await setTransactionLabel(db, transactionId, {
     categoryId: null,
     costCenterId: null,
     note: null,
   });
+
+  // Limpar uma parcela tem de limpar a COMPRA: senao a categoria da compra
+  // reapareceria no mesmo instante, e o botao pareceria nao funcionar.
+  const lancamento = await lerLancamento(db, transactionId);
+  const daCompra = lancamento
+    ? chaveDaCompra(lancamento.details, lancamento.description)
+    : null;
+
+  if (daCompra) {
+    await setRotuloDeCompra(db, purchaseFingerprint(daCompra), {
+      categoryId: null,
+      costCenterId: null,
+    });
+  }
 
   for (const rota of ["/dia", "/categorias", "/contrapartes", "/"]) revalidatePath(rota);
 }
