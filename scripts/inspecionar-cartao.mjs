@@ -45,7 +45,20 @@ async function lerEnv() {
 
 await lerEnv();
 const API = process.env.PLUGGY_API_URL || "https://api.pluggy.ai";
-const filtro = (process.argv[2] || "").toLowerCase();
+/**
+ * Sem acento e sem caixa, dos dois lados.
+ *
+ * O conector se chama "Itau" com acento e ninguem o digita na linha de
+ * comando: comparar cru fazia o filtro descartar justamente a conexao pedida.
+ */
+function comparavel(valor) {
+  return String(valor ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+const filtro = comparavel(process.argv[2] || "");
 
 const auth = await fetch(`${API}/auth`, {
   method: "POST",
@@ -81,8 +94,22 @@ try {
   morrerComExplicacao(erro);
 }
 
-for (const { item_id, connector_name } of conexoes) {
-  if (filtro && !String(connector_name).toLowerCase().includes(filtro)) continue;
+const escolhidas = conexoes.filter(
+  (c) => !filtro || comparavel(c.connector_name).includes(filtro),
+);
+
+// Sair calado quando nada casa e o pior jeito de falhar: parece que a resposta
+// e "nao ha nada", quando na verdade a pergunta nao chegou a ser feita.
+if (escolhidas.length === 0) {
+  console.log(`\nNenhuma conexao casa com "${process.argv[2]}".`);
+  console.log(`Conexoes: ${conexoes.map((c) => c.connector_name).join(", ")}`);
+  await banco.fim();
+  process.exit(0);
+}
+
+let comCredito = 0;
+
+for (const { item_id, connector_name } of escolhidas) {
 
   const contas = await fetch(`${API}/accounts?itemId=${item_id}`, { headers: cabecalho });
   if (!contas.ok) {
@@ -92,7 +119,12 @@ for (const { item_id, connector_name } of conexoes) {
 
   const lista = (await contas.json())?.results ?? [];
   const credito = lista.filter((c) => c.type === "CREDIT");
-  if (credito.length === 0) continue;
+  if (credito.length === 0) {
+    console.log(`\n━━ ${connector_name}: nenhuma conta de credito`);
+    continue;
+  }
+
+  comCredito += credito.length;
 
   console.log(`\n━━ ${connector_name}`);
 
@@ -147,6 +179,10 @@ for (const { item_id, connector_name } of conexoes) {
       console.log(`      ${chave}  ×${n}`);
     }
   }
+}
+
+if (comCredito === 0) {
+  console.log("\nNenhuma conta de credito nas conexoes consultadas.");
 }
 
 await banco.fim();
