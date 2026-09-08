@@ -21,7 +21,8 @@
     "pix": "node scripts/inspecionar-pix.mjs",
     "zerar-categorias": "node scripts/zerar-categorias.mjs",
     "banco": "node scripts/testar-banco.mjs",
-    "produtos": "node scripts/probe-produtos.mjs"
+    "produtos": "node scripts/probe-produtos.mjs",
+    "cartao": "node scripts/inspecionar-cartao.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
