@@ -7,6 +7,7 @@ import {
   listAccounts,
   listChamadas,
   listCompromissos,
+  listRegrasDeCartao,
   listCategorias,
   listCentrosDeCusto,
   listCounterpartyLinks,
@@ -46,11 +47,21 @@ import {
 } from "./counterparties";
 import { isUserInitiatedExpense } from "./automatic";
 import { maskDocument, normalizeName } from "./counterparties";
-import { currentMonthRange, currentYearRange, localDay, localTime, shiftDay } from "./dates";
+import {
+  currentMonthRange,
+  currentYearRange,
+  localDay,
+  localTime,
+  shiftDay,
+  shiftMonth,
+} from "./dates";
 import { netWorth, normalizeAmount, sumBy } from "./money";
 import { rotuloDoLancamento } from "./rotulo";
 import { fronteiraDeDados, situacaoDoDia, type SituacaoDoDia } from "./situacao";
 import { corDeGrafico } from "./cores-de-conta";
+import { dadosDoCartao } from "./cartao";
+import { categoriaDoMcc } from "./mcc";
+import { classificar, estaClassificado, type Atribuicao } from "./classificacao";
 import { montarCarteira, type CarteiraDeCompromissos } from "./compromissos";
 import {
   totalExpenses,
@@ -798,6 +809,14 @@ export interface LancamentoParaClassificar {
   comentario: string | null;
   /** true quando veio da contraparte, nao de uma decisao sobre este lancamento. */
   herdada: boolean;
+  /**
+   * Categoria sugerida pelo ramo do estabelecimento (MCC do cartao).
+   *
+   * SUGESTAO, nunca atribuicao: o codigo descreve o lojista, nao a intencao da
+   * compra. Serve para a bussola ja abrir com uma direcao acesa — o acerto
+   * custa um enter, o erro custa uma seta.
+   */
+  sugestaoId: string | null;
 }
 
 export interface ClassificacaoDoDia {
@@ -824,16 +843,68 @@ function chaveDeRegra(t: Transaction): string | null {
 }
 
 /** Se o lancamento ja tem categoria, propria ou herdada da contraparte. */
+/**
+ * Indexa as regras por conta e plastico.
+ *
+ * A chave junta os dois porque `cardNumber` sao quatro digitos: dois bancos
+ * diferentes podem ter cartoes terminados igual, e uma regra do Itau nao pode
+ * alcancar um lancamento do Nubank.
+ */
+function indexarRegrasDeCartao(
+  regras: { accountId: string; cardNumber: string; categoryId: string | null; costCenterId: string | null }[],
+): Map<string, Atribuicao> {
+  return new Map(
+    regras.map((r) => [
+      `${r.accountId}|${r.cardNumber}`,
+      { categoryId: r.categoryId, costCenterId: r.costCenterId },
+    ]),
+  );
+}
+
+/** A regra do cartao usado neste lancamento, se houver uma. */
+function regraDoCartao(
+  t: Transaction,
+  porCartao: Map<string, Atribuicao>,
+): Atribuicao | null {
+  const numero = dadosDoCartao(t.details).numero;
+  if (!numero) return null;
+  return porCartao.get(`${t.accountId}|${numero}`) ?? null;
+}
+
+/** A atribuicao herdada da contraparte, ja resolvida para ids. */
+function daContraparte(
+  t: Transaction,
+  cadastro: CounterpartyRegistry,
+  categoriaPorNome: Map<string, string>,
+): Atribuicao | null {
+  const chave = chaveDeRegra(t);
+  const herdada = chave ? cadastro[chave]?.category : null;
+  if (!herdada) return null;
+
+  return {
+    categoryId: categoriaPorNome.get(normalizeName(herdada)) ?? null,
+    costCenterId: null,
+  };
+}
+
 function jaClassificado(
   t: Transaction,
   rotulos: Map<string, { categoryId: string | null; costCenterId: string | null }>,
   cadastro: CounterpartyRegistry,
+  porCartao: Map<string, Atribuicao> = new Map(),
 ): boolean {
-  const proprio = rotulos.get(t.id);
-  if (proprio && (proprio.categoryId || proprio.costCenterId)) return true;
-
   const chave = chaveDeRegra(t);
-  return Boolean(chave && cadastro[chave]?.category);
+
+  return estaClassificado({
+    proprio: rotulos.get(t.id) ?? null,
+    cartao: regraDoCartao(t, porCartao),
+    // Aqui basta saber que existe heranca; resolver o id sairia caro para
+    // responder a uma pergunta de sim ou nao.
+    contraparte:
+      chave && cadastro[chave]?.category
+        ? { categoryId: "herdada", costCenterId: null }
+        : null,
+  });
 }
 
 export interface SituacaoDaFita {
@@ -861,20 +932,26 @@ export async function loadSituacaoDaFita(
   if (useMock()) return { dias: {}, fronteira: hoje };
 
   const conexao = db();
-  const [{ contas, transacoes, registry, decisoes }, rotulos, ultimoDia] = await Promise.all([
-    carregar({ from: de, to: ate }, accountIds),
-    listTransactionLabels(conexao),
-    ultimoDiaPorConta(conexao, hoje),
-  ]);
+  const [{ contas, transacoes, registry, decisoes }, rotulos, ultimoDia, regras] =
+    await Promise.all([
+      carregar({ from: de, to: ate }, accountIds),
+      listTransactionLabels(conexao),
+      ultimoDiaPorConta(conexao, hoje),
+      listRegrasDeCartao(conexao).catch(() => []),
+    ]);
 
   const conciliado = conciliar(transacoes, decisoes);
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
   const porId = new Map(rotulos.map((r) => [r.transactionId, r]));
+  // A fita tem de contar a pendencia com a MESMA regra da lista do dia: era a
+  // divergencia entre as duas que fazia a bolinha dizer "pronto" num dia com
+  // trabalho a fazer.
+  const porCartao = indexarRegrasDeCartao(regras);
 
   const pendentes: Record<string, number> = {};
   for (const t of conciliado.transacoes) {
     if (!isUserInitiatedExpense(t)) continue;
-    if (jaClassificado(t, porId, cadastro)) continue;
+    if (jaClassificado(t, porId, cadastro, porCartao)) continue;
 
     const dia = localDay(t.date);
     pendentes[dia] = (pendentes[dia] ?? 0) + 1;
@@ -904,14 +981,26 @@ export async function loadPendentesDoPeriodo(
   const accountIds = options.accountIds ?? [];
   const conexao = db();
 
-  const [{ contas, transacoes, registry, decisoes }, categorias, centros, rotulos, produtos] =
-    await Promise.all([
-      carregar(period, accountIds),
-      listCategorias(conexao),
-      listCentrosDeCusto(conexao),
-      listTransactionLabels(conexao),
-      listTransactionProducts(conexao).catch(() => []),
-    ]);
+  const [
+    { contas, transacoes, registry, decisoes },
+    categorias,
+    centros,
+    rotulos,
+    produtos,
+    regras,
+  ] = await Promise.all([
+    carregar(period, accountIds),
+    listCategorias(conexao),
+    listCentrosDeCusto(conexao),
+    listTransactionLabels(conexao),
+    listTransactionProducts(conexao).catch(() => []),
+    listRegrasDeCartao(conexao).catch(() => []),
+  ]);
+
+  const porCartao = indexarRegrasDeCartao(regras);
+  const idPorNomeDaCategoria = new Map(
+    categorias.map((c) => [normalizeName(c.name), c.id] as const),
+  );
 
   const conciliado = conciliar(transacoes, decisoes);
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
@@ -938,8 +1027,20 @@ export async function loadPendentesDoPeriodo(
     return (chave ? cadastro[chave]?.alias : null) || t.counterparty?.name || null;
   };
 
+  /**
+   * A categoria que o ramo do estabelecimento sugere.
+   *
+   * Resolvida por nome porque o mapa de MCC nao conhece os ids deste banco. Um
+   * nome que nao exista no cadastro simplesmente nao sugere nada — melhor
+   * silencio do que uma direcao que nunca acende.
+   */
+  const sugestaoDe = (t: Transaction): string | null => {
+    const nome = categoriaDoMcc(dadosDoCartao(t.details).mcc);
+    return nome ? (idPorNomeDaCategoria.get(normalizeName(nome)) ?? null) : null;
+  };
+
   const pendentes = conciliado.transacoes
-    .filter((t) => isUserInitiatedExpense(t) && !jaClassificado(t, porId, cadastro))
+    .filter((t) => isUserInitiatedExpense(t) && !jaClassificado(t, porId, cadastro, porCartao))
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const lancamentos: LancamentoParaClassificar[] = pendentes.map((t) => {
@@ -964,6 +1065,7 @@ export async function loadPendentesDoPeriodo(
       centroId: null,
       comentario: proprio?.note ?? null,
       herdada: false,
+      sugestaoId: sugestaoDe(t),
     };
   });
 
@@ -1071,12 +1173,16 @@ export async function loadPainelDeDespesas(
     categorias,
     centros,
     rotulos,
+    regras,
   ] = await Promise.all([
-      carregar(period, accountIds),
-      listCategorias(conexao),
-      listCentrosDeCusto(conexao),
-      listTransactionLabels(conexao),
-    ]);
+    carregar(period, accountIds),
+    listCategorias(conexao),
+    listCentrosDeCusto(conexao),
+    listTransactionLabels(conexao),
+    listRegrasDeCartao(conexao).catch(() => []),
+  ]);
+
+  const porCartao = indexarRegrasDeCartao(regras);
 
   const conciliado = conciliar(transacoes, decisoes);
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
@@ -1085,18 +1191,24 @@ export async function loadPainelDeDespesas(
   const categoriaPorNome = new Map(categorias.map((c) => [normalizeName(c.name), c] as const));
   const categoriaPorId = new Map(categorias.map((c) => [c.id, c] as const));
 
-  /** A categoria que vale para o lancamento: a propria, senao a da contraparte. */
+  const idPorNome = new Map([...categoriaPorNome].map(([nome, c]) => [nome, c.id] as const));
+
+  /** A categoria que vale para o lancamento, na ordem de precedencia unica. */
   const categoriaDe = (t: Transaction): CategoriaRow | null => {
-    const proprio = porId.get(t.id);
-    if (proprio?.costCenterId) {
-      const centro = centroPorId.get(proprio.costCenterId);
+    const decidida = classificar({
+      proprio: porId.get(t.id) ?? null,
+      cartao: regraDoCartao(t, porCartao),
+      contraparte: daContraparte(t, cadastro, idPorNome),
+    });
+
+    // O centro carrega a categoria dele: quem escolheu um centro escolheu a
+    // categoria junto, e ela vence o campo de categoria da mesma atribuicao.
+    if (decidida.costCenterId) {
+      const centro = centroPorId.get(decidida.costCenterId);
       if (centro) return categoriaPorId.get(centro.categoryId) ?? null;
     }
-    if (proprio?.categoryId) return categoriaPorId.get(proprio.categoryId) ?? null;
 
-    const chave = chaveDeRegra(t);
-    const herdada = chave ? cadastro[chave]?.category : null;
-    return herdada ? (categoriaPorNome.get(normalizeName(herdada)) ?? null) : null;
+    return decidida.categoryId ? (categoriaPorId.get(decidida.categoryId) ?? null) : null;
   };
 
   const despesas = conciliado.transacoes.filter((t) => classify(t) === "expense");
@@ -1118,8 +1230,17 @@ export async function loadPainelDeDespesas(
 
   /** O centro de custo do lancamento, proprio ou herdado da contraparte. */
   const centroDe = (t: Transaction): CentroDeCustoRow | null => {
+    // Mesma ordem de precedencia da categoria: sem isto, uma despesa poderia
+    // cair na categoria do cartao e na subcategoria da contraparte — duas
+    // decisoes viradas numa terceira que ninguem tomou.
     const proprio = porId.get(t.id);
     if (proprio?.costCenterId) return centroPorId.get(proprio.costCenterId) ?? null;
+    if (proprio?.categoryId) return null;
+
+    const doCartao = regraDoCartao(t, porCartao);
+    if (doCartao) {
+      return doCartao.costCenterId ? (centroPorId.get(doCartao.costCenterId) ?? null) : null;
+    }
 
     const chave = chaveDeRegra(t);
     const herdado = chave ? cadastro[chave] : null;
@@ -1234,8 +1355,14 @@ export async function loadClassificacaoDoDia(
   if (useMock()) return { dia, lancamentos: [], categorias: [] };
 
   const conexao = db();
-  const [{ contas, transacoes, registry, decisoes }, categorias, centros, rotulos, produtos] =
-    await Promise.all([
+  const [
+    { contas, transacoes, registry, decisoes },
+    categorias,
+    centros,
+    rotulos,
+    produtos,
+    regras,
+  ] = await Promise.all([
       carregar(janela, accountIds),
       listCategorias(conexao),
       listCentrosDeCusto(conexao),
@@ -1244,11 +1371,15 @@ export async function loadClassificacaoDoDia(
       // nao pode cair por causa de um nome de produto: sem ela, os cartoes
       // ficam sem o produto e todo o resto continua funcionando.
       listTransactionProducts(conexao).catch(() => []),
+      // Idem para a 014: sem a tabela, some a regra de cartao e o resto da
+      // tela continua de pe.
+      listRegrasDeCartao(conexao).catch(() => []),
     ]);
 
   const conciliado = conciliar(transacoes, decisoes);
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
   const porId = new Map(rotulos.map((r) => [r.transactionId, r]));
+  const porCartao = indexarRegrasDeCartao(regras);
 
   // Produtos lidos de tela de pedido. Um pedido de tres itens cobrado de uma
   // vez tem tres produtos na mesma cobranca, entao a lista e por transacao.
@@ -1290,33 +1421,51 @@ export async function loadClassificacaoDoDia(
 
   const resolver = (t: Transaction) => {
     const proprio = porId.get(t.id);
-    if (proprio && (proprio.categoryId || proprio.costCenterId)) {
-      const centro = proprio.costCenterId ? centroPorId.get(proprio.costCenterId) : undefined;
-      return {
-        categoriaId: centro?.categoryId ?? proprio.categoryId,
-        centroId: proprio.costCenterId,
-        comentario: proprio.note,
-        herdada: false,
-      };
-    }
+    const comentario = proprio?.note ?? null;
 
     const chave = chaveDaRegra(t);
     const cadastroDaParte = chave ? cadastro[chave] : undefined;
-    if (!cadastroDaParte?.category) {
-      return {
-        categoriaId: null,
-        centroId: null,
-        comentario: proprio?.note ?? null,
-        herdada: false,
-      };
-    }
-
-    const categoriaId = categoriaPorRotulo.get(normalizeName(cadastroDaParte.category)) ?? null;
-    const centroId = cadastroDaParte.subcategory && categoriaId
-      ? centroPorRotulo.get(`${categoriaId}|${normalizeName(cadastroDaParte.subcategory)}`) ?? null
+    const daParte = cadastroDaParte?.category
+      ? {
+          categoryId: categoriaPorRotulo.get(normalizeName(cadastroDaParte.category)) ?? null,
+          costCenterId: null,
+        }
       : null;
 
-    return { categoriaId, centroId, comentario: proprio?.note ?? null, herdada: true };
+    const decidida = classificar({
+      proprio: proprio ?? null,
+      cartao: regraDoCartao(t, porCartao),
+      contraparte: daParte,
+    });
+
+    if (decidida.origem === null) {
+      return { categoriaId: null, centroId: null, comentario, herdada: false };
+    }
+
+    // A subcategoria da contraparte so entra quando foi ELA que classificou:
+    // vinda junto de outra origem, seria um pedaco de uma decisao colado em
+    // outra.
+    if (decidida.origem === "contraparte") {
+      const categoriaId = decidida.categoryId;
+      const centroId =
+        cadastroDaParte?.subcategory && categoriaId
+          ? (centroPorRotulo.get(
+              `${categoriaId}|${normalizeName(cadastroDaParte.subcategory)}`,
+            ) ?? null)
+          : null;
+
+      return { categoriaId, centroId, comentario, herdada: true };
+    }
+
+    const centro = decidida.costCenterId ? centroPorId.get(decidida.costCenterId) : undefined;
+    return {
+      categoriaId: centro?.categoryId ?? decidida.categoryId,
+      centroId: decidida.costCenterId,
+      comentario,
+      // Regra de cartao e heranca tambem: nao foi uma decisao sobre ESTE
+      // lancamento, e a etiqueta na tela tem de dizer isso.
+      herdada: decidida.origem === "cartao",
+    };
   };
 
   // Apelido primeiro: e como o usuario chama a contraparte. "PIX para Mae" diz
@@ -1360,6 +1509,18 @@ export async function loadClassificacaoDoDia(
     return linhas;
   };
 
+  /**
+   * A categoria que o ramo do estabelecimento sugere.
+   *
+   * Resolvida por nome porque o mapa de MCC nao conhece os ids deste banco. Um
+   * nome que nao exista no cadastro simplesmente nao sugere nada — melhor
+   * silencio do que uma direcao que nunca acende.
+   */
+  const sugestaoDe = (t: Transaction): string | null => {
+    const nome = categoriaDoMcc(dadosDoCartao(t.details).mcc);
+    return nome ? (categoriaPorRotulo.get(normalizeName(nome)) ?? null) : null;
+  };
+
   const lancamentos: LancamentoParaClassificar[] = doDia.map((t) => {
     const classificavel = isUserInitiatedExpense(t);
     const decidido = resolver(t);
@@ -1380,6 +1541,7 @@ export async function loadClassificacaoDoDia(
       classificavel,
       frequencia: frequencia.get(chaveDaRegra(t) ?? "") ?? 1,
       ...decidido,
+      sugestaoId: sugestaoDe(t),
       // Uma contraparte com categoria tambem manda dinheiro de volta: sem este
       // corte, um reembolso apareceria etiquetado como despesa dela.
       categoriaId: classificavel ? decidido.categoriaId : null,
@@ -1442,4 +1604,120 @@ export async function loadCompromissos(): Promise<CarteiraDeCompromissos> {
   ]);
 
   return montarCarteira(compromissos, chamadas);
+}
+
+export interface CartaoDaConta {
+  numero: string;
+  /** Quantos lancamentos sairam dele na janela lida. */
+  lancamentos: number;
+  /** Soma do que saiu, positiva. */
+  gasto: number;
+  /** Data do lancamento mais recente, para reconhecer cartao fora de uso. */
+  ultimoUso: string | null;
+  categoriaId: string | null;
+  centroId: string | null;
+  apelido: string | null;
+}
+
+export interface ContaCadastrada {
+  id: string;
+  nome: string;
+  connectorName: string;
+  tipo: string;
+  subtipo: string | null;
+  /** Vazio em conta que nao e cartao. */
+  cartoes: CartaoDaConta[];
+}
+
+export interface CadastroDeContas {
+  contas: ContaCadastrada[];
+  categorias: { id: string; name: string; hue: number }[];
+  centros: { id: string; categoryId: string; name: string }[];
+  /** Ate onde a leitura olhou, para a tela poder dizer de que periodo fala. */
+  desde: string;
+}
+
+/**
+ * As contas e, dentro das de cartao, os plasticos que aparecem nos lancamentos.
+ *
+ * Os cartoes nao vem de um cadastro: o Open Finance nao cria conta para o
+ * adicional e o banco nao manda o nome de quem usou. O que existe e o
+ * `cardNumber` no bloco do cartao de cada lancamento — entao a lista de
+ * plasticos e DESCOBERTA lendo o historico, e nao consultada.
+ *
+ * Por isso a janela e larga: um cartao pouco usado precisa de meses para
+ * aparecer, e um que nao aparece nao pode receber regra.
+ */
+export async function loadCadastroDeContas(
+  options: { meses?: number; hoje?: string } = {},
+): Promise<CadastroDeContas> {
+  const hoje = options.hoje ?? localDay(new Date());
+  const desde = shiftMonth(hoje.slice(0, 7), -(options.meses ?? 12)) + "-01";
+
+  const conexao = db();
+  const [contas, categorias, centros, regras, transacoes] = await Promise.all([
+    listAccounts(conexao),
+    listCategorias(conexao),
+    listCentrosDeCusto(conexao),
+    listRegrasDeCartao(conexao).catch(() => []),
+    listTransactions(conexao, { from: desde, to: hoje }),
+  ]);
+
+  const regraPorChave = new Map(regras.map((r) => [`${r.accountId}|${r.cardNumber}`, r] as const));
+
+  /** conta -> cartao -> o que se sabe dele pelos lancamentos. */
+  const vistos = new Map<string, Map<string, { n: number; gasto: number; ultimo: string }>>();
+
+  for (const linha of transacoes) {
+    const numero = dadosDoCartao(linha.details ?? undefined).numero;
+    if (!numero) continue;
+
+    const daConta = vistos.get(linha.accountId) ?? new Map();
+    const atual = daConta.get(numero) ?? { n: 0, gasto: 0, ultimo: "" };
+    const dia = linha.localDay;
+
+    daConta.set(numero, {
+      n: atual.n + 1,
+      // So saida: um estorno nao "gastou", e somar o sinal cru faria o cartao
+      // do mes com muita devolucao parecer pouco usado.
+      gasto: atual.gasto + (linha.amount < 0 ? -linha.amount : 0),
+      ultimo: dia > atual.ultimo ? dia : atual.ultimo,
+    });
+    vistos.set(linha.accountId, daConta);
+  }
+
+  return {
+    desde,
+    categorias: categorias.map((c) => ({ id: c.id, name: c.name, hue: c.hue })),
+    centros: centros.map((c) => ({ id: c.id, categoryId: c.categoryId, name: c.name })),
+    contas: contas
+      .map((conta) => {
+        const daConta = vistos.get(conta.id) ?? new Map();
+
+        return {
+          id: conta.id,
+          nome: conta.name || conta.connectorName,
+          connectorName: conta.connectorName,
+          tipo: conta.type,
+          subtipo: conta.subtype ?? null,
+          cartoes: [...daConta.entries()]
+            .map(([numero, dados]) => {
+              const regra = regraPorChave.get(`${conta.id}|${numero}`);
+              return {
+                numero,
+                lancamentos: dados.n,
+                gasto: dados.gasto,
+                ultimoUso: dados.ultimo || null,
+                categoriaId: regra?.categoryId ?? null,
+                centroId: regra?.costCenterId ?? null,
+                apelido: regra?.label ?? null,
+              };
+            })
+            // Do mais usado para o menos: e a ordem em que se reconhece um
+            // cartao, e o pouco usado costuma ser o substituido.
+            .sort((a, b) => b.lancamentos - a.lancamentos),
+        };
+      })
+      .sort((a, b) => a.connectorName.localeCompare(b.connectorName, "pt-BR")),
+  };
 }

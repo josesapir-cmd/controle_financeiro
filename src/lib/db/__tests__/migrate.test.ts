@@ -42,6 +42,7 @@ describe("migracoes", () => {
       "app_settings",
       "auth_challenges",
       "capital_calls",
+      "card_rules",
       "categories",
       "connections",
       "cost_centers",

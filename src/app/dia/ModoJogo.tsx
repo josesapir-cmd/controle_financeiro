@@ -9,7 +9,14 @@ import type {
   LancamentoParaClassificar,
 } from "@/lib/finance/service";
 import type { SituacaoDoDia } from "@/lib/finance/situacao";
-import { PREENCHIMENTO, POR_VOLTA, SETA, direcaoDasTeclas, type Direcao } from "./bussola";
+import {
+  PREENCHIMENTO,
+  POR_VOLTA,
+  SETA,
+  direcaoDasTeclas,
+  ondeEsta,
+  type Direcao,
+} from "./bussola";
 import { SpinnerDeDatas } from "./SpinnerDeDatas";
 import { completarSubcategoria, filtrarSubcategorias } from "./subcategorias";
 
@@ -197,12 +204,40 @@ export function ModoJogo({
   const atual = fila.length ? fila[indice % fila.length] : undefined;
   const escolhida = direcao ? porDirecao.get(direcao) : undefined;
 
+  /**
+   * A posicao que o ramo do estabelecimento sugere, e se a mira esta nela.
+   *
+   * Derivado, e nao guardado num estado: o que a marca precisa dizer e "esta e
+   * a categoria sugerida", nao "voce nao escolheu esta". Mirar a mesma a mao
+   * continua sendo a sugerida.
+   */
+  const sugerida = ondeEsta(bussola, atual?.sugestaoId);
+  const porSugestao = Boolean(
+    sugerida && direcao === sugerida.direcao && pagina === sugerida.pagina,
+  );
+
   const opcoes = escolhida ? filtrarSubcategorias(escolhida.centros, digitado) : [];
 
   // Foco na caixa: sem ele as setas rolariam a pagina de fundo em vez de mirar.
   useEffect(() => {
     caixa.current?.focus();
   }, []);
+
+  /**
+   * A bussola abre apontada para o que o ramo do estabelecimento sugere.
+   *
+   * Preso ao id da despesa, e nao a cada render: assim a sugestao aparece uma
+   * vez, quando o cartao troca, e nao volta a se impor por cima da direcao que
+   * a pessoa acabou de escolher para a mesma despesa.
+   *
+   * Sem sugestao, a mira fica limpa — que e como sempre foi.
+   */
+  useEffect(() => {
+    const alvo = ondeEsta(bussola, atual?.sugestaoId);
+    setDirecao(alvo?.direcao ?? null);
+    if (alvo) setPagina(alvo.pagina);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [atual?.id]);
 
   useEffect(() => {
     if (subcategoria !== null) campo.current?.focus();
@@ -637,6 +672,10 @@ export function ModoJogo({
                       "jogo-alvo",
                       `jogo-${posicao}`,
                       acesa ? "aceso" : "",
+                      // Aceso por sugestao, e nao por escolha: a diferenca tem
+                      // de aparecer, senao a pessoa nao sabe se mirou ou se
+                      // foi mirado por ela.
+                      acesa && porSugestao ? "sugerido" : "",
                       recebeu === posicao ? "recebeu" : "",
                     ]
                       .filter(Boolean)

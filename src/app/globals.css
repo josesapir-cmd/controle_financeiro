@@ -3866,6 +3866,8 @@ ul.produtos {
 .jogo-SE { grid-area: 3 / 3; }
 
 .jogo-alvo {
+  /* Ancora da etiqueta "sugerido", que fica no canto da celula. */
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -5180,4 +5182,93 @@ ul.produtos {
   white-space: nowrap;
 }
 
+/* Aceso porque o ramo do estabelecimento sugeriu, e nao porque alguem mirou.
+   O `.aceso` ja preenche a celula e zera a borda, entao a marca tem de ser no
+   contorno: tracejado em vez de continuo, na mesma linguagem do rascunho
+   amarelo e da barra pontilhada — proposto, ainda nao decidido. */
+.jogo-alvo.sugerido {
+  outline-style: dashed;
+}
 
+.jogo-alvo.sugerido::after {
+  content: "sugerido";
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+/* ==========================================================================
+   Cadastro das contas e dos cartoes
+   ========================================================================== */
+
+.ct-conta {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ct-cartao {
+  padding: 12px;
+  background: var(--bg-weak);
+  border-radius: var(--radius);
+}
+
+/* Cartao com regra tem destino definido, e isso precisa aparecer na lista sem
+   ler campo por campo. */
+.ct-cartao.com-regra {
+  background: var(--bg-white);
+  border: 1px solid var(--primary);
+  box-shadow: var(--shadow-xs);
+}
+
+.ct-cabeca {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+/* Tabular porque sao digitos que se comparam entre linhas. */
+.ct-numero {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ct-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.ct-linha + .ct-linha {
+  margin-top: 10px;
+}
+
+.ct-linha label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.ct-linha select {
+  min-width: 170px;
+}
+
+.ct-linha input[type="text"] {
+  width: 100%;
+}
+
+.ct-cresce {
+  flex: 1;
+  min-width: 160px;
+}

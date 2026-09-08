@@ -48,3 +48,25 @@ export function direcaoDasTeclas(teclas: ReadonlySet<string>): Direcao | null {
   if (vertical < 0) return horizontal > 0 ? "SE" : horizontal < 0 ? "SW" : "S";
   return horizontal > 0 ? "E" : "W";
 }
+
+/**
+ * Onde uma categoria esta na bussola: em que volta e em que direcao.
+ *
+ * Serve para a sugestao do MCC ja abrir apontada. Devolve `null` quando a
+ * categoria nao esta na bussola — ela pode ter sido arquivada, ou ser de outro
+ * tipo — e ai a bussola abre sem mira, que e o comportamento de sempre.
+ */
+export function ondeEsta(
+  categorias: { id: string }[],
+  categoriaId: string | null | undefined,
+): { pagina: number; direcao: Direcao } | null {
+  if (!categoriaId) return null;
+
+  const indice = categorias.findIndex((c) => c.id === categoriaId);
+  if (indice < 0) return null;
+
+  return {
+    pagina: Math.floor(indice / POR_VOLTA),
+    direcao: PREENCHIMENTO[indice % POR_VOLTA],
+  };
+}

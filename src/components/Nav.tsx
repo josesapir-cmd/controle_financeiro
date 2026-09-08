@@ -14,7 +14,7 @@ import Link from "next/link";
  * fora porque nao filtra por conta.
  */
 
-export type Aba = "/" | "/dia" | "/categorias" | "/contrapartes" | "/conexoes";
+export type Aba = "/" | "/dia" | "/categorias" | "/contrapartes" | "/contas" | "/conexoes";
 
 interface Item {
   href: Aba;
@@ -80,6 +80,17 @@ const ITENS: Item[] = [
     icone: (
       <svg {...traco}>
         <path d="M3 8h13l-3-3M21 16H8l3 3" />
+      </svg>
+    ),
+  },
+  {
+    href: "/contas",
+    rotulo: "Contas",
+    preservaContas: false,
+    icone: (
+      <svg {...traco}>
+        <rect x="2" y="5" width="20" height="14" rx="2" />
+        <path d="M2 10h20M6 15h4" />
       </svg>
     ),
   },

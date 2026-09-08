@@ -1396,3 +1396,87 @@ export async function liquidarChamada(db: Db, id: string, liquidar = true): Prom
     [id],
   );
 }
+
+/* ==========================================================================
+   Regra por cartao
+   ========================================================================== */
+
+export interface RegraDeCartaoRow {
+  id: string;
+  accountId: string;
+  cardNumber: string;
+  categoryId: string | null;
+  costCenterId: string | null;
+  label: string | null;
+}
+
+export async function listRegrasDeCartao(db: Db): Promise<RegraDeCartaoRow[]> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, account_id, card_number, category_id, cost_center_id, label
+       FROM card_rules
+      ORDER BY card_number`,
+  );
+
+  return linhas.map((linha) => ({
+    id: String(linha.id),
+    accountId: String(linha.account_id),
+    cardNumber: String(linha.card_number),
+    categoryId: linha.category_id ? String(linha.category_id) : null,
+    costCenterId: linha.cost_center_id ? String(linha.cost_center_id) : null,
+    label: linha.label ? String(linha.label) : null,
+  }));
+}
+
+/**
+ * Grava a regra do cartao, substituindo a que houver.
+ *
+ * Sem categoria nem centro nem apelido a regra deixa de existir: uma linha que
+ * nao classifica nada e nao nomeia nada so atrapalharia a leitura da tela.
+ */
+export async function salvarRegraDeCartao(
+  db: Db,
+  dados: {
+    accountId: string;
+    cardNumber: string;
+    categoryId?: string | null;
+    costCenterId?: string | null;
+    label?: string | null;
+  },
+): Promise<void> {
+  if (!UUID.test(dados.accountId)) return;
+
+  const cartao = dados.cardNumber.trim();
+  if (!cartao) return;
+
+  const categoria = dados.categoryId && UUID.test(dados.categoryId) ? dados.categoryId : null;
+  const centro = dados.costCenterId && UUID.test(dados.costCenterId) ? dados.costCenterId : null;
+  const apelido = dados.label?.trim() || null;
+
+  if (!categoria && !centro && !apelido) {
+    await apagarRegraDeCartao(db, dados.accountId, cartao);
+    return;
+  }
+
+  await db.query(
+    `INSERT INTO card_rules (account_id, card_number, category_id, cost_center_id, label)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (account_id, card_number) DO UPDATE
+       SET category_id = EXCLUDED.category_id,
+           cost_center_id = EXCLUDED.cost_center_id,
+           label = EXCLUDED.label,
+           updated_at = now()`,
+    [dados.accountId, cartao, categoria, centro, apelido],
+  );
+}
+
+export async function apagarRegraDeCartao(
+  db: Db,
+  accountId: string,
+  cardNumber: string,
+): Promise<void> {
+  if (!UUID.test(accountId)) return;
+  await db.query(`DELETE FROM card_rules WHERE account_id = $1 AND card_number = $2`, [
+    accountId,
+    cardNumber.trim(),
+  ]);
+}

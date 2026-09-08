@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PREENCHIMENTO, POR_VOLTA, SETA, direcaoDasTeclas } from "../bussola";
+import { PREENCHIMENTO, POR_VOLTA, SETA, direcaoDasTeclas, ondeEsta } from "../bussola";
 
 function teclas(...nomes: string[]): ReadonlySet<string> {
   return new Set(nomes);
@@ -80,5 +80,31 @@ describe("preenchimento da bussola", () => {
     for (const direcao of PREENCHIMENTO) {
       expect(direcaoDasTeclas(teclas(...porSeta[SETA[direcao]]))).toBe(direcao);
     }
+  });
+});
+
+describe("ondeEsta", () => {
+  const bussola = Array.from({ length: 10 }, (_, i) => ({ id: `c${i}` }));
+
+  it("acha a categoria na primeira volta, na direcao que ela ocupa", () => {
+    expect(ondeEsta(bussola, "c0")).toEqual({ pagina: 0, direcao: "N" });
+    expect(ondeEsta(bussola, "c1")).toEqual({ pagina: 0, direcao: "E" });
+    expect(ondeEsta(bussola, "c7")).toEqual({ pagina: 0, direcao: "NW" });
+  });
+
+  it("acha a categoria que caiu na segunda volta", () => {
+    // Saude e Educacao vivem na pagina 1: a sugestao tem de virar a pagina
+    // junto, senao ela aponta para uma direcao que a tela nao mostra.
+    expect(ondeEsta(bussola, "c8")).toEqual({ pagina: 1, direcao: "N" });
+    expect(ondeEsta(bussola, "c9")).toEqual({ pagina: 1, direcao: "E" });
+  });
+
+  it("categoria fora da bussola nao aponta para lugar nenhum", () => {
+    // Arquivada, ou de outro tipo. Apontar para uma posicao qualquer seria
+    // pior que nao apontar.
+    expect(ondeEsta(bussola, "nao-existe")).toBeNull();
+    expect(ondeEsta(bussola, null)).toBeNull();
+    expect(ondeEsta(bussola, undefined)).toBeNull();
+    expect(ondeEsta([], "c0")).toBeNull();
   });
 });
