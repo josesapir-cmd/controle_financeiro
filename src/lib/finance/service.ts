@@ -49,6 +49,7 @@ import {
   type CounterpartyTotal,
 } from "./counterparties";
 import { contraparteCasa } from "./busca-de-contraparte";
+import { pedidosPlausiveis, type PedidoLido } from "./pedido-do-print";
 import { isUserInitiatedExpense } from "./automatic";
 import { maskDocument, normalizeName } from "./counterparties";
 import {
@@ -882,6 +883,138 @@ function indexarRegrasDeCartao(
   );
 }
 
+/**
+ * Pedidos lidos de print que ainda nao viraram associacao.
+ *
+ * Lote pendente e lote que ficou ambiguo guardam produto que ninguem ligou a
+ * cobranca nenhuma. E justamente esse que falta na hora de classificar.
+ */
+async function pedidosNaoConferidos(conexao: Db): Promise<PedidoLido[]> {
+  const lotes = await listarImportacoes(conexao, 20).catch(() => []);
+
+  return lotes
+    .filter((lote) => lote.status === "pendente")
+    .flatMap((lote) =>
+      lote.pedidos.map((pedido) => ({
+        loja: pedido.loja,
+        produto: pedido.produto,
+        dia: pedido.dia,
+        valor: pedido.valor,
+        referencia: pedido.referencia,
+      })),
+    );
+}
+
+const COMPRA_EM = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: process.env.APP_TIMEZONE || "America/Sao_Paulo",
+});
+
+/**
+ * Linhas do painel `i` que nao vem do extrato.
+ *
+ * Duas coisas que a pessoa precisa para decidir e que a linha do banco nao diz:
+ *
+ * - QUANDO a compra aconteceu, se o lancamento e uma parcela. A data da parcela
+ *   e a da fatura; a compra pode ser de um ano atras, e sem isso nao da para
+ *   lembrar o que foi.
+ * - O que um print de pedido ja contou sobre aquele valor, mesmo que a
+ *   conferencia nao tenha sido feita. A informacao existe no banco e nao
+ *   chegava a quem classifica.
+ */
+function pistasDaCompra(
+  t: Transaction,
+  rotulo: string,
+  nomeDaParte: string | null,
+  pedidos: PedidoLido[],
+): { label: string; value: string }[] {
+  const linhas: { label: string; value: string }[] = [];
+  const cartao = dadosDoCartao(t.details);
+
+  const compraEm = t.details?.find((d) => d.label === "Cartao · purchaseDate")?.value;
+  if (compraEm && cartao.totalDeParcelas && cartao.totalDeParcelas > 1) {
+    const quando = new Date(compraEm);
+    if (!Number.isNaN(quando.getTime())) {
+      linhas.push({
+        label: "Compra feita em",
+        value: `${COMPRA_EM.format(quando)} · ${cartao.totalDeParcelas}x`,
+      });
+    }
+  }
+
+  // Palpite, e a tela diz que e: mesma loja, mesmo valor, data proxima.
+  const plausiveis = pedidosPlausiveis(
+    { dia: localDay(t.date), valor: t.amount, descricao: rotulo, contraparte: nomeDaParte },
+    pedidos,
+  );
+
+  for (const pedido of plausiveis) {
+    linhas.push({
+      label: `Print de pedido · ${pedido.loja}`,
+      value: [pedido.produto, pedido.referencia, `pedido em ${pedido.dia}`]
+        .filter(Boolean)
+        .join(" · "),
+    });
+  }
+
+  return linhas;
+}
+
+/**
+ * Tudo o que se sabe do lancamento, pronto para o painel `i`.
+ *
+ * Vive no modulo e nao dentro de um loader porque os DOIS jogos abrem o mesmo
+ * painel — o do dia e o do painel do mes. Enquanto era uma closure local, o
+ * jogo do painel mandava lista vazia: apertar `i` la nao mostrava nada.
+ */
+function detalhesDoLancamento(
+  t: Transaction,
+  rotulo: string,
+  contexto: {
+    produtos: string[];
+    nomeDaParte: string | null;
+    pedidos: PedidoLido[];
+  },
+): { label: string; value: string }[] {
+  const linhas: { label: string; value: string }[] = [];
+  const original = t.description?.trim();
+
+  // So quando o rotulo trocou o texto: repetir a mesma frase duas vezes com
+  // rotulos diferentes nao informa nada.
+  if (original && original !== rotulo) {
+    linhas.push({ label: "No extrato", value: original });
+  }
+  if (t.category) {
+    linhas.push({ label: "Categoria da Pluggy", value: translateCategory(t.category) });
+  }
+  if (t.counterparty?.name) linhas.push({ label: "Contraparte", value: t.counterparty.name });
+  if (t.counterparty?.document) {
+    linhas.push({
+      label: "Documento",
+      value: maskDocument(t.counterparty.document, t.counterparty.documentType),
+    });
+  }
+
+  if (contexto.produtos.length > 0) {
+    linhas.push({ label: "Comprado", value: contexto.produtos.join(" · ") });
+  }
+
+  // Quando a compra aconteceu, e o que um print ja contou sobre ela.
+  for (const pista of pistasDaCompra(t, rotulo, contexto.nomeDaParte, contexto.pedidos)) {
+    linhas.push(pista);
+  }
+
+  // Os detalhes que vieram da Pluggy por ultimo: meio de pagamento,
+  // estabelecimento, dados do cartao. Sao os mais especificos.
+  for (const detalhe of t.details ?? []) linhas.push(detalhe);
+
+  return linhas;
+}
+
 /** Indexa os rotulos de compra pela chave que ja vem cifrada do banco. */
 function indexarRotulosDeCompra(
   rotulos: { purchaseKey: string; categoryId: string | null; costCenterId: string | null }[],
@@ -990,6 +1123,7 @@ export async function loadSituacaoDaFita(
       ultimoDiaPorConta(conexao, hoje),
       listRegrasDeCartao(conexao).catch(() => []),
       listRotulosDeCompra(conexao).catch(() => []),
+      pedidosNaoConferidos(conexao),
     ]);
 
   const conciliado = conciliar(transacoes, decisoes);
@@ -1042,6 +1176,7 @@ export async function loadPendentesDoPeriodo(
     produtos,
     regras,
     compras,
+    pedidosLidos,
   ] = await Promise.all([
     carregar(period, accountIds),
     listCategorias(conexao),
@@ -1050,6 +1185,7 @@ export async function loadPendentesDoPeriodo(
     listTransactionProducts(conexao).catch(() => []),
     listRegrasDeCartao(conexao).catch(() => []),
     listRotulosDeCompra(conexao).catch(() => []),
+    pedidosNaoConferidos(conexao),
   ]);
 
   const porCartao = indexarRegrasDeCartao(regras);
@@ -1115,7 +1251,11 @@ export async function loadPendentesDoPeriodo(
       contraparte: nomeDaParte(t),
       contraparteKey: chaveDeRegra(t),
       alvoDaRegra: nomeDaParte(t) || t.description?.trim() || null,
-      detalhes: [],
+      detalhes: detalhesDoLancamento(t, rotulo, {
+        produtos: produtosPorTransacao.get(t.id) ?? [],
+        nomeDaParte: nomeDaParte(t),
+        pedidos: pedidosLidos,
+      }),
       produtos: produtosPorTransacao.get(t.id) ?? [],
       classificavel: true,
       frequencia: frequencia.get(chaveDeRegra(t) ?? "") ?? 1,
@@ -1431,6 +1571,7 @@ export async function loadClassificacaoDoDia(
     produtos,
     regras,
     compras,
+    pedidosLidos,
   ] = await Promise.all([
       carregar(janela, accountIds),
       listCategorias(conexao),
@@ -1444,6 +1585,7 @@ export async function loadClassificacaoDoDia(
       // tela continua de pe.
       listRegrasDeCartao(conexao).catch(() => []),
       listRotulosDeCompra(conexao).catch(() => []),
+      pedidosNaoConferidos(conexao),
     ]);
 
   const conciliado = conciliar(transacoes, decisoes);
@@ -1549,38 +1691,6 @@ export async function loadClassificacaoDoDia(
   };
 
   /** O que se sabe do lancamento, sem repetir o que o cartao ja mostra. */
-  const detalhesDe = (t: Transaction, rotulo: string): { label: string; value: string }[] => {
-    const linhas: { label: string; value: string }[] = [];
-    const original = t.description?.trim();
-
-    // So quando o rotulo trocou o texto: repetir a mesma frase duas vezes com
-    // rotulos diferentes nao informa nada.
-    if (original && original !== rotulo) {
-      linhas.push({ label: "No extrato", value: original });
-    }
-    if (t.category) {
-      linhas.push({ label: "Categoria da Pluggy", value: translateCategory(t.category) });
-    }
-    if (t.counterparty?.name) linhas.push({ label: "Contraparte", value: t.counterparty.name });
-    if (t.counterparty?.document) {
-      linhas.push({
-        label: "Documento",
-        value: maskDocument(t.counterparty.document, t.counterparty.documentType),
-      });
-    }
-
-    const produtos = produtosPorTransacao.get(t.id) ?? [];
-    if (produtos.length > 0) {
-      linhas.push({ label: "Comprado", value: produtos.join(" · ") });
-    }
-
-    // Os detalhes que vieram da Pluggy por ultimo: meio de pagamento,
-    // estabelecimento, dados do cartao. Sao os mais especificos.
-    for (const detalhe of t.details ?? []) linhas.push(detalhe);
-
-    return linhas;
-  };
-
   /**
    * A categoria que o ramo do estabelecimento sugere.
    *
@@ -1608,7 +1718,11 @@ export async function loadClassificacaoDoDia(
       contraparte: nomeDaParte(t),
       contraparteKey: chaveDaRegra(t),
       alvoDaRegra: nomeDaParte(t) || t.description?.trim() || null,
-      detalhes: detalhesDe(t, rotulo),
+      detalhes: detalhesDoLancamento(t, rotulo, {
+        produtos: produtosPorTransacao.get(t.id) ?? [],
+        nomeDaParte: nomeDaParte(t),
+        pedidos: pedidosLidos,
+      }),
       produtos: produtosPorTransacao.get(t.id) ?? [],
       classificavel,
       frequencia: frequencia.get(chaveDaRegra(t) ?? "") ?? 1,

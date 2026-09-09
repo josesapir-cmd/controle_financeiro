@@ -793,7 +793,14 @@ export function ModoJogo({
                   </p>
                 ) : (
                   atual.detalhes.map((detalhe) => (
-                    <div key={`${detalhe.label}-${detalhe.value}`}>
+                    <div
+                      key={`${detalhe.label}-${detalhe.value}`}
+                      // O print de pedido e palpite — mesma loja, mesmo valor,
+                      // data proxima — e nao uma associacao conferida. Le-lo
+                      // como fato faria classificar com confianca no lugar
+                      // errado, entao ele nao pode ter a cara dos outros.
+                      className={detalhe.label.startsWith("Print de pedido") ? "jogo-palpite" : undefined}
+                    >
                       <dt>{detalhe.label}</dt>
                       <dd>{detalhe.value}</dd>
                     </div>

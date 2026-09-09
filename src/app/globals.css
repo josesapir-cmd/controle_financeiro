@@ -5334,3 +5334,15 @@ ul.produtos {
 .gr-tabela .negative {
   color: var(--error-dark);
 }
+
+/* Linha de palpite no painel `i`: o produto veio de um print que ainda nao foi
+   conferido. Tracejado, como o rascunho amarelo e a barra pontilhada — a mesma
+   linguagem para "proposto, ainda nao confirmado". */
+.jogo-info .jogo-palpite {
+  padding-left: 8px;
+  border-left: 2px dashed var(--away);
+}
+
+.jogo-info .jogo-palpite dt {
+  color: var(--away);
+}
