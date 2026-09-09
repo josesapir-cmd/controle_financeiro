@@ -44,9 +44,11 @@ import {
 import {
   aggregateCounterparties,
   chaveIdentificada,
+  NAO_IDENTIFICADA,
   type CounterpartyRegistry,
   type CounterpartyTotal,
 } from "./counterparties";
+import { contraparteCasa } from "./busca-de-contraparte";
 import { isUserInitiatedExpense } from "./automatic";
 import { maskDocument, normalizeName } from "./counterparties";
 import {
@@ -138,6 +140,22 @@ function comSaldo(contas: AccountWithConnector[]): AccountWithConnector[] {
   return contas.filter((conta) => conta.origin !== "manual");
 }
 
+/** O cadastro de contrapartes na forma que os agregadores consomem. */
+function paraRegistro(
+  rotulos: Awaited<ReturnType<typeof listLabels>>,
+): CounterpartyRegistry {
+  const registry: CounterpartyRegistry = {};
+  for (const rotulo of rotulos) {
+    registry[rotulo.fingerprint] = {
+      category: rotulo.category ?? undefined,
+      subcategory: rotulo.subcategory ?? undefined,
+      alias: rotulo.alias ?? undefined,
+      officialName: rotulo.officialName ?? undefined,
+    };
+  }
+  return registry;
+}
+
 /** Converte a linha do banco para a forma que os agregadores ja consomem. */
 function paraTransacao(linha: Awaited<ReturnType<typeof listTransactions>>[number]): Transaction {
   return {
@@ -215,15 +233,7 @@ async function carregar(
     ? todasAsContas.filter((c) => accountIds.includes(c.id))
     : todasAsContas;
 
-  const registry: CounterpartyRegistry = {};
-  for (const rotulo of rotulos) {
-    registry[rotulo.fingerprint] = {
-      category: rotulo.category ?? undefined,
-      subcategory: rotulo.subcategory ?? undefined,
-      alias: rotulo.alias ?? undefined,
-      officialName: rotulo.officialName ?? undefined,
-    };
-  }
+  const registry = paraRegistro(rotulos);
 
   return {
     contas,
@@ -1800,5 +1810,135 @@ export async function loadCadastroDeContas(
         };
       })
       .sort((a, b) => a.connectorName.localeCompare(b.connectorName, "pt-BR")),
+  };
+}
+
+export interface ContraparteEncontrada {
+  key: string;
+  nome: string;
+  nomeOficial: string | null;
+  categoria: string | null;
+  subcategoria: string | null;
+  enviado: number;
+  recebido: number;
+  contagem: number;
+  primeira: string;
+  ultima: string;
+}
+
+export interface LancamentoDaContraparte {
+  id: string;
+  dia: string;
+  hora: string;
+  descricao: string;
+  valor: number;
+  conta: string;
+  categoria: string | null;
+  parcela: string | null;
+}
+
+export interface BuscaDeContrapartes {
+  termo: string;
+  resultados: ContraparteEncontrada[];
+  /** A contraparte aberta, com o historico inteiro dela. */
+  escolhida: (ContraparteEncontrada & { lancamentos: LancamentoDaContraparte[] }) | null;
+  /** Quantas contrapartes casaram alem das que couberam em `resultados`. */
+  alemDoLimite: number;
+}
+
+/** Quantas contrapartes a lista de resultados mostra antes de pedir refino. */
+const LIMITE_DA_BUSCA = 40;
+
+/**
+ * Busca contraparte pelo nome, no historico INTEIRO.
+ *
+ * Sem periodo de proposito. A lista da tela responde "com quem gastei neste
+ * mes"; a busca responde outra pergunta — "o que ja passou com esta pessoa" —
+ * e limita-la ao mes corrente daria "nao encontrado" para quem procura alguem
+ * com quem nao houve movimento agora, que e justamente quando se procura.
+ *
+ * O nome vai cifrado no banco, entao nao ha `LIKE` que resolva: o casamento
+ * acontece aqui, depois de decifrar. Por isso a leitura so acontece quando ha
+ * termo — sem busca, a tela nao paga esse custo.
+ */
+export async function loadBuscaDeContrapartes(
+  termo: string,
+  options: { escolhida?: string | null } = {},
+): Promise<BuscaDeContrapartes> {
+  const limpo = termo.trim();
+  const escolhidaKey = options.escolhida ?? null;
+
+  if (!limpo && !escolhidaKey) {
+    return { termo: limpo, resultados: [], escolhida: null, alemDoLimite: 0 };
+  }
+
+  const conexao = db();
+  const [contas, linhas, registry, decisoes, categorias] = await Promise.all([
+    listAccounts(conexao),
+    listTransactions(conexao),
+    listLabels(conexao).then(paraRegistro),
+    listCounterpartyLinks(conexao),
+    listCategorias(conexao),
+  ]);
+
+  const transacoes = linhas.map(paraTransacao);
+  const conciliado = conciliar(transacoes, decisoes);
+  const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
+
+  const nomeDaConta = new Map(
+    contas.map((c) => [c.id, `${c.connectorName}${c.name ? ` · ${c.name}` : ""}`] as const),
+  );
+  const nomeDaCategoria = new Map(categorias.map((c) => [c.id, c.name] as const));
+
+  const agregadas = aggregateCounterparties(
+    conciliado.transacoes.filter((t) => !t.counterparty?.self),
+    cadastro,
+  ).filter((c) => c.key !== NAO_IDENTIFICADA);
+
+  const resumo = (c: (typeof agregadas)[number]): ContraparteEncontrada => {
+    const dias = c.transactions.map((t) => localDay(t.date)).sort();
+    return {
+      key: c.key,
+      nome: c.name,
+      nomeOficial: c.officialName ?? null,
+      categoria: c.category ?? null,
+      subcategoria: c.subcategory ?? null,
+      enviado: c.sent,
+      recebido: c.received,
+      contagem: c.count,
+      primeira: dias[0] ?? "",
+      ultima: dias[dias.length - 1] ?? "",
+    };
+  };
+
+  const casaram = limpo ? agregadas.filter((c) => contraparteCasa(c, limpo)) : [];
+
+  // Do mais movimentado para o menos: quem procura por "mercado" quer primeiro
+  // aquele em que gasta, e nao o que apareceu uma vez.
+  casaram.sort((a, b) => b.count - a.count);
+
+  const alvo = escolhidaKey ? agregadas.find((c) => c.key === escolhidaKey) : undefined;
+
+  return {
+    termo: limpo,
+    alemDoLimite: Math.max(0, casaram.length - LIMITE_DA_BUSCA),
+    resultados: casaram.slice(0, LIMITE_DA_BUSCA).map(resumo),
+    escolhida: alvo
+      ? {
+          ...resumo(alvo),
+          lancamentos: [...alvo.transactions]
+            .sort((a, b) => b.date.localeCompare(a.date))
+            .map((t) => ({
+              id: t.id,
+              dia: localDay(t.date),
+              hora: localTime(t.date),
+              descricao: t.description,
+              valor: t.amount,
+              conta: nomeDaConta.get(t.accountId ?? "") ?? "",
+              categoria: t.category ? (nomeDaCategoria.get(t.category) ?? t.category) : null,
+              parcela: rotuloDaParcela(dadosDoCartao(t.details)),
+            })),
+        }
+      : null,
   };
 }

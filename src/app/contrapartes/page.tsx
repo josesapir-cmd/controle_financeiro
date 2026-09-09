@@ -14,7 +14,14 @@ import {
 import { currentMonthRange, localTime } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
 import type { Sugestao } from "@/lib/finance/conciliacao";
-import { loadCounterparties, loadTaxonomy, type Decisao } from "@/lib/finance/service";
+import {
+  loadBuscaDeContrapartes,
+  loadCounterparties,
+  loadTaxonomy,
+  type Decisao,
+} from "@/lib/finance/service";
+import { BuscaContraparte } from "./BuscaContraparte";
+import { ResultadosDaBusca } from "./ResultadosDaBusca";
 import { PeriodForm } from "./PeriodForm";
 import {
   reverDecisao,
@@ -369,6 +376,8 @@ export default async function Contrapartes({
     internas?: string;
     edit?: string;
     open?: string;
+    busca?: string;
+    ver?: string;
     contas?: string | string[];
   }>;
 }) {
@@ -381,9 +390,15 @@ export default async function Contrapartes({
   const accountIds = parseAccountIds(params.contas);
   const contasQuery = accountQuery(accountIds);
 
-  const [dados, taxonomia] = await Promise.all([
+  const termo = (params.busca ?? "").slice(0, 120);
+  const ver = params.ver ?? null;
+
+  const [dados, taxonomia, busca] = await Promise.all([
     loadCounterparties(periodo, { includeInternal: incluirInternas, accountIds }),
     loadTaxonomy(),
+    // So le o historico inteiro quando ha o que procurar: sem termo, a busca
+    // devolve vazio sem tocar no banco.
+    loadBuscaDeContrapartes(termo, { escolhida: ver }),
   ]);
 
   const queryPeriodo = buildQuery(
@@ -415,6 +430,14 @@ export default async function Contrapartes({
       </div>
 
       <Nav atual="/contrapartes" contasQuery={contasQuery} />
+
+      {/* A busca vem antes do periodo porque nao depende dele: ela procura no
+          historico inteiro, e o periodo so recorta a lista de baixo. */}
+      <BuscaContraparte termo={termo} rotaBase={`/contrapartes?${queryPeriodo}`} />
+
+      {termo || ver ? (
+        <ResultadosDaBusca busca={busca} rotaBase={`/contrapartes?${queryPeriodo}`} />
+      ) : null}
 
       <PeriodForm from={periodo.from} to={periodo.to} accountIds={accountIds} />
 

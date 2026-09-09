@@ -5287,3 +5287,50 @@ ul.produtos {
   border-radius: 999px;
   white-space: nowrap;
 }
+
+/* ==========================================================================
+   Busca de contraparte
+   ========================================================================== */
+
+.busca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.busca-campo {
+  flex: 1;
+  min-width: 0;
+}
+
+.busca-campo input {
+  width: 100%;
+}
+
+.busca-resultado {
+  margin-bottom: 16px;
+}
+
+/* A linha aberta fica marcada: com a lista e o historico na mesma tela, sem
+   isto nao se sabe de quem e a tabela de baixo. */
+.gr-tabela tr.busca-atual > th,
+.gr-tabela tr.busca-atual > td {
+  background: var(--bg-weak);
+}
+
+.busca-historico {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--stroke-soft);
+}
+
+/* Entrada e saida convivem na mesma coluna do historico, e o sinal e a unica
+   coisa que as separa — a cor reforca, nao substitui. */
+.gr-tabela .positive {
+  color: var(--success-dark);
+}
+
+.gr-tabela .negative {
+  color: var(--error-dark);
+}
