@@ -18,11 +18,14 @@ export function CartaoDaConta({
   cartao,
   categorias,
   centros,
+  bloqueado = false,
 }: {
   contaId: string;
   cartao: Cartao;
   categorias: { id: string; name: string; hue: number }[];
   centros: { id: string; categoryId: string; name: string }[];
+  /** Sem a migracao aplicada, gravar estouraria: melhor nao deixar tentar. */
+  bloqueado?: boolean;
 }) {
   const [categoriaId, setCategoriaId] = useState(cartao.categoriaId ?? "");
   const daCategoria = centros.filter((c) => c.categoryId === categoriaId);
@@ -49,6 +52,7 @@ export function CartaoDaConta({
             name="label"
             defaultValue={cartao.apelido ?? ""}
             placeholder="Cartao do pai"
+            disabled={bloqueado}
           />
         </label>
 
@@ -57,6 +61,7 @@ export function CartaoDaConta({
           <select
             name="categoryId"
             value={categoriaId}
+            disabled={bloqueado}
             onChange={(evento) => setCategoriaId(evento.target.value)}
           >
             <option value="">(nenhuma)</option>
@@ -70,7 +75,11 @@ export function CartaoDaConta({
 
         <label>
           Subcategoria
-          <select name="costCenterId" defaultValue={cartao.centroId ?? ""} disabled={!categoriaId}>
+          <select
+            name="costCenterId"
+            defaultValue={cartao.centroId ?? ""}
+            disabled={bloqueado || !categoriaId}
+          >
             <option value="">(nenhuma)</option>
             {daCategoria.map((centro) => (
               <option key={centro.id} value={centro.id}>
@@ -80,7 +89,9 @@ export function CartaoDaConta({
           </select>
         </label>
 
-        <button type="submit">Salvar</button>
+        <button type="submit" disabled={bloqueado}>
+          Salvar
+        </button>
       </form>
 
       {cartao.categoriaId ? (

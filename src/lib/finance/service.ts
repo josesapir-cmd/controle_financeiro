@@ -1698,6 +1698,15 @@ export interface CadastroDeContas {
   centros: { id: string; categoryId: string; name: string }[];
   /** Ate onde a leitura olhou, para a tela poder dizer de que periodo fala. */
   desde: string;
+  /**
+   * A tabela de regras ainda nao existe neste banco.
+   *
+   * Ler com tolerancia e escrever sem ela e a pior combinacao: a tela abre
+   * inteira, o botao Salvar parece disponivel, e o clique estoura em erro de
+   * servidor sem dizer nada. Quando falta a migracao, a tela precisa DIZER
+   * isso e nao oferecer o que nao vai funcionar.
+   */
+  migracaoPendente: boolean;
 }
 
 /**
@@ -1718,11 +1727,19 @@ export async function loadCadastroDeContas(
   const desde = shiftMonth(hoje.slice(0, 7), -(options.meses ?? 12)) + "-01";
 
   const conexao = db();
+
+  // A falha nao e engolida: e guardada. A tela precisa saber a diferenca entre
+  // "nao ha regra nenhuma" e "nao da para gravar regra".
+  let migracaoPendente = false;
+
   const [contas, categorias, centros, regras, transacoes] = await Promise.all([
     listAccounts(conexao),
     listCategorias(conexao),
     listCentrosDeCusto(conexao),
-    listRegrasDeCartao(conexao).catch(() => []),
+    listRegrasDeCartao(conexao).catch(() => {
+      migracaoPendente = true;
+      return [];
+    }),
     listTransactions(conexao, { from: desde, to: hoje }),
   ]);
 
@@ -1751,6 +1768,7 @@ export async function loadCadastroDeContas(
 
   return {
     desde,
+    migracaoPendente,
     categorias: categorias.map((c) => ({ id: c.id, name: c.name, hue: c.hue })),
     centros: centros.map((c) => ({ id: c.id, categoryId: c.categoryId, name: c.name })),
     contas: contas

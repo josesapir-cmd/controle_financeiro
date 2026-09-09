@@ -54,6 +54,14 @@ export default async function Contas() {
 
       <Nav atual="/contas" />
 
+      {dados.migracaoPendente ? (
+        <p className="banner">
+          <strong>Migracao pendente.</strong> A tabela de regras de cartao ainda nao existe neste
+          banco: rode <code>npm run migrate</code> e recarregue. Ate la os cartoes aparecem, mas
+          gravar uma regra falharia.
+        </p>
+      ) : null}
+
       <p className="empty" style={{ marginTop: 0 }}>
         Um cartao adicional nao e uma conta separada: as compras dele entram na fatura do titular,
         e o banco nao diz de quem sao. Dar uma categoria a um cartao aqui manda todas as despesas
@@ -77,6 +85,7 @@ export default async function Contas() {
               cartao={cartao}
               categorias={dados.categorias}
               centros={dados.centros}
+              bloqueado={dados.migracaoPendente}
             />
           ))}
         </section>
