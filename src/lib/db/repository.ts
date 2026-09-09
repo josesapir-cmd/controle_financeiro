@@ -787,7 +787,17 @@ export async function encerrarImportacao(
  * pelo usuario e sao o que as telas agrupam no SQL.
  */
 
-export type TipoDeCategoria = "despesa" | "receita" | "movimentacao";
+/**
+ * O que a categoria diz sobre o dinheiro.
+ *
+ * `despesa` e consumo — o unico que entra nos relatorios de gasto.
+ * `receita` e entrada. `movimentacao` e dinheiro trocando de bolso e que
+ * volta: transferencia entre contas proprias, pagamento de fatura.
+ * `investimento` e aporte que vira patrimonio e nao volta como saldo: imovel,
+ * fundo, previdencia. Separado de `movimentacao` porque a diferenca importa
+ * na hora de olhar patrimonio, e junta-los apagaria a distincao.
+ */
+export type TipoDeCategoria = "despesa" | "receita" | "movimentacao" | "investimento";
 
 export interface CategoriaRow {
   id: string;

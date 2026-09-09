@@ -62,6 +62,16 @@ export default async function Dia({
     ? paraClassificar.lancamentos.filter((l) => pendentes.has(l.id))
     : paraClassificar.lancamentos;
 
+  // Investimento sai da conta, mas nao e gasto. O ponto continua na fita —
+  // o dinheiro saiu mesmo — e o total do cabecalho o ignora, senao a compra
+  // de um imovel apagaria a leitura do resto do dia.
+  const kindPorCategoria = new Map(paraClassificar.categorias.map((c) => [c.id, c.kind]));
+  const foraDoGasto = new Set(
+    paraClassificar.lancamentos
+      .filter((l) => l.categoriaId && kindPorCategoria.get(l.categoriaId) !== "despesa")
+      .map((l) => l.id),
+  );
+
   const cores = coresPorConta(dados.accountOptions);
 
   return (
@@ -111,7 +121,12 @@ export default async function Dia({
         {diaExtenso.format(new Date(`${dia}T12:00:00Z`))}
       </p>
 
-      <DayStrip transactions={lancamentos} cores={cores} nomes={dados.accountNames} />
+      <DayStrip
+        transactions={lancamentos}
+        cores={cores}
+        nomes={dados.accountNames}
+        foraDoGasto={foraDoGasto}
+      />
 
       {dados.isMock ? (
         <p className="banner">

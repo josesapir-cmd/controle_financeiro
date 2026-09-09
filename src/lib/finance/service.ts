@@ -18,6 +18,7 @@ import {
   ultimoDiaPorConta,
   type CategoriaRow,
   type CentroDeCustoRow,
+  type TipoDeCategoria,
   listLabels,
   listTransactions,
   listarImportacoes,
@@ -764,6 +765,13 @@ export async function loadTaxonomiaDeCentros() {
 export interface CategoriaParaClassificar {
   id: string;
   name: string;
+  /**
+   * `investimento` nao entra em relatorio de gasto.
+   *
+   * A bussola mostra as duas porque a compra sai da conta como despesa e
+   * precisa de destino; quem separa uma da outra e quem soma.
+   */
+  kind: TipoDeCategoria;
   hue: number;
   hint: string | null;
   /** Total ja classificado nesta categoria no dia e no mes. */
@@ -1274,11 +1282,15 @@ export async function loadPendentesDoPeriodo(
     // Os totais por categoria nao entram: a bussola do jogo mostra nome e
     // icone, e somar o mes inteiro por categoria aqui seria trabalho para um
     // numero que ninguem le.
+    // Investimento entra na bussola, mesmo nao sendo gasto: a compra sai da
+    // conta como despesa e precisa de um lugar para onde ir. Receita nao entra
+    // — o jogo classifica saida.
     categorias: categorias
-      .filter((c) => c.kind === "despesa")
+      .filter((c) => c.kind === "despesa" || c.kind === "investimento")
       .map((c) => ({
         id: c.id,
         name: c.name,
+        kind: c.kind,
         hue: c.hue,
         hint: c.hint,
         noDia: 0,
@@ -1459,11 +1471,17 @@ export async function loadPainelDeDespesas(
   };
 
   for (const t of despesas) {
+    const categoria = categoriaDe(t);
+
+    // Comprar um imovel sai da conta como qualquer despesa, mas nao e gasto:
+    // somar isso ao mes torna todo o resto ilegivel. O corte e aqui, antes do
+    // total — nem no total por conta, nem na fatia por categoria.
+    if (categoria && categoria.kind !== "despesa") continue;
+
     const valor = -t.amount;
     total += valor;
     totalPorConta.set(t.accountId, (totalPorConta.get(t.accountId) ?? 0) + valor);
 
-    const categoria = categoriaDe(t);
     if (!categoria) {
       semCategoria = { total: semCategoria.total + valor, contagem: semCategoria.contagem + 1 };
       continue;
@@ -1760,10 +1778,11 @@ export async function loadClassificacaoDoDia(
     dia,
     lancamentos,
     categorias: categorias
-      .filter((c) => c.kind === "despesa")
+      .filter((c) => c.kind === "despesa" || c.kind === "investimento")
       .map((c) => ({
         id: c.id,
         name: c.name,
+        kind: c.kind,
         hue: c.hue,
         hint: c.hint,
         noDia: totais.get(c.id)?.dia ?? 0,

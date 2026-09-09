@@ -50,6 +50,12 @@ export default async function Categorias({
   }
 
   const contasQuery = accountQuery(dados.selectedAccountIds);
+
+  // O total do topo ja e so de despesa. O indice e o mapa tem de olhar para o
+  // mesmo recorte: um bloco de investimento medido contra um total que nao o
+  // contem daria uma fatia maior que o mapa inteiro.
+  const deDespesa = dados.categorias.filter((c) => c.kind === "despesa");
+  const noAnoDeDespesa = dados.noAno.filter((c) => c.kind === "despesa");
   return (
     <main className="page">
       <div className="masthead">
@@ -119,8 +125,8 @@ export default async function Categorias({
       </div>
 
       <Indice
-        categorias={dados.categorias}
-        noAno={dados.noAno}
+        categorias={deDespesa}
+        noAno={noAnoDeDespesa}
         aberta={params.cat ?? null}
         queryBase={buildQuery(`from=${periodo.from}&to=${periodo.to}`, contasQuery)}
       />
@@ -128,7 +134,7 @@ export default async function Categorias({
       <section>
         <h2>Mapa do gasto</h2>
         <div className="card">
-          <TreemapCategorias categorias={dados.categorias} total={dados.despesas} />
+          <TreemapCategorias categorias={deDespesa} total={dados.despesas} />
         </div>
       </section>
     </main>

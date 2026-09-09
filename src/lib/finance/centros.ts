@@ -16,7 +16,7 @@ import { normalizeName, type CounterpartyTotal } from "./counterparties";
 export interface Categoria {
   id: string;
   name: string;
-  kind: "despesa" | "receita" | "movimentacao";
+  kind: "despesa" | "receita" | "movimentacao" | "investimento";
   position: number;
   /** Matiz OKLCH da cor de sinalizacao. Nao entra em nenhuma conta. */
   hue: number;
