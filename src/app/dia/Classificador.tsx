@@ -10,7 +10,12 @@ import type {
 } from "@/lib/finance/service";
 import type { SituacaoDoDia } from "@/lib/finance/situacao";
 import { ModoJogo } from "./ModoJogo";
-import { classificarLancamento, comentarLancamento, limparLancamento } from "./actions";
+import {
+  classificarLancamento,
+  comentarLancamento,
+  dividirLancamento,
+  limparLancamento,
+} from "./actions";
 
 /**
  * Classificar gastos arrastando o cartao para o bloco da categoria.
@@ -238,6 +243,18 @@ export function Classificador({
             dados.set("note", texto);
             iniciar(() => {
               void comentarLancamento(dados);
+            });
+          }}
+          onDividir={(lancamento, divisao) => {
+            const dados = new FormData();
+            dados.set("transactionId", lancamento.id);
+            dados.set("total", String(lancamento.valor));
+            dados.set("categoryId", divisao.categoriaId);
+            dados.set("valorProprio", divisao.valorProprio.toFixed(2).replace(".", ","));
+            dados.set("valorReembolso", divisao.valorReembolso.toFixed(2).replace(".", ","));
+            dados.set("devedor", divisao.devedor);
+            iniciar(() => {
+              void dividirLancamento(dados);
             });
           }}
           onFechar={() => setJogando(false)}

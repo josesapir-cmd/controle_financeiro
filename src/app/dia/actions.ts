@@ -7,6 +7,7 @@ import { getSql } from "@/lib/db/client";
 import {
   acharOuCriarCentroDeCusto,
   lerLancamento,
+  salvarRateio,
   listCategorias,
   purchaseFingerprint,
   setLabel,
@@ -16,6 +17,7 @@ import {
   vincularCentroDeCusto,
 } from "@/lib/db/repository";
 import { chaveDaCompra } from "@/lib/finance/parcelamento";
+import { validarRateio } from "@/lib/finance/rateio";
 
 /**
  * Classificacao de um lancamento pela tela do dia.
@@ -25,6 +27,20 @@ import { chaveDaCompra } from "@/lib/finance/parcelamento";
  * regra ampla marca "aplicar a todos", e ai o cadastro da contraparte tambem e
  * gravado — que e o que a aba de contrapartes ja fazia.
  */
+/**
+ * Valor em reais digitado em pt-BR.
+ *
+ * O ponto some antes de a virgula virar ponto: na ordem inversa, "1.200" viraria
+ * 1,2 — e num rateio isso nao da erro, da uma divisao que fecha errado.
+ */
+function dinheiro(valor: FormDataEntryValue | null): number | null {
+  const bruto = String(valor ?? "").trim().replace(/\./g, "").replace(",", ".");
+  if (!bruto) return null;
+
+  const numero = Number(bruto);
+  return Number.isFinite(numero) && numero > 0 ? numero : null;
+}
+
 export async function classificarLancamento(formData: FormData): Promise<void> {
   await requireSession();
 
@@ -136,4 +152,78 @@ export async function comentarLancamento(formData: FormData): Promise<void> {
   );
 
   revalidatePath("/dia");
+}
+
+/**
+ * Divide a despesa em duas partes: a minha e a que volta.
+ *
+ * Paguei o almoco de seis, paguei o hotel de tres casais. Uma cobranca no
+ * extrato, duas coisas por dentro — e somar tudo como gasto inventaria uma
+ * despesa que nao existe.
+ *
+ * A validacao do fechamento acontece em `validarRateio`, e nao aqui: uma
+ * divisao que nao fecha some com dinheiro sem avisar, e o erro so apareceria
+ * semanas depois como um total que ninguem explica.
+ */
+export async function dividirLancamento(formData: FormData): Promise<void> {
+  await requireSession();
+
+  const transactionId = String(formData.get("transactionId") ?? "");
+  const total = Number(formData.get("total") ?? 0);
+  if (!transactionId || !Number.isFinite(total) || total === 0) return;
+
+  const minha = dinheiro(formData.get("valorProprio"));
+  const reembolso = dinheiro(formData.get("valorReembolso"));
+  const devedor = String(formData.get("devedor") ?? "").trim();
+
+  const db = fromPostgres(getSql());
+  const categorias = await listCategorias(db);
+
+  const aReembolsar = categorias.find((c) => c.kind === "reembolso");
+  const categoriaId = String(formData.get("categoryId") ?? "") || null;
+
+  const partes = [
+    { valor: minha ?? 0, categoriaId, centroId: null, devedor: null },
+    {
+      valor: reembolso ?? 0,
+      categoriaId: aReembolsar?.id ?? null,
+      centroId: null,
+      devedor: devedor || null,
+    },
+  ];
+
+  const rateio = validarRateio(total, partes);
+  if (!rateio.valido) return;
+
+  await salvarRateio(
+    db,
+    transactionId,
+    rateio.partes.map((parte) => ({
+      amount: parte.valor,
+      categoryId: parte.categoriaId,
+      costCenterId: parte.centroId,
+      owedBy: parte.devedor,
+    })),
+  );
+
+  // A cobranca em si deixa de ter rotulo proprio: quem classifica agora sao as
+  // partes, e um rotulo na cobranca competiria com elas.
+  await setTransactionLabel(db, transactionId, {
+    categoryId: null,
+    costCenterId: null,
+    note: String(formData.get("note") ?? "") || null,
+  });
+
+  for (const rota of ["/dia", "/categorias", "/contrapartes", "/"]) revalidatePath(rota);
+}
+
+/** Desfaz a divisao: a despesa volta a ser uma coisa so. */
+export async function juntarLancamento(formData: FormData): Promise<void> {
+  await requireSession();
+
+  const transactionId = String(formData.get("transactionId") ?? "");
+  if (!transactionId) return;
+
+  await salvarRateio(fromPostgres(getSql()), transactionId, []);
+  for (const rota of ["/dia", "/categorias", "/contrapartes", "/"]) revalidatePath(rota);
 }

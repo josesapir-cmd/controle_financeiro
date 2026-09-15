@@ -7,6 +7,7 @@ import {
   listAccounts,
   listChamadas,
   listCompromissos,
+  listPartesDaDespesa,
   listRegrasDeCartao,
   listRotulosDeCompra,
   purchaseFingerprint,
@@ -847,6 +848,18 @@ export interface LancamentoParaClassificar {
    * cada mes.
    */
   parcela: string | null;
+  /**
+   * As partes, quando a cobranca foi dividida.
+   *
+   * Vazio em quase tudo. Com conteudo, a despesa ja esta resolvida: cada parte
+   * foi para uma categoria, e a soma delas fecha o valor da cobranca.
+   */
+  divisao: {
+    valor: number;
+    categoriaId: string | null;
+    categoria: string | null;
+    devedor: string | null;
+  }[];
 }
 
 export interface ClassificacaoDoDia {
@@ -1083,7 +1096,12 @@ function jaClassificado(
   cadastro: CounterpartyRegistry,
   porCartao: Map<string, Atribuicao> = new Map(),
   porCompra: Map<string, Atribuicao> = new Map(),
+  divididas: ReadonlySet<string> = new Set(),
 ): boolean {
+  // Dividir E classificar: cada parte foi para uma categoria, e a cobranca nao
+  // volta para a fila so porque ela mesma nao tem rotulo.
+  if (divididas.has(t.id)) return true;
+
   const chave = chaveDeRegra(t);
 
   return estaClassificado({
@@ -1124,15 +1142,23 @@ export async function loadSituacaoDaFita(
   if (useMock()) return { dias: {}, fronteira: hoje };
 
   const conexao = db();
-  const [{ contas, transacoes, registry, decisoes }, rotulos, ultimoDia, regras, compras] =
-    await Promise.all([
-      carregar({ from: de, to: ate }, accountIds),
-      listTransactionLabels(conexao),
-      ultimoDiaPorConta(conexao, hoje),
-      listRegrasDeCartao(conexao).catch(() => []),
-      listRotulosDeCompra(conexao).catch(() => []),
-      pedidosNaoConferidos(conexao),
-    ]);
+  const [
+    { contas, transacoes, registry, decisoes },
+    rotulos,
+    ultimoDia,
+    regras,
+    compras,
+    partes,
+  ] = await Promise.all([
+    carregar({ from: de, to: ate }, accountIds),
+    listTransactionLabels(conexao),
+    ultimoDiaPorConta(conexao, hoje),
+    listRegrasDeCartao(conexao).catch(() => []),
+    listRotulosDeCompra(conexao).catch(() => []),
+    // A fita so conta pendencia: precisa saber quais cobrancas foram divididas,
+    // e nao os pedidos de print, que ninguem le aqui.
+    listPartesDaDespesa(conexao).catch(() => []),
+  ]);
 
   const conciliado = conciliar(transacoes, decisoes);
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
@@ -1142,11 +1168,12 @@ export async function loadSituacaoDaFita(
   // trabalho a fazer.
   const porCartao = indexarRegrasDeCartao(regras);
   const porCompra = indexarRotulosDeCompra(compras);
+  const divididas = new Set(partes.map((parte) => parte.transactionId));
 
   const pendentes: Record<string, number> = {};
   for (const t of conciliado.transacoes) {
     if (!isUserInitiatedExpense(t)) continue;
-    if (jaClassificado(t, porId, cadastro, porCartao, porCompra)) continue;
+    if (jaClassificado(t, porId, cadastro, porCartao, porCompra, divididas)) continue;
 
     const dia = localDay(t.date);
     pendentes[dia] = (pendentes[dia] ?? 0) + 1;
@@ -1185,6 +1212,7 @@ export async function loadPendentesDoPeriodo(
     regras,
     compras,
     pedidosLidos,
+    partes,
   ] = await Promise.all([
     carregar(period, accountIds),
     listCategorias(conexao),
@@ -1194,10 +1222,12 @@ export async function loadPendentesDoPeriodo(
     listRegrasDeCartao(conexao).catch(() => []),
     listRotulosDeCompra(conexao).catch(() => []),
     pedidosNaoConferidos(conexao),
+    listPartesDaDespesa(conexao).catch(() => []),
   ]);
 
   const porCartao = indexarRegrasDeCartao(regras);
   const porCompra = indexarRotulosDeCompra(compras);
+  const divididas = new Set(partes.map((parte) => parte.transactionId));
   const idPorNomeDaCategoria = new Map(
     categorias.map((c) => [normalizeName(c.name), c.id] as const),
   );
@@ -1241,7 +1271,9 @@ export async function loadPendentesDoPeriodo(
 
   const pendentes = conciliado.transacoes
     .filter(
-      (t) => isUserInitiatedExpense(t) && !jaClassificado(t, porId, cadastro, porCartao, porCompra),
+      (t) =>
+        isUserInitiatedExpense(t) &&
+        !jaClassificado(t, porId, cadastro, porCartao, porCompra, divididas),
     )
     .sort((a, b) => a.date.localeCompare(b.date));
 
@@ -1273,6 +1305,8 @@ export async function loadPendentesDoPeriodo(
       herdada: false,
       sugestaoId: sugestaoDe(t),
       parcela: rotuloDaParcela(dadosDoCartao(t.details)),
+      // A fila do jogo so tem pendente, e dividida nao e pendente.
+      divisao: [],
     };
   });
 
@@ -1386,6 +1420,7 @@ export async function loadPainelDeDespesas(
     rotulos,
     regras,
     compras,
+    partes,
   ] = await Promise.all([
     carregar(period, accountIds),
     listCategorias(conexao),
@@ -1393,10 +1428,19 @@ export async function loadPainelDeDespesas(
     listTransactionLabels(conexao),
     listRegrasDeCartao(conexao).catch(() => []),
     listRotulosDeCompra(conexao).catch(() => []),
+    listPartesDaDespesa(conexao).catch(() => []),
   ]);
 
   const porCartao = indexarRegrasDeCartao(regras);
   const porCompra = indexarRotulosDeCompra(compras);
+
+  /** As partes de cada cobranca dividida, quando ha divisao. */
+  const rateios = new Map<string, typeof partes>();
+  for (const parte of partes) {
+    const lista = rateios.get(parte.transactionId) ?? [];
+    lista.push(parte);
+    rateios.set(parte.transactionId, lista);
+  }
 
   const conciliado = conciliar(transacoes, decisoes);
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
@@ -1470,46 +1514,82 @@ export async function loadPainelDeDespesas(
     return centros.find((c) => normalizeName(c.name) === alvo) ?? null;
   };
 
-  for (const t of despesas) {
-    const categoria = categoriaDe(t);
+  /**
+   * A cobranca vista como uma ou varias parcelas de gasto.
+   *
+   * Sem divisao, a cobranca e um pedaco so — o caso de quase tudo. Com divisao,
+   * cada parte tem categoria propria e entra por si: o almoco na Alimentacao, o
+   * que os outros devem em "A reembolsar", que nao e despesa e cai fora do
+   * total logo abaixo.
+   */
+  const pedacosDe = (t: Transaction) => {
+    const divisao = rateios.get(t.id);
 
-    // Comprar um imovel sai da conta como qualquer despesa, mas nao e gasto:
-    // somar isso ao mes torna todo o resto ilegivel. O corte e aqui, antes do
-    // total — nem no total por conta, nem na fatia por categoria.
-    if (categoria && categoria.kind !== "despesa") continue;
-
-    const valor = -t.amount;
-    total += valor;
-    totalPorConta.set(t.accountId, (totalPorConta.get(t.accountId) ?? 0) + valor);
-
-    if (!categoria) {
-      semCategoria = { total: semCategoria.total + valor, contagem: semCategoria.contagem + 1 };
-      continue;
+    if (!divisao || divisao.length === 0) {
+      return [
+        {
+          chave: t.id,
+          valor: -t.amount,
+          categoria: categoriaDe(t),
+          centro: centroDe(t),
+          sufixo: "",
+        },
+      ];
     }
 
-    const atual = totalPorCategoria.get(categoria.id) ?? { total: 0, contagem: 0 };
-    totalPorCategoria.set(categoria.id, {
-      total: atual.total + valor,
-      contagem: atual.contagem + 1,
-    });
+    return divisao.map((parte, i) => ({
+      // A folha da arvore precisa de chave propria por parte: duas partes com o
+      // id da cobranca colidiriam na lista.
+      chave: `${t.id}#${i}`,
+      valor: parte.amount,
+      categoria: parte.categoryId ? (categoriaPorId.get(parte.categoryId) ?? null) : null,
+      centro: parte.costCenterId ? (centroPorId.get(parte.costCenterId) ?? null) : null,
+      sufixo: parte.owedBy ? ` · ${parte.owedBy}` : " · parte",
+    }));
+  };
 
-    const centro = centroDe(t);
-    // O centro so vale se for DESTA categoria: um centro herdado da contraparte
-    // pode ter sido movido de categoria depois, e pendura-lo aqui somaria uma
-    // subcategoria que nao pertence a linha.
-    const chaveDoCentro = centro && centro.categoryId === categoria.id ? centro.id : "";
+  for (const t of despesas) {
+    for (const pedaco of pedacosDe(t)) {
+      const { categoria, valor } = pedaco;
 
-    const daCategoria = arvore.get(categoria.id) ?? new Map<string, DespesaDaCategoria[]>();
-    const doCentro = daCategoria.get(chaveDoCentro) ?? [];
-    doCentro.push({
-      id: t.id,
-      dia: localDay(t.date),
-      descricao: rotuloDoLancamento(t, nomeDaContraparte(t)),
-      valor,
-      conta: nomeDaConta.get(t.accountId) ?? "",
-    });
-    daCategoria.set(chaveDoCentro, doCentro);
-    arvore.set(categoria.id, daCategoria);
+      // Comprar um imovel sai da conta como qualquer despesa, e a parte que
+      // outra pessoa me deve tambem — nenhum dos dois e gasto. Somar isso ao
+      // mes torna todo o resto ilegivel. O corte e aqui, antes do total: nem no
+      // total por conta, nem na fatia por categoria.
+      if (categoria && categoria.kind !== "despesa") continue;
+
+      total += valor;
+      totalPorConta.set(t.accountId, (totalPorConta.get(t.accountId) ?? 0) + valor);
+
+      if (!categoria) {
+        semCategoria = { total: semCategoria.total + valor, contagem: semCategoria.contagem + 1 };
+        continue;
+      }
+
+      const atual = totalPorCategoria.get(categoria.id) ?? { total: 0, contagem: 0 };
+      totalPorCategoria.set(categoria.id, {
+        total: atual.total + valor,
+        contagem: atual.contagem + 1,
+      });
+
+      // O centro so vale se for DESTA categoria: um centro herdado da
+      // contraparte pode ter sido movido de categoria depois, e pendura-lo aqui
+      // somaria uma subcategoria que nao pertence a linha.
+      const centro = pedaco.centro;
+      const chaveDoCentro = centro && centro.categoryId === categoria.id ? centro.id : "";
+
+      const daCategoria = arvore.get(categoria.id) ?? new Map<string, DespesaDaCategoria[]>();
+      const doCentro = daCategoria.get(chaveDoCentro) ?? [];
+      doCentro.push({
+        id: pedaco.chave,
+        dia: localDay(t.date),
+        descricao: `${rotuloDoLancamento(t, nomeDaContraparte(t))}${pedaco.sufixo}`,
+        valor,
+        conta: nomeDaConta.get(t.accountId) ?? "",
+      });
+      daCategoria.set(chaveDoCentro, doCentro);
+      arvore.set(categoria.id, daCategoria);
+    }
   }
 
   const porConta: DespesaPorConta[] = [...totalPorConta.entries()].map(([id, valor]) => {
@@ -1590,6 +1670,7 @@ export async function loadClassificacaoDoDia(
     regras,
     compras,
     pedidosLidos,
+    partes,
   ] = await Promise.all([
       carregar(janela, accountIds),
       listCategorias(conexao),
@@ -1604,6 +1685,7 @@ export async function loadClassificacaoDoDia(
       listRegrasDeCartao(conexao).catch(() => []),
       listRotulosDeCompra(conexao).catch(() => []),
       pedidosNaoConferidos(conexao),
+      listPartesDaDespesa(conexao).catch(() => []),
     ]);
 
   const conciliado = conciliar(transacoes, decisoes);
@@ -1611,6 +1693,14 @@ export async function loadClassificacaoDoDia(
   const porId = new Map(rotulos.map((r) => [r.transactionId, r]));
   const porCartao = indexarRegrasDeCartao(regras);
   const porCompra = indexarRotulosDeCompra(compras);
+
+  /** As partes de cada cobranca dividida, na ordem em que foram informadas. */
+  const rateios = new Map<string, typeof partes>();
+  for (const parte of partes) {
+    const lista = rateios.get(parte.transactionId) ?? [];
+    lista.push(parte);
+    rateios.set(parte.transactionId, lista);
+  }
 
   // Produtos lidos de tela de pedido. Um pedido de tres itens cobrado de uma
   // vez tem tres produtos na mesma cobranca, entao a lista e por transacao.
@@ -1721,10 +1811,19 @@ export async function loadClassificacaoDoDia(
     return nome ? (categoriaPorRotulo.get(normalizeName(nome)) ?? null) : null;
   };
 
+  const nomeDaCategoriaPorId = new Map(categorias.map((c) => [c.id, c.name] as const));
+
   const lancamentos: LancamentoParaClassificar[] = doDia.map((t) => {
     const classificavel = isUserInitiatedExpense(t);
     const decidido = resolver(t);
     const rotulo = rotuloDoLancamento(t, nomeDaParte(t));
+
+    const divisao = (rateios.get(t.id) ?? []).map((parte) => ({
+      valor: parte.amount,
+      categoriaId: parte.categoryId,
+      categoria: parte.categoryId ? (nomeDaCategoriaPorId.get(parte.categoryId) ?? null) : null,
+      devedor: parte.owedBy,
+    }));
 
     return {
       id: t.id,
@@ -1747,9 +1846,14 @@ export async function loadClassificacaoDoDia(
       ...decidido,
       sugestaoId: sugestaoDe(t),
       parcela: rotuloDaParcela(dadosDoCartao(t.details)),
+      divisao,
       // Uma contraparte com categoria tambem manda dinheiro de volta: sem este
       // corte, um reembolso apareceria etiquetado como despesa dela.
-      categoriaId: classificavel ? decidido.categoriaId : null,
+      // Dividida conta como classificada: a categoria da etiqueta e a da
+      // primeira parte, e a lista das outras vai em `divisao`.
+      categoriaId: classificavel
+        ? (divisao[0]?.categoriaId ?? decidido.categoriaId)
+        : null,
       centroId: classificavel ? decidido.centroId : null,
     };
   });
@@ -1761,17 +1865,26 @@ export async function loadClassificacaoDoDia(
   for (const t of conciliado.transacoes) {
     if (!isUserInitiatedExpense(t)) continue;
 
-    const { categoriaId } = resolver(t);
-    if (!categoriaId) continue;
+    // Cobranca dividida entra por parte: o almoco na Alimentacao, o que os
+    // outros devem em "A reembolsar". Soma-la inteira num bloco so daria a
+    // categoria um valor que nao e dela.
+    const divisao = rateios.get(t.id);
+    const pedacos =
+      divisao && divisao.length > 0
+        ? divisao.map((parte) => ({ categoriaId: parte.categoryId, valor: parte.amount }))
+        : [{ categoriaId: resolver(t).categoriaId, valor: -t.amount }];
 
-    const atual = totais.get(categoriaId) ?? { dia: 0, mes: 0, contagem: 0 };
-    const valor = -t.amount;
-    atual.mes += valor;
-    if (localDay(t.date) === dia) {
-      atual.dia += valor;
-      atual.contagem += 1;
+    for (const { categoriaId, valor } of pedacos) {
+      if (!categoriaId) continue;
+
+      const atual = totais.get(categoriaId) ?? { dia: 0, mes: 0, contagem: 0 };
+      atual.mes += valor;
+      if (localDay(t.date) === dia) {
+        atual.dia += valor;
+        atual.contagem += 1;
+      }
+      totais.set(categoriaId, atual);
     }
-    totais.set(categoriaId, atual);
   }
 
   return {

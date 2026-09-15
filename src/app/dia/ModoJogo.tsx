@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { IconeDeCategoria } from "@/components/IconeDeCategoria";
 import { diaCurto } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
+import { emCentavos } from "@/lib/finance/rateio";
 import type {
   CategoriaParaClassificar,
   LancamentoParaClassificar,
@@ -101,6 +102,16 @@ interface Props {
   ) => void;
   /** Grava so o comentario, sem tocar na categoria. */
   onComentar: (lancamento: LancamentoParaClassificar, comentario: string) => void;
+  /**
+   * Divide a despesa: a parte que e minha e a que outra pessoa me deve.
+   *
+   * A categoria da parte propria e a que estiver mirada na bussola — dividir e
+   * classificar as duas de uma vez, e nao duas operacoes seguidas.
+   */
+  onDividir?: (
+    lancamento: LancamentoParaClassificar,
+    divisao: { categoriaId: string; valorProprio: number; valorReembolso: number; devedor: string },
+  ) => void;
   onFechar: () => void;
 }
 
@@ -114,6 +125,7 @@ export function ModoJogo({
   totalDoPeriodo = 0,
   onClassificar,
   onComentar,
+  onDividir,
   onFechar,
 }: Props) {
   const [indice, setIndice] = useState(0);
@@ -157,6 +169,16 @@ export function ModoJogo({
   const [comentario, setComentario] = useState<string | null>(null);
   const [comentarioPendente, setComentarioPendente] = useState<string | null>(null);
   const caixaDeComentario = useRef<HTMLTextAreaElement>(null);
+
+  /**
+   * Divisao em edicao. `null` com a caixa fechada.
+   *
+   * Guarda so o que o usuario digita — quanto volta e de quem. A parte propria
+   * e deduzida: pedir os dois seria pedir a conta que o computador ja sabe
+   * fazer, e abrir espaco para ela nao fechar.
+   */
+  const [rateio, setRateio] = useState<{ reembolso: string; devedor: string } | null>(null);
+  const campoDoRateio = useRef<HTMLInputElement>(null);
 
   /** Setas pressionadas neste instante, para reconhecer a diagonal. */
   const teclas = useRef(new Set<string>());
@@ -211,6 +233,43 @@ export function ModoJogo({
    * a categoria sugerida", nao "voce nao escolheu esta". Mirar a mesma a mao
    * continua sendo a sugerida.
    */
+  /**
+   * O que sobra para mim depois do que volta.
+   *
+   * Negativo significa que o reembolso passou do valor da despesa — a tela
+   * mostra isso e recusa o enter, em vez de gravar uma divisao que nao fecha.
+   */
+  const reembolsoDigitado = rateio
+    ? Number(rateio.reembolso.replace(/\./g, "").replace(",", ".")) || 0
+    : 0;
+  const minhaParte = atual ? emCentavos(Math.abs(atual.valor) - reembolsoDigitado) : 0;
+
+  /** Enter divide, esc desiste. O resto e digitacao normal. */
+  function noRateio(evento: React.KeyboardEvent<HTMLInputElement>) {
+    if (evento.key === "Escape") {
+      evento.preventDefault();
+      setRateio(null);
+      return;
+    }
+
+    if (evento.key !== "Enter") return;
+    evento.preventDefault();
+
+    if (!atual || !escolhida || !onDividir) return;
+    if (reembolsoDigitado <= 0 || minhaParte < 0) return;
+
+    onDividir(atual, {
+      categoriaId: escolhida.id,
+      valorProprio: minhaParte,
+      valorReembolso: emCentavos(reembolsoDigitado),
+      devedor: rateio?.devedor.trim() ?? "",
+    });
+
+    setDespachados((atuais) => new Set(atuais).add(atual.id));
+    limparMira();
+    setIndice((i) => i + 1);
+  }
+
   const sugerida = ondeEsta(bussola, atual?.sugestaoId);
   const porSugestao = Boolean(
     sugerida && direcao === sugerida.direcao && pagina === sugerida.pagina,
@@ -247,6 +306,10 @@ export function ModoJogo({
     if (comentario !== null) caixaDeComentario.current?.focus();
   }, [comentario !== null]);
 
+  useEffect(() => {
+    if (rateio !== null) campoDoRateio.current?.focus();
+  }, [rateio !== null]);
+
   // A selecao do trecho completado so pode ser feita depois que o valor novo
   // esta no campo — antes disso os indices apontam para o texto velho.
   useEffect(() => {
@@ -262,6 +325,7 @@ export function ModoJogo({
     setDigitado("");
     setComentario(null);
     setComentarioPendente(null);
+    setRateio(null);
     // O painel e sobre AQUELA despesa: deixa-lo aberto mostraria os dados de
     // uma e o cartao de outra.
     setInformando(false);
@@ -337,7 +401,7 @@ export function ModoJogo({
     function baixou(evento: KeyboardEvent) {
       // Com um campo de texto aberto o teclado e dele: as setas escolhem
       // sugestao e as letras sao letras. Quem trata isso e o proprio campo.
-      if (subcategoria !== null || comentario !== null) return;
+      if (subcategoria !== null || comentario !== null || rateio !== null) return;
 
       if (evento.key === "Escape") {
         onFechar();
@@ -396,6 +460,14 @@ export function ModoJogo({
       if (evento.key === "c" || evento.key === "C") {
         evento.preventDefault();
         setComentario(comentarioPendente ?? atual.comentario ?? "");
+        return;
+      }
+
+      // `r` de rateio. So faz sentido com uma categoria mirada: a parte propria
+      // precisa de destino, e sem ele a divisao ficaria pela metade.
+      if ((evento.key === "r" || evento.key === "R") && onDividir) {
+        evento.preventDefault();
+        setRateio({ reembolso: "", devedor: "" });
         return;
       }
 
@@ -724,7 +796,49 @@ export function ModoJogo({
                   <span className="jogo-nota">{comentarioPendente ?? atual.comentario}</span>
                 ) : null}
 
-                {comentario !== null ? (
+                {rateio !== null ? (
+                  <div className="jogo-sub jogo-rateio">
+                    <div className="jogo-rateio-linha">
+                      <label>
+                        volta para mim
+                        <input
+                          ref={campoDoRateio}
+                          type="text"
+                          inputMode="decimal"
+                          value={rateio.reembolso}
+                          placeholder="0,00"
+                          onChange={(evento) =>
+                            setRateio({ ...rateio, reembolso: evento.target.value })
+                          }
+                          onKeyDown={noRateio}
+                        />
+                      </label>
+                      <label className="jogo-rateio-quem">
+                        de quem
+                        <input
+                          type="text"
+                          value={rateio.devedor}
+                          placeholder="turma do almoco"
+                          onChange={(evento) =>
+                            setRateio({ ...rateio, devedor: evento.target.value })
+                          }
+                          onKeyDown={noRateio}
+                        />
+                      </label>
+                    </div>
+
+                    {/* A parte propria e deduzida, nunca digitada: pedir os dois
+                        seria pedir a conta que o computador ja faz, e abrir
+                        espaco para a divisao nao fechar. */}
+                    <span className={minhaParte < 0 ? "jogo-rateio-erro" : "account-meta"}>
+                      {minhaParte < 0
+                        ? `O reembolso passa ${formatBRL(-minhaParte)} do valor da despesa.`
+                        : escolhida
+                          ? `${formatBRL(minhaParte)} ficam em ${escolhida.name} · enter divide`
+                          : "Mire uma categoria com as setas para a sua parte ter destino"}
+                    </span>
+                  </div>
+                ) : comentario !== null ? (
                   <div className="jogo-sub jogo-comentario">
                     <textarea
                       ref={caixaDeComentario}
@@ -819,9 +933,24 @@ export function ModoJogo({
               <span className="account-meta">
                 setas miram · duas juntas fazem a diagonal · enter classifica · shift+enter vale
                 para toda a contraparte · espaco abre a subcategoria · c comenta · i mostra o que se sabe ·
+                {onDividir ? " r divide com quem me reembolsa · " : " "}
                 backspace pula
                 {paginas > 1 ? ` · tab troca de volta (${pagina + 1}/${paginas})` : ""}
               </span>
+
+              {/* Botao alem da tecla: dividir e raro o bastante para ninguem
+                  decorar a letra, e quem so passa por aqui uma vez precisa
+                  descobrir que isto existe. */}
+              {onDividir ? (
+                <button
+                  type="button"
+                  className="jogo-pular"
+                  onClick={() => setRateio({ reembolso: "", devedor: "" })}
+                >
+                  dividir (r)
+                </button>
+              ) : null}
+
               <button type="button" className="jogo-pular" onClick={avancar}>
                 pular
               </button>

@@ -57,6 +57,7 @@ describe("migracoes", () => {
       "sync_runs",
       "transaction_labels",
       "transaction_products",
+      "transaction_splits",
       "transactions",
     ]);
   });

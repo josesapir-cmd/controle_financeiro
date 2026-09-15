@@ -796,8 +796,16 @@ export async function encerrarImportacao(
  * `investimento` e aporte que vira patrimonio e nao volta como saldo: imovel,
  * fundo, previdencia. Separado de `movimentacao` porque a diferenca importa
  * na hora de olhar patrimonio, e junta-los apagaria a distincao.
+ * `reembolso` e o que outra pessoa me deve: paguei a conta inteira e parte
+ * volta. Tambem nao e gasto, e tambem nao e aporte — e credito de curto prazo,
+ * e a diferenca importa quando a pergunta for quem deve o que.
  */
-export type TipoDeCategoria = "despesa" | "receita" | "movimentacao" | "investimento";
+export type TipoDeCategoria =
+  | "despesa"
+  | "receita"
+  | "movimentacao"
+  | "investimento"
+  | "reembolso";
 
 export interface CategoriaRow {
   id: string;
@@ -1575,4 +1583,96 @@ export async function setRotuloDeCompra(
            updated_at = now()`,
     [chave, categoria, centro],
   );
+}
+
+/* ==========================================================================
+   Rateio: a despesa dividida em partes
+   ========================================================================== */
+
+export interface ParteDaDespesaRow {
+  id: string;
+  transactionId: string;
+  amount: number;
+  categoryId: string | null;
+  costCenterId: string | null;
+  /** Nome de quem deve, ja decifrado. `null` quando a parte e consumo proprio. */
+  owedBy: string | null;
+  owedByFingerprint: string | null;
+}
+
+/** Fingerprint do devedor, no mesmo esquema das contrapartes. */
+export function debtorFingerprint(nome: string): string {
+  return fingerprint("debtor", nome.trim().toLowerCase());
+}
+
+export async function listPartesDaDespesa(
+  db: Db,
+  transactionIds?: string[],
+): Promise<ParteDaDespesaRow[]> {
+  const filtrar = Array.isArray(transactionIds);
+  if (filtrar && transactionIds!.length === 0) return [];
+
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, transaction_id, amount, category_id, cost_center_id, owed_by_enc, owed_by_fp
+       FROM transaction_splits
+      ${filtrar ? "WHERE transaction_id = ANY($1)" : ""}
+      ORDER BY transaction_id, position, created_at`,
+    filtrar ? [transactionIds] : [],
+  );
+
+  return linhas.map((linha) => ({
+    id: String(linha.id),
+    transactionId: String(linha.transaction_id),
+    amount: numero(linha.amount),
+    categoryId: linha.category_id ? String(linha.category_id) : null,
+    costCenterId: linha.cost_center_id ? String(linha.cost_center_id) : null,
+    owedBy: decryptOptional(linha.owed_by_enc as string | null),
+    owedByFingerprint: linha.owed_by_fp ? String(linha.owed_by_fp) : null,
+  }));
+}
+
+/**
+ * Substitui a divisao de uma despesa.
+ *
+ * Apaga e regrava em vez de conciliar parte a parte: a divisao e uma coisa so,
+ * e uma edicao parcial deixaria a soma quebrada no meio do caminho. Lista
+ * vazia desfaz a divisao — a despesa volta a ser inteira.
+ */
+export async function salvarRateio(
+  db: Db,
+  transactionId: string,
+  partes: {
+    amount: number;
+    categoryId?: string | null;
+    costCenterId?: string | null;
+    owedBy?: string | null;
+  }[],
+): Promise<void> {
+  if (!transactionId) return;
+
+  await db.query(`DELETE FROM transaction_splits WHERE transaction_id = $1`, [transactionId]);
+
+  let posicao = 0;
+  for (const parte of partes) {
+    if (!(parte.amount > 0)) continue;
+
+    const devedor = parte.owedBy?.trim() || null;
+
+    await db.query(
+      `INSERT INTO transaction_splits
+         (transaction_id, amount, category_id, cost_center_id, owed_by_enc, owed_by_fp, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        transactionId,
+        parte.amount,
+        parte.categoryId && UUID.test(parte.categoryId) ? parte.categoryId : null,
+        parte.costCenterId && UUID.test(parte.costCenterId) ? parte.costCenterId : null,
+        encryptOptional(devedor),
+        devedor ? debtorFingerprint(devedor) : null,
+        posicao,
+      ],
+    );
+
+    posicao += 1;
+  }
 }

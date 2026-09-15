@@ -2,7 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { ModoJogo } from "@/app/dia/ModoJogo";
-import { classificarLancamento, comentarLancamento } from "@/app/dia/actions";
+import {
+  classificarLancamento,
+  comentarLancamento,
+  dividirLancamento,
+} from "@/app/dia/actions";
 import { formatBRL } from "@/lib/finance/money";
 import type {
   CategoriaParaClassificar,
@@ -89,6 +93,18 @@ export function ClassificarNoPeriodo({
             dados.set("note", texto);
             iniciar(() => {
               void comentarLancamento(dados);
+            });
+          }}
+          onDividir={(lancamento, divisao) => {
+            const dados = new FormData();
+            dados.set("transactionId", lancamento.id);
+            dados.set("total", String(lancamento.valor));
+            dados.set("categoryId", divisao.categoriaId);
+            dados.set("valorProprio", divisao.valorProprio.toFixed(2).replace(".", ","));
+            dados.set("valorReembolso", divisao.valorReembolso.toFixed(2).replace(".", ","));
+            dados.set("devedor", divisao.devedor);
+            iniciar(() => {
+              void dividirLancamento(dados);
             });
           }}
           onFechar={() => setJogando(false)}
