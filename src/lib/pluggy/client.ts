@@ -1,5 +1,5 @@
 import { localDay } from "@/lib/finance/dates";
-import type { Account, Item, Paginated, Transaction } from "./types";
+import type { Account, Investment, Item, Paginated, Transaction } from "./types";
 
 const DEFAULT_API_URL = "https://api.pluggy.ai";
 
@@ -308,6 +308,18 @@ export async function getTransactions(
   }
 
   return collected.filter((transaction) => withinPeriod(transaction, options));
+}
+
+/**
+ * Posicoes de investimento da conexao.
+ *
+ * Sem paginacao explicita: a resposta vem inteira em `results`. Uma carteira de
+ * quarenta papeis cabe numa chamada, e inventar cursor aqui seria resolver um
+ * problema que a API nao tem.
+ */
+export async function getInvestments(itemId: string): Promise<Investment[]> {
+  const body = await request<Paginated<Investment>>("/investments", { query: { itemId } });
+  return body.results ?? [];
 }
 
 export async function deleteItem(itemId: string): Promise<void> {

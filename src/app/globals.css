@@ -4573,6 +4573,14 @@ ul.produtos {
   }
 }
 
+/* Data de vencimento na tabela de papeis: apagada como o resto do que e
+   contexto, mas sem `.account-meta` — aquela regra vira `display: block` no
+   celular e venceria o `display: none` da coluna que some ali. */
+.gr-data {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
 /* Barra fina, canto arredondado so na ponta do dado, ancorada na linha de base
    a esquerda. Uma matiz so: o nome ja diz de quem e a linha. */
 .gr-barra {
@@ -5396,4 +5404,12 @@ ul.produtos {
 .jogo-rateio-erro {
   font-size: 12px;
   color: var(--error-dark);
+}
+
+/* Titulo que separa a carteira dos compromissos na aba de investimentos: sao
+   duas coisas distintas — o que existe e o que ainda vai sair. */
+.cp-secao {
+  margin: 24px 0 12px;
+  font-size: 15px;
+  font-weight: 600;
 }

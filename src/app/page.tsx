@@ -6,15 +6,18 @@ import { DespesasPorConta } from "@/components/DespesasPorConta";
 import { Nav } from "@/components/Nav";
 import { SairButton } from "@/components/SairButton";
 import { SpinnerDeMeses } from "@/components/SpinnerDeMeses";
+import { CarteiraDeInvestimentos } from "@/components/CarteiraDeInvestimentos";
 import { Compromissos } from "@/components/Compromissos";
 import { ClassificarNoPeriodo } from "./ClassificarNoPeriodo";
 import { accountQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import { currentMonthRange } from "@/lib/finance/dates";
 import type { CarteiraDeCompromissos } from "@/lib/finance/compromissos";
 import {
+  loadCarteira,
   loadCompromissos,
   loadPainelDeDespesas,
   loadPendentesDoPeriodo,
+  type Carteira,
   type PainelDeDespesas,
 } from "@/lib/finance/service";
 
@@ -130,9 +133,13 @@ export default async function Home({
   if (aba === "investimentos") {
     const query = accountQuery(accountIds);
     let carteira: CarteiraDeCompromissos;
+    let posicoes: Carteira;
 
     try {
-      carteira = await loadCompromissos();
+      [carteira, posicoes] = await Promise.all([
+        loadCompromissos(),
+        loadCarteira(),
+      ]);
     } catch (error) {
       return (
         <Setup mensagem={error instanceof Error ? error.message : "Erro ao carregar dados."} />
@@ -151,6 +158,12 @@ export default async function Home({
 
         <Nav atual="/" contasQuery={query} />
         <Abas atual={aba} query={query} />
+
+        {/* A carteira primeiro: e o que existe. O compromisso vem depois, que e
+            o que ainda vai sair. */}
+        <CarteiraDeInvestimentos carteira={posicoes} />
+
+        <h2 className="cp-secao">Compromissos de capital</h2>
         <Compromissos carteira={carteira} />
       </main>
     );

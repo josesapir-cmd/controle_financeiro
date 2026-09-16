@@ -131,3 +131,30 @@ export interface AccountWithConnector extends Account {
    */
   origin?: "pluggy" | "manual";
 }
+
+/**
+ * Posicao de investimento como a Pluggy devolve.
+ *
+ * Fotografia do que se tem hoje, e nao lancamento: nao tem data de competencia
+ * e nao entra em soma de gasto. Os campos variam muito por tipo — renda fixa
+ * tem taxa e vencimento, fundo nao — entao quase tudo e opcional.
+ */
+export interface Investment {
+  id: string;
+  itemId?: string;
+  type: string;
+  subtype?: string | null;
+  name?: string | null;
+  issuer?: string | null;
+  /** Valor de mercado hoje. E o que a tela soma. */
+  balance?: number | null;
+  /** Quanto foi aportado. */
+  amount?: number | null;
+  /** Quanto do saldo e lucro. */
+  amountProfit?: number | null;
+  annualRate?: number | null;
+  dueDate?: string | null;
+  currencyCode?: string | null;
+  status?: string | null;
+  institution?: { name?: string | null } | null;
+}

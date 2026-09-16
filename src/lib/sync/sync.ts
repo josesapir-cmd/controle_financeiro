@@ -2,10 +2,11 @@ import { extractCounterparty, type PaymentData } from "@/lib/finance/counterpart
 import { localDay } from "@/lib/finance/dates";
 import { extractDetails } from "@/lib/finance/details";
 import { normalizeAmount } from "@/lib/finance/money";
-import type { Account, Item, Transaction } from "@/lib/pluggy/types";
+import type { Account, Investment, Item, Transaction } from "@/lib/pluggy/types";
 import type { Db } from "@/lib/db/adapter";
 import {
   markSync,
+  substituirPosicoes,
   upsertAccount,
   upsertConnection,
   upsertTransactions,
@@ -25,6 +26,11 @@ export interface PluggyGateway {
     accountId: string,
     options: { from?: string; to?: string },
   ): Promise<(Transaction & { paymentData?: PaymentData | null })[]>;
+  /**
+   * Opcional: nem todo conector expoe investimento, e o gateway falso dos
+   * testes nao precisa implementar o que nao esta testando.
+   */
+  getInvestments?(itemId: string): Promise<Investment[]>;
 }
 
 export interface SyncOptions {
@@ -37,6 +43,8 @@ export interface SyncResult {
   connectorName: string;
   accounts: number;
   transactions: number;
+  /** Posicoes de investimento gravadas. Zero quando o banco nao expoe. */
+  investments: number;
   error?: string;
 }
 
@@ -127,8 +135,48 @@ export async function syncConnection(
       totalTransacoes += await upsertTransactions(db, preparadas);
     }
 
+    // A carteira e uma fotografia, nao um lancamento: nao depende do periodo
+    // sincronizado e e reescrita por inteiro a cada passagem.
+    //
+    // Falha aqui NAO derruba a sincronizacao: extrato e o essencial, carteira e
+    // o extra, e perder o mes inteiro porque a corretora nao respondeu seria
+    // trocar o certo pelo duvidoso.
+    let totalPosicoes = 0;
+    try {
+      const posicoes = (await pluggy.getInvestments?.(itemId)) ?? [];
+
+      totalPosicoes = await substituirPosicoes(
+        db,
+        itemId,
+        posicoes.map((posicao) => ({
+          id: posicao.id,
+          itemId,
+          institution: posicao.institution?.name || connectorName,
+          type: posicao.type,
+          subtype: posicao.subtype ?? null,
+          name: posicao.name ?? null,
+          issuer: posicao.issuer ?? null,
+          balance: posicao.balance ?? null,
+          amount: posicao.amount ?? null,
+          profit: posicao.amountProfit ?? null,
+          annualRate: posicao.annualRate ?? null,
+          dueDate: posicao.dueDate ? String(posicao.dueDate).slice(0, 10) : null,
+          currency: posicao.currencyCode ?? null,
+          status: posicao.status ?? null,
+        })),
+      );
+    } catch {
+      totalPosicoes = 0;
+    }
+
     await markSync(db, itemId, null);
-    return { itemId, connectorName, accounts: contas.length, transactions: totalTransacoes };
+    return {
+      itemId,
+      connectorName,
+      accounts: contas.length,
+      transactions: totalTransacoes,
+      investments: totalPosicoes,
+    };
   } catch (erro) {
     const mensagem = erro instanceof Error ? erro.message : "Erro desconhecido";
 
@@ -137,7 +185,14 @@ export async function syncConnection(
     await upsertConnection(db, { itemId, connectorName }).catch(() => {});
     await markSync(db, itemId, mensagem).catch(() => {});
 
-    return { itemId, connectorName, accounts: 0, transactions: 0, error: mensagem };
+    return {
+      itemId,
+      connectorName,
+      accounts: 0,
+      transactions: 0,
+      investments: 0,
+      error: mensagem,
+    };
   }
 }
 

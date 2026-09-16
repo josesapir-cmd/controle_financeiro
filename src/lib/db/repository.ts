@@ -1676,3 +1676,143 @@ export async function salvarRateio(
     posicao += 1;
   }
 }
+
+/* ==========================================================================
+   Posicoes de investimento
+   ========================================================================== */
+
+export interface PosicaoRow {
+  id: string;
+  itemId: string | null;
+  institution: string;
+  type: string;
+  subtype: string | null;
+  name: string | null;
+  issuer: string | null;
+  balance: number;
+  amount: number | null;
+  profit: number | null;
+  annualRate: number | null;
+  dueDate: string | null;
+  currency: string;
+  status: string | null;
+  seenAt: Date;
+}
+
+export interface PosicaoInput {
+  id: string;
+  itemId: string;
+  institution: string;
+  type: string;
+  subtype?: string | null;
+  name?: string | null;
+  issuer?: string | null;
+  balance?: number | null;
+  amount?: number | null;
+  profit?: number | null;
+  annualRate?: number | null;
+  dueDate?: string | null;
+  currency?: string | null;
+  status?: string | null;
+}
+
+export async function listPosicoes(db: Db): Promise<PosicaoRow[]> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, item_id, institution, type, subtype, name_enc, issuer_enc, balance, amount,
+            profit, annual_rate, due_date, currency, status, seen_at
+       FROM investments
+      ORDER BY balance DESC NULLS LAST`,
+  );
+
+  return linhas.map((linha) => ({
+    id: String(linha.id),
+    itemId: linha.item_id ? String(linha.item_id) : null,
+    institution: String(linha.institution),
+    type: String(linha.type),
+    subtype: linha.subtype ? String(linha.subtype) : null,
+    name: decryptOptional(linha.name_enc as string | null),
+    issuer: decryptOptional(linha.issuer_enc as string | null),
+    balance: numero(linha.balance),
+    amount:
+      linha.amount === null || linha.amount === undefined
+        ? null
+        : numero(linha.amount),
+    profit:
+      linha.profit === null || linha.profit === undefined
+        ? null
+        : numero(linha.profit),
+    annualRate:
+      linha.annual_rate === null || linha.annual_rate === undefined
+        ? null
+        : numero(linha.annual_rate),
+    dueDate: dia(linha.due_date),
+    currency: String(linha.currency ?? "BRL"),
+    status: linha.status ? String(linha.status) : null,
+    seenAt: new Date(linha.seen_at as string),
+  }));
+}
+
+/**
+ * Grava a carteira de uma conexao, substituindo a anterior.
+ *
+ * Posicao que sumiu da resposta foi resgatada. Apagar as que nao vieram e o
+ * unico jeito honesto: mante-las somaria para sempre um papel que nao existe
+ * mais, e o total do patrimonio mentiria sem nunca dar erro.
+ */
+export async function substituirPosicoes(
+  db: Db,
+  itemId: string,
+  posicoes: PosicaoInput[],
+): Promise<number> {
+  if (!itemId) return 0;
+
+  const vistos = posicoes.map((p) => p.id);
+
+  await db.query(
+    `DELETE FROM investments WHERE item_id = $1 ${vistos.length ? "AND NOT (id = ANY($2))" : ""}`,
+    vistos.length ? [itemId, vistos] : [itemId],
+  );
+
+  for (const posicao of posicoes) {
+    await db.query(
+      `INSERT INTO investments
+         (id, item_id, institution, type, subtype, name_enc, issuer_enc, balance, amount,
+          profit, annual_rate, due_date, currency, status, seen_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now(), now())
+       ON CONFLICT (id) DO UPDATE
+         SET item_id = EXCLUDED.item_id,
+             institution = EXCLUDED.institution,
+             type = EXCLUDED.type,
+             subtype = EXCLUDED.subtype,
+             name_enc = EXCLUDED.name_enc,
+             issuer_enc = EXCLUDED.issuer_enc,
+             balance = EXCLUDED.balance,
+             amount = EXCLUDED.amount,
+             profit = EXCLUDED.profit,
+             annual_rate = EXCLUDED.annual_rate,
+             due_date = EXCLUDED.due_date,
+             currency = EXCLUDED.currency,
+             status = EXCLUDED.status,
+             seen_at = now(),
+             updated_at = now()`,
+      [
+        posicao.id,
+        itemId,
+        posicao.institution,
+        posicao.type,
+        posicao.subtype ?? null,
+        encryptOptional(posicao.name),
+        encryptOptional(posicao.issuer),
+        posicao.balance ?? null,
+        posicao.amount ?? null,
+        posicao.profit ?? null,
+        posicao.annualRate ?? null,
+        posicao.dueDate ?? null,
+        posicao.currency ?? "BRL",
+        posicao.status ?? null,
+      ],
+    );
+  }
+
+  return posicoes.length;
+}

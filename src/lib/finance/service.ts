@@ -8,6 +8,7 @@ import {
   listChamadas,
   listCompromissos,
   listPartesDaDespesa,
+  listPosicoes,
   listRegrasDeCartao,
   listRotulosDeCompra,
   purchaseFingerprint,
@@ -71,6 +72,12 @@ import { categoriaDoMcc } from "./mcc";
 import { chaveDaCompra } from "./parcelamento";
 import { classificar, estaClassificado, type Atribuicao } from "./classificacao";
 import { montarCarteira, type CarteiraDeCompromissos } from "./compromissos";
+import {
+  agrupar,
+  classeDoPapel,
+  type GrupoDaCarteira,
+  type PapelNaCarteira,
+} from "./carteira";
 import {
   totalExpenses,
   totalIncome,
@@ -2186,5 +2193,68 @@ export async function loadBuscaDeContrapartes(
             })),
         }
       : null,
+  };
+}
+
+export type { GrupoDaCarteira, PapelNaCarteira };
+
+export interface Carteira {
+  papeis: PapelNaCarteira[];
+  porClasse: GrupoDaCarteira[];
+  porInstituicao: GrupoDaCarteira[];
+  total: number;
+  /** Soma dos lucros informados. `null` quando nenhum papel informa. */
+  lucro: number | null;
+  /** Quando a posicao mais antiga foi vista pela ultima vez. */
+  vistoEm: Date | null;
+}
+
+/**
+ * A carteira que veio do Open Finance.
+ *
+ * Fotografia, nao extrato: nao depende de periodo nem de conta selecionada. O
+ * que ela responde e "quanto existe hoje", e a tela mostra ao lado dos
+ * compromissos de capital — que sao a outra metade, o dinheiro prometido e
+ * ainda nao aportado.
+ */
+export async function loadCarteira(): Promise<Carteira> {
+  const posicoes = await listPosicoes(db()).catch(() => []);
+
+  const papeis: PapelNaCarteira[] = posicoes.map((posicao) => ({
+    id: posicao.id,
+    // Sem nome, o tipo ja diz mais que um id opaco.
+    nome: posicao.name || classeDoPapel(posicao.type, posicao.subtype),
+    instituicao: posicao.institution,
+    tipo: posicao.type,
+    subtipo: posicao.subtype,
+    saldo: posicao.balance,
+    aportado: posicao.amount,
+    lucro: posicao.profit,
+    taxa: posicao.annualRate,
+    vence: posicao.dueDate,
+  }));
+
+  const comLucro = papeis.filter((papel) => papel.lucro !== null);
+
+  return {
+    papeis,
+    porClasse: agrupar(papeis, (papel) =>
+      classeDoPapel(papel.tipo, papel.subtipo),
+    ),
+    porInstituicao: agrupar(papeis, (papel) => papel.instituicao),
+    total: papeis.reduce((soma, papel) => soma + papel.saldo, 0),
+    // `null` quando NENHUM papel informa lucro, e nao zero: zero diria que a
+    // carteira nao rendeu nada, que e outra afirmacao.
+    lucro:
+      comLucro.length > 0
+        ? comLucro.reduce((s, p) => s + (p.lucro ?? 0), 0)
+        : null,
+    vistoEm: posicoes.reduce<Date | null>(
+      (maisAntigo, posicao) =>
+        !maisAntigo || posicao.seenAt < maisAntigo
+          ? posicao.seenAt
+          : maisAntigo,
+      null,
+    ),
   };
 }
