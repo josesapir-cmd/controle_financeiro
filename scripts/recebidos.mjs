@@ -43,6 +43,19 @@ async function lerEnv() {
   }
 }
 
+/**
+ * O dia em ISO, venha ele como `Date` ou como texto.
+ *
+ * O driver devolve `date` como objeto `Date`, e `String(data).slice(0, 10)` da
+ * "Fri Aug 2" — que agrupa o ano inteiro debaixo de "Fri". O erro nao estoura:
+ * so produz um relatorio errado de cara certa.
+ */
+function emIso(valor) {
+  return valor instanceof Date
+    ? valor.toISOString().slice(0, 10)
+    : String(valor).slice(0, 10);
+}
+
 /** Sem acento e sem caixa: "Oliveira Trust" casa com "oliveira trust". */
 function simplificar(texto) {
   return texto
@@ -99,7 +112,7 @@ try {
     const descricao = abrir(linha.description_enc);
     if (!simplificar(`${nome} ${descricao}`).includes(alvo)) continue;
 
-    const dia = String(linha.local_day).slice(0, 10);
+    const dia = emIso(linha.local_day);
     if (anoPedido && Number(dia.slice(0, 4)) !== anoPedido) continue;
 
     achadas.push({
