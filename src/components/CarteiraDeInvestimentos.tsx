@@ -13,6 +13,36 @@ import type { Carteira } from "@/lib/finance/service";
  * Uma matiz so nas barras: o nome da classe ja esta escrito na linha, e dar uma
  * cor a cada uma acrescentaria arco-iris, nao informacao.
  */
+/**
+ * Marca do ativo digitado a mao.
+ *
+ * Um losango vazado, nao um emoji: a tabela inteira e texto e numero, e um
+ * emoji colorido no meio pesaria mais que o aviso que ele da. O que a marca
+ * precisa dizer e "este numero nao se atualiza sozinho".
+ *
+ * O aviso vai tambem em texto, e nao so no `title`: quem le a tela por leitor
+ * de tela nao passa o mouse em cima de nada.
+ */
+function MarcaManual({ avaliadoEm }: { avaliadoEm?: string | null }) {
+  const legenda = avaliadoEm
+    ? `Ativo digitado a mao — valor apurado em ${dataCompleta(avaliadoEm)}`
+    : "Ativo digitado a mao, fora do Open Finance";
+
+  return (
+    <span className="gr-manual" title={legenda}>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path
+          d="M12 3 21 12 12 21 3 12Z"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <span className="sr-only">{legenda}</span>
+    </span>
+  );
+}
+
 export function CarteiraDeInvestimentos({ carteira }: { carteira: Carteira }) {
   if (carteira.papeis.length === 0) {
     return (
@@ -195,6 +225,9 @@ export function CarteiraDeInvestimentos({ carteira }: { carteira: Carteira }) {
               {carteira.papeis.map((papel) => (
                 <tr key={papel.id}>
                   <th scope="row">
+                    {papel.manual ? (
+                      <MarcaManual avaliadoEm={papel.avaliadoEm} />
+                    ) : null}
                     {papel.nome}
                     <span className="account-meta"> · {papel.instituicao}</span>
                     {/* So aparece quando ha o que somar: um "1" em toda linha
@@ -210,7 +243,11 @@ export function CarteiraDeInvestimentos({ carteira }: { carteira: Carteira }) {
                   </th>
                   <td className="gr-so-largo">
                     <span className="gr-data">
-                      {papel.vence ? dataCompleta(papel.vence) : "—"}
+                      {papel.vence
+                        ? dataCompleta(papel.vence)
+                        : papel.manual && papel.avaliadoEm
+                          ? `avaliado em ${dataCompleta(papel.avaliadoEm)}`
+                          : "—"}
                     </span>
                   </td>
                   {/* Renda fixa tem taxa contratada; fundo nao. O traco diz

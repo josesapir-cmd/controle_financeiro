@@ -4,7 +4,10 @@ import { resetKeyCache } from "@/lib/crypto";
 import type { Db } from "../adapter";
 import { migrate } from "../migrate.mjs";
 import {
+  arquivarAtivoManual,
+  listAtivosManuais,
   listPosicoes,
+  salvarAtivoManual,
   substituirPosicoes,
   upsertConnection,
 } from "../repository";
@@ -217,5 +220,122 @@ describe("posicoes de investimento", () => {
     expect(papel.amount).toBeNull();
     expect(papel.annualRate).toBeNull();
     expect(papel.dueDate).toBeNull();
+  });
+});
+
+describe("ativos manuais", () => {
+  it("guarda o nome e a nota cifrados", async () => {
+    const id = await salvarAtivoManual(db, {
+      name: "Green FIDC Solar GD",
+      institution: "Oliveira Trust",
+      type: "FIXED_INCOME",
+      subtype: "FIDC",
+      balance: 377098.98,
+      annualRate: 11,
+      valuedAt: "2025-12-31",
+      note: "informe de rendimentos 2025",
+    });
+
+    const [cru] = await db.query<{ name_enc: string; note_enc: string }>(
+      "SELECT name_enc, note_enc FROM manual_investments WHERE id = $1",
+      [id],
+    );
+    expect(cru.name_enc).not.toContain("Green");
+    expect(cru.note_enc).not.toContain("informe");
+
+    const [ativo] = await listAtivosManuais(db);
+    expect(ativo.name).toBe("Green FIDC Solar GD");
+    expect(ativo.note).toBe("informe de rendimentos 2025");
+    expect(ativo.balance).toBe(377098.98);
+    expect(ativo.valuedAt).toBe("2025-12-31");
+    expect(ativo.institution).toBe("Oliveira Trust");
+  });
+
+  it("aceita ativo sem custodiante, que e o caso da cripto em carteira propria", async () => {
+    await salvarAtivoManual(db, {
+      name: "Fade to Space",
+      type: "CRYPTO",
+      balance: 300000,
+      valuedAt: "2026-09-16",
+    });
+
+    const [ativo] = await listAtivosManuais(db);
+    expect(ativo.institution).toBeNull();
+    expect(ativo.balance).toBe(300000);
+  });
+
+  it("nao grava sem nome, sem valor ou sem data de apuracao", async () => {
+    const base = { type: "CRYPTO", balance: 1, valuedAt: "2026-09-16" };
+
+    expect(await salvarAtivoManual(db, { ...base, name: "   " })).toBeNull();
+    expect(
+      await salvarAtivoManual(db, { ...base, name: "x", balance: NaN }),
+    ).toBeNull();
+    expect(
+      await salvarAtivoManual(db, { ...base, name: "x", valuedAt: "" }),
+    ).toBeNull();
+    expect(await listAtivosManuais(db)).toHaveLength(0);
+  });
+
+  it("atualiza sem criar uma segunda linha", async () => {
+    const id = await salvarAtivoManual(db, {
+      name: "Fade to Space",
+      type: "CRYPTO",
+      balance: 300000,
+      valuedAt: "2026-09-16",
+    });
+
+    await salvarAtivoManual(
+      db,
+      {
+        name: "Fade to Space",
+        type: "CRYPTO",
+        balance: 312500,
+        valuedAt: "2026-10-01",
+      },
+      id!,
+    );
+
+    const ativos = await listAtivosManuais(db);
+    expect(ativos).toHaveLength(1);
+    expect(ativos[0].balance).toBe(312500);
+    expect(ativos[0].valuedAt).toBe("2026-10-01");
+  });
+
+  it("nao junta dois ativos de mesmo nome — podem ser dois de verdade", async () => {
+    const base = {
+      name: "Apartamento",
+      type: "REAL_ESTATE",
+      valuedAt: "2026-01-01",
+    };
+    await salvarAtivoManual(db, {
+      ...base,
+      balance: 1200000,
+      institution: "Sao Paulo",
+    });
+    await salvarAtivoManual(db, {
+      ...base,
+      balance: 800000,
+      institution: "Campos do Jordao",
+    });
+
+    expect(await listAtivosManuais(db)).toHaveLength(2);
+  });
+
+  it("arquivado some da lista mas continua no banco", async () => {
+    const id = await salvarAtivoManual(db, {
+      name: "Vendido",
+      type: "CRYPTO",
+      balance: 50000,
+      valuedAt: "2026-01-01",
+    });
+
+    await arquivarAtivoManual(db, id!);
+
+    expect(await listAtivosManuais(db)).toHaveLength(0);
+    const [linha] = await db.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM manual_investments",
+    );
+    expect(linha.n).toBe("1");
   });
 });

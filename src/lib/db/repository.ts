@@ -1,4 +1,9 @@
-import { decryptOptional, encryptOptional, fingerprint } from "@/lib/crypto";
+import {
+  decryptOptional,
+  encrypt,
+  encryptOptional,
+  fingerprint,
+} from "@/lib/crypto";
 import type { Db } from "./adapter";
 
 /**
@@ -1815,4 +1820,146 @@ export async function substituirPosicoes(
   }
 
   return posicoes.length;
+}
+
+/* ==========================================================================
+   Ativos manuais — o patrimonio que o Open Finance nao ve
+   ========================================================================== */
+
+export interface AtivoManualRow {
+  id: string;
+  name: string;
+  institution: string | null;
+  type: string;
+  subtype: string | null;
+  balance: number;
+  amount: number | null;
+  profit: number | null;
+  annualRate: number | null;
+  dueDate: string | null;
+  currency: string;
+  /** Data em que este valor foi apurado — nao a da digitacao. */
+  valuedAt: string;
+  note: string | null;
+}
+
+export interface AtivoManualInput {
+  name: string;
+  institution?: string | null;
+  type: string;
+  subtype?: string | null;
+  balance: number;
+  amount?: number | null;
+  profit?: number | null;
+  annualRate?: number | null;
+  dueDate?: string | null;
+  currency?: string | null;
+  valuedAt: string;
+  note?: string | null;
+}
+
+export async function listAtivosManuais(db: Db): Promise<AtivoManualRow[]> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, name_enc, institution, type, subtype, balance, amount, profit,
+            annual_rate, due_date, currency, valued_at, note_enc
+       FROM manual_investments
+      WHERE archived_at IS NULL
+      ORDER BY balance DESC`,
+  );
+
+  return linhas.map((linha) => ({
+    id: String(linha.id),
+    name: decryptOptional(linha.name_enc as string | null) ?? "(sem nome)",
+    institution: linha.institution ? String(linha.institution) : null,
+    type: String(linha.type),
+    subtype: linha.subtype ? String(linha.subtype) : null,
+    balance: numero(linha.balance),
+    amount:
+      linha.amount === null || linha.amount === undefined
+        ? null
+        : numero(linha.amount),
+    profit:
+      linha.profit === null || linha.profit === undefined
+        ? null
+        : numero(linha.profit),
+    annualRate:
+      linha.annual_rate === null || linha.annual_rate === undefined
+        ? null
+        : numero(linha.annual_rate),
+    dueDate: dia(linha.due_date),
+    currency: String(linha.currency ?? "BRL"),
+    valuedAt: dia(linha.valued_at) ?? "",
+    note: decryptOptional(linha.note_enc as string | null),
+  }));
+}
+
+/**
+ * Cria ou atualiza um ativo manual.
+ *
+ * Sem `id` cria; com `id` atualiza. Nao ha upsert por nome: dois ativos podem
+ * legitimamente se chamar igual em custodias diferentes, e casar por nome
+ * sobrescreveria um com o outro sem avisar.
+ */
+export async function salvarAtivoManual(
+  db: Db,
+  dados: AtivoManualInput,
+  id?: string,
+): Promise<string | null> {
+  const nome = dados.name.trim();
+  if (!nome || !Number.isFinite(dados.balance) || !dados.valuedAt) return null;
+
+  const valores = [
+    encrypt(nome),
+    dados.institution?.trim() || null,
+    dados.type,
+    dados.subtype ?? null,
+    dados.balance,
+    dados.amount ?? null,
+    dados.profit ?? null,
+    dados.annualRate ?? null,
+    dados.dueDate || null,
+    dados.currency ?? "BRL",
+    dados.valuedAt,
+    encryptOptional(dados.note?.trim() || null),
+  ];
+
+  if (id) {
+    if (!UUID.test(id)) return null;
+
+    await db.query(
+      `UPDATE manual_investments
+          SET name_enc = $2, institution = $3, type = $4, subtype = $5, balance = $6,
+              amount = $7, profit = $8, annual_rate = $9, due_date = $10, currency = $11,
+              valued_at = $12, note_enc = $13, updated_at = now()
+        WHERE id = $1`,
+      [id, ...valores],
+    );
+
+    return id;
+  }
+
+  const linhas = await db.query<{ id: string }>(
+    `INSERT INTO manual_investments
+       (name_enc, institution, type, subtype, balance, amount, profit, annual_rate,
+        due_date, currency, valued_at, note_enc)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     RETURNING id`,
+    valores,
+  );
+
+  return linhas[0]?.id ?? null;
+}
+
+/**
+ * Some da tela sem sumir do banco.
+ *
+ * Um ativo vendido nao e um erro de digitacao: o valor que ele teve e o que
+ * havia no patrimonio naquela data, e apagar a linha apagaria a historia junto.
+ */
+export async function arquivarAtivoManual(db: Db, id: string): Promise<void> {
+  if (!UUID.test(id)) return;
+  await db.query(
+    "UPDATE manual_investments SET archived_at = now() WHERE id = $1",
+    [id],
+  );
 }

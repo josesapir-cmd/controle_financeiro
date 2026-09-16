@@ -9,6 +9,16 @@ export interface PapelNaCarteira {
   lucro: number | null;
   taxa: number | null;
   vence: string | null;
+  /**
+   * Digitado a mao, fora do Open Finance.
+   *
+   * Nao e detalhe de exibicao: um numero que ninguem re-sincroniza envelhece
+   * sozinho, e a tela precisa poder dizer isso. Por isso anda junto com o
+   * papel, e nao numa lista paralela de ids.
+   */
+  manual?: boolean;
+  /** So para o manual: quando este valor foi apurado. */
+  avaliadoEm?: string | null;
 }
 
 export interface GrupoDaCarteira {
@@ -27,6 +37,7 @@ export interface GrupoDaCarteira {
  */
 const NOME_DA_CLASSE: Record<string, string> = {
   TREASURY: "Tesouro Direto",
+  FIDC: "FIDC",
   CDB: "CDB",
   LCI: "LCI",
   LCA: "LCA",
@@ -51,6 +62,9 @@ const NOME_DO_TIPO: Record<string, string> = {
   COE: "COE",
   PENSION: "Previdencia",
   ETF: "ETF",
+  CRYPTO: "Cripto",
+  REAL_ESTATE: "Imovel",
+  EQUITY_STAKE: "Participacao",
 };
 
 /** O rotulo mais especifico que existir: subtipo antes de tipo. */
@@ -112,6 +126,9 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
     } else {
       atual.posicoes += 1;
       atual.saldo += papel.saldo;
+      // Basta um membro digitado a mao para o grupo inteiro precisar do aviso:
+      // parte do numero nao se re-sincroniza.
+      atual.manual = atual.manual || papel.manual;
       atual.aportado = somar(atual.aportado, papel.aportado);
       atual.lucro = somar(atual.lucro, papel.lucro);
     }

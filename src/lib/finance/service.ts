@@ -8,6 +8,7 @@ import {
   listChamadas,
   listCompromissos,
   listPartesDaDespesa,
+  listAtivosManuais,
   listPosicoes,
   listRegrasDeCartao,
   listRotulosDeCompra,
@@ -2221,7 +2222,10 @@ export interface Carteira {
  * ainda nao aportado.
  */
 export async function loadCarteira(): Promise<Carteira> {
-  const posicoes = await listPosicoes(db()).catch(() => []);
+  const [posicoes, ativos] = await Promise.all([
+    listPosicoes(db()).catch(() => []),
+    listAtivosManuais(db()).catch(() => []),
+  ]);
 
   const posicoesLidas: PapelNaCarteira[] = posicoes.map((posicao) => ({
     id: posicao.id,
@@ -2237,9 +2241,27 @@ export async function loadCarteira(): Promise<Carteira> {
     vence: posicao.dueDate,
   }));
 
+  // O que a Pluggy nao ve entra aqui, e entra na soma: cota de fundo fechado,
+  // cripto, imovel. Deixar de fora nao deixaria o total neutro — deixaria ele
+  // errado para baixo, com cara de completo.
+  const manuais: PapelNaCarteira[] = ativos.map((ativo) => ({
+    id: `manual:${ativo.id}`,
+    nome: ativo.name,
+    instituicao: ativo.institution || "fora do Open Finance",
+    tipo: ativo.type,
+    subtipo: ativo.subtype,
+    saldo: ativo.balance,
+    aportado: ativo.amount,
+    lucro: ativo.profit,
+    taxa: ativo.annualRate,
+    vence: ativo.dueDate,
+    manual: true,
+    avaliadoEm: ativo.valuedAt,
+  }));
+
   // Agrupa antes de somar qualquer coisa: a corretora manda uma posicao por
   // lote comprado, e o resumo tem que contar instrumentos, nao ordens de compra.
-  const papeis = agruparPapeis(semZerados(posicoesLidas));
+  const papeis = agruparPapeis(semZerados([...posicoesLidas, ...manuais]));
 
   const comLucro = papeis.filter((papel) => papel.lucro !== null);
 

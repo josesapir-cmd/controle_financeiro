@@ -52,6 +52,7 @@ describe("migracoes", () => {
       "fund_commitments",
       "installment_labels",
       "investments",
+      "manual_investments",
       "schema_migrations",
       "sessions",
       "shared_imports",

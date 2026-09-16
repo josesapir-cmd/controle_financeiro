@@ -47,8 +47,18 @@ describe("classeDoPapel", () => {
   it("mostra o codigo cru em vez de inventar um nome", () => {
     // Um codigo desconhecido aparecendo na tela e um pedido de traducao; um
     // "Outros" generico esconderia que existe algo novo.
-    expect(classeDoPapel("CRYPTO", "BITCOIN")).toBe("BITCOIN");
-    expect(classeDoPapel("CRYPTO", null)).toBe("CRYPTO");
+    expect(classeDoPapel("ESTRUTURADO", "BOX_DE_3_PONTAS")).toBe(
+      "BOX_DE_3_PONTAS",
+    );
+    expect(classeDoPapel("ESTRUTURADO", null)).toBe("ESTRUTURADO");
+  });
+
+  it("traduz tambem as classes que so existem em ativo manual", () => {
+    // Cripto, imovel e participacao nao chegam por Open Finance nenhum; sao
+    // digitadas, e mesmo assim precisam de nome na tabela de classes.
+    expect(classeDoPapel("CRYPTO", null)).toBe("Cripto");
+    expect(classeDoPapel("REAL_ESTATE", null)).toBe("Imovel");
+    expect(classeDoPapel("FIXED_INCOME", "FIDC")).toBe("FIDC");
   });
 });
 
