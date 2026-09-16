@@ -3,7 +3,16 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetKeyCache } from "@/lib/crypto";
 import type { Db } from "../adapter";
 import { migrate } from "../migrate.mjs";
-import { listCategorias, listCentrosDeCusto, listLabels, setLabel } from "../repository";
+import {
+  acharOuCriarCategoria,
+  criarCentroDeCusto,
+  listCategorias,
+  listCentrosDeCusto,
+  listLabels,
+  salvarCategoria,
+  salvarCentroDeCusto,
+  setLabel,
+} from "../repository";
 
 /**
  * A migracao que enxugou a taxonomia para dez categorias.
@@ -141,5 +150,69 @@ describe("enxugamento da taxonomia", () => {
 
     await expect(migrate(executor)).resolves.toEqual([]);
     expect((await listCategorias(db)).map((c) => c.name).sort()).toEqual(antes);
+  });
+});
+
+describe("renomear sem perder o resto", () => {
+  beforeEach(aplicarEnxugamento);
+
+  it("troca o nome do centro sem apagar orcamento, datas e nota", async () => {
+    // O bug que isto impede: `salvarCentroDeCusto` gravava nota, datas e
+    // orcamento incondicionalmente. Um formulario que so renomeia mandaria
+    // apenas o nome, e os outros campos iriam a nulo — calados, porque gravar
+    // nulo por cima e uma escrita bem-sucedida.
+    const categoria = await acharOuCriarCategoria(db, "Viagens", "despesa");
+    const id = await criarCentroDeCusto(db, categoria!, "Bariloche");
+
+    await salvarCentroDeCusto(db, id!, {
+      name: "Bariloche",
+      note: "ski com a familia",
+      startsOn: "2026-07-10",
+      endsOn: "2026-07-24",
+      budget: 40000,
+    });
+
+    await salvarCentroDeCusto(db, id!, { name: "Bariloche 2026" });
+
+    const [centro] = (await listCentrosDeCusto(db)).filter((c) => c.id === id);
+    expect(centro.name).toBe("Bariloche 2026");
+    expect(centro.note).toBe("ski com a familia");
+    expect(centro.startsOn).toBe("2026-07-10");
+    expect(centro.endsOn).toBe("2026-07-24");
+    expect(centro.budget).toBe(40000);
+  });
+
+  it("passar nulo continua limpando, que e diferente de nao passar", async () => {
+    const categoria = await acharOuCriarCategoria(db, "Viagens", "despesa");
+    const id = await criarCentroDeCusto(db, categoria!, "Bariloche");
+
+    await salvarCentroDeCusto(db, id!, { name: "Bariloche", budget: 40000, note: "ski" });
+    await salvarCentroDeCusto(db, id!, { budget: null });
+
+    const [centro] = (await listCentrosDeCusto(db)).filter((c) => c.id === id);
+    expect(centro.budget).toBeNull();
+    expect(centro.note).toBe("ski");
+  });
+
+  it("nome vazio nao apaga o nome que existe", async () => {
+    const categoria = await acharOuCriarCategoria(db, "Viagens", "despesa");
+    const id = await criarCentroDeCusto(db, categoria!, "Bariloche");
+
+    await salvarCentroDeCusto(db, id!, { name: "   " });
+
+    const [centro] = (await listCentrosDeCusto(db)).filter((c) => c.id === id);
+    expect(centro.name).toBe("Bariloche");
+  });
+
+  it("renomear a categoria nao mexe no tipo dela", async () => {
+    // A categoria Investimentos e `kind: investimento` justamente para nao
+    // aparecer nos relatorios de despesa. Renomear nao pode rebaixa-la.
+    const id = await acharOuCriarCategoria(db, "Investimentos", "investimento");
+
+    await salvarCategoria(db, id!, { name: "Aportes" });
+
+    const categoria = (await listCategorias(db)).find((c) => c.id === id)!;
+    expect(categoria.name).toBe("Aportes");
+    expect(categoria.kind).toBe("investimento");
   });
 });

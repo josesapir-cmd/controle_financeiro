@@ -966,20 +966,30 @@ export async function salvarCentroDeCusto(
 ): Promise<void> {
   if (!UUID.test(id)) return;
 
+  // Ausente e diferente de nulo: quem nao passou o campo nao quis mexer nele,
+  // quem passou nulo quis limpar. Sem essa distincao um formulario que so
+  // renomeia apagaria junto o orcamento, as datas e a nota — calado, porque
+  // gravar nulo por cima e uma escrita bem-sucedida.
+  const tem = (campo: keyof typeof valores) => campo in valores;
+
   await db.query(
     `UPDATE cost_centers
         SET name = COALESCE(NULLIF(trim($2), ''), name),
-            note = $3,
-            starts_on = $4,
-            ends_on = $5,
-            budget = $6
+            note = CASE WHEN $3 THEN $4 ELSE note END,
+            starts_on = CASE WHEN $5 THEN $6 ELSE starts_on END,
+            ends_on = CASE WHEN $7 THEN $8 ELSE ends_on END,
+            budget = CASE WHEN $9 THEN $10 ELSE budget END
       WHERE id = $1`,
     [
       id,
       valores.name ?? "",
+      tem("note"),
       valores.note?.trim() || null,
+      tem("startsOn"),
       valores.startsOn || null,
+      tem("endsOn"),
       valores.endsOn || null,
+      tem("budget"),
       valores.budget ?? null,
     ],
   );

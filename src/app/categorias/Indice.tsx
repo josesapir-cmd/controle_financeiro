@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { IconeDeCategoria } from "@/components/IconeDeCategoria";
 import type { CategoriaTotal, CentroTotal } from "@/lib/finance/centros";
-import { adicionarCentro } from "./actions";
+import { adicionarCentro, renomearCategoria, renomearCentro } from "./actions";
 
 /**
  * Indice de categorias em blocos de cor, com as subcategorias da categoria
@@ -41,6 +41,111 @@ function periodo(centro: CentroTotal): string | null {
     return `${formatar(centro.startsOn)} – ${formatar(centro.endsOn)}`;
   }
   return formatar((centro.startsOn ?? centro.endsOn) as string);
+}
+
+/**
+ * Trocar o nome no lugar onde ele esta escrito.
+ *
+ * Sem tela de edicao e sem modal: o nome ja esta ali, e o caminho mais curto
+ * entre ler e corrigir e o proprio texto virar campo. O mesmo componente serve
+ * categoria e subcategoria porque a operacao e a mesma — muda so a acao e o
+ * tamanho da letra.
+ *
+ * Escape desiste, Enter salva. Sair do campo NAO salva: um clique fora e tao
+ * facilmente um "deixa pra la" quanto um "pronto", e gravar na duvida e gravar
+ * o que ninguem pediu.
+ *
+ * O botao de renomear so aparece no hover e no foco do teclado. Ele nao pode
+ * sumir para quem navega por Tab, que e o que `:focus-within` garante.
+ */
+function Renomear({
+  id,
+  nome,
+  acao,
+  classe,
+  rotulo,
+}: {
+  id: string;
+  nome: string;
+  /** Server action que grava so o nome. */
+  acao: (formData: FormData) => void;
+  /** Classe do texto que o campo substitui, para nao mudar de tamanho ao abrir. */
+  classe: string;
+  rotulo: string;
+}) {
+  const [editando, setEditando] = useState(false);
+
+  if (!editando) {
+    return (
+      <span className="ren">
+        <span className={classe}>{nome}</span>
+        <button
+          type="button"
+          className="ren-abrir"
+          onClick={() => setEditando(true)}
+          aria-label={rotulo}
+          title={rotulo}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden
+          >
+            <path
+              d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    // A classe do texto vai no FORMULARIO, e nao no campo. Posta no campo ela
+    // perderia para `input[type="text"]` do sistema visual — um seletor de
+    // elemento mais classe vence uma classe sozinha — e o nome mudaria de
+    // tamanho na hora de editar. No formulario ela so define a fonte, e o campo
+    // herda.
+    <form
+      action={acao}
+      className={`ren ren-editando ${classe}`}
+      onSubmit={() => setEditando(false)}
+    >
+      <input type="hidden" name="id" value={id} />
+      <input
+        type="text"
+        name="name"
+        defaultValue={nome}
+        // eslint-disable-next-line jsx-a11y/no-autofocus
+        autoFocus
+        aria-label={rotulo}
+        onKeyDown={(evento) => {
+          if (evento.key === "Escape") setEditando(false);
+        }}
+      />
+      <button
+        type="submit"
+        className="ren-ok"
+        aria-label="Salvar nome"
+        title="Salvar"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path
+            d="m5 13 4 4L19 7"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+    </form>
+  );
 }
 
 export function Indice({
@@ -171,7 +276,13 @@ function Painel({
           <IconeDeCategoria nome={categoria.name} tamanho={34} animar />
         </span>
         <div>
-          <div className="cat-painel-nome">{categoria.name}</div>
+          <Renomear
+            id={categoria.id}
+            nome={categoria.name}
+            acao={renomearCategoria}
+            classe="cat-painel-nome"
+            rotulo={`Renomear a categoria ${categoria.name}`}
+          />
           <div className="account-meta">
             {categoria.centros.length}{" "}
             {categoria.centros.length === 1 ? "subcategoria" : "subcategorias"} ·{" "}
@@ -198,7 +309,13 @@ function Painel({
 
           return (
             <div key={centro.id} className="sub-quadrado">
-              <span className="sub-nome">{centro.name}</span>
+              <Renomear
+                id={centro.id}
+                nome={centro.name}
+                acao={renomearCentro}
+                classe="sub-nome"
+                rotulo={`Renomear a subcategoria ${centro.name}`}
+              />
               <span className="sub-valor">{MES.format(centro.sent)}</span>
               <span className="sub-meta">
                 {janela ??

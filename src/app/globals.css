@@ -2589,6 +2589,119 @@ ul.centros {
   font-size: 12px;
 }
 
+/* ==========================================================================
+   Renomear no lugar
+   O nome ja esta escrito na tela; o caminho mais curto entre ler e corrigir e
+   o proprio texto virar campo.
+   ========================================================================== */
+
+.ren {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* No quadrado da subcategoria era o nome que empurrava o resto para o pe com
+   `margin-bottom: auto`; agora o filho do flex e o involucro, e o empurrao
+   precisa mudar de dono junto. */
+.sub-quadrado > .ren {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: auto;
+}
+
+.sub-quadrado > .ren > .sub-nome {
+  margin-bottom: 0;
+}
+
+/* Visivel sempre, e nao so no hover: no celular nao existe passar por cima, e
+   um lapis que so aparece com mouse e um lapis que metade do uso nao tem.
+   Apagado o bastante para nao competir com o nome. */
+.ren-abrir,
+.ren-ok {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--text-soft);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  opacity: 0.5;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.ren:hover .ren-abrir,
+.ren-abrir:focus-visible {
+  color: var(--primary);
+  background: var(--bg-weak);
+  opacity: 1;
+}
+
+.ren-ok {
+  color: var(--primary);
+  opacity: 1;
+}
+
+.ren-ok:hover {
+  background: var(--bg-weak);
+}
+
+.ren-editando {
+  flex: 1;
+  align-items: center;
+  width: 100%;
+}
+
+/* Nome de categoria e uma expressao curta. Deixar o campo tomar a largura do
+   cabecalho daria uma caixa enorme para escrever "Alimentacao". */
+.cat-painel-topo .ren-editando {
+  max-width: 24rem;
+}
+
+/* No quadrado da subcategoria o cartao tem pouco mais de 130px: lado a lado,
+   sobram uns 77px para o campo, e nem o nome que se esta editando cabe.
+   Empilhados, o campo fica com a largura inteira do cartao. */
+.sub-quadrado > .ren-editando {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.sub-quadrado > .ren-editando .ren-ok {
+  width: 100%;
+}
+
+/* O recorte de linha da classe do nome nao serve a um formulario, e
+   `-webkit-box` ainda desmancharia o flex. */
+.ren-editando {
+  display: flex;
+  -webkit-line-clamp: none;
+  line-clamp: none;
+  overflow: visible;
+}
+
+.ren-editando input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  /* `font: inherit` pega o tamanho e o peso do nome pelo formulario. Altura
+     automatica porque a de 40px do sistema visual foi feita para formulario de
+     cadastro, e aqui o campo esta no lugar de uma linha de texto. */
+  font: inherit;
+  height: auto;
+  padding: 3px 8px;
+  background: var(--bg-white);
+  border: 1px solid var(--bg-sub);
+  border-radius: 6px;
+  box-shadow: none;
+}
+
 .cat-sem-centro {
   margin: 16px 0 0;
   padding: 10px 14px;

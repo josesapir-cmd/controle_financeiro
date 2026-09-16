@@ -26,9 +26,25 @@ function revalidar() {
   for (const rota of ["/categorias", "/contrapartes", "/"]) revalidatePath(rota);
 }
 
+const TIPOS: readonly TipoDeCategoria[] = [
+  "despesa",
+  "receita",
+  "movimentacao",
+  "investimento",
+  "reembolso",
+];
+
+/**
+ * Le o tipo do formulario, caindo em despesa so quando nao veio nada.
+ *
+ * A lista tem que acompanhar `TipoDeCategoria`. Enquanto faltavam
+ * "investimento" e "reembolso" aqui, qualquer formulario que reenviasse o tipo
+ * de uma categoria dessas a rebaixava para despesa — e a categoria
+ * Investimentos voltaria a aparecer nos relatorios de gasto, calada.
+ */
 function tipo(valor: FormDataEntryValue | null): TipoDeCategoria {
-  const bruto = String(valor ?? "despesa");
-  return bruto === "receita" || bruto === "movimentacao" ? bruto : "despesa";
+  const bruto = String(valor ?? "");
+  return TIPOS.find((t) => t === bruto) ?? "despesa";
 }
 
 /** Valor em reais digitado em pt-BR: aceita virgula e devolve null se vazio. */
@@ -116,5 +132,38 @@ export async function alternarCentro(formData: FormData): Promise<void> {
     id,
     String(formData.get("arquivado") ?? "") !== "sim",
   );
+  revalidar();
+}
+
+/**
+ * Renomear e so renomear.
+ *
+ * Separado de `editarCategoria` e `editarCentro` de proposito: aqueles gravam o
+ * registro inteiro, e reaproveita-los para trocar o nome exigiria que a tela
+ * reenviasse tipo, orcamento, datas e nota so para nao perde-los. Uma acao que
+ * toca um campo so nao tem como apagar os outros por engano.
+ *
+ * O nome vale para todo o historico de uma vez: a contraparte aponta para o
+ * registro, nao guarda uma copia do nome.
+ */
+export async function renomearCategoria(formData: FormData): Promise<void> {
+  await requireSession();
+
+  const id = String(formData.get("id") ?? "");
+  const nome = String(formData.get("name") ?? "").trim();
+  if (!id || !nome) return;
+
+  await salvarCategoria(fromPostgres(getSql()), id, { name: nome });
+  revalidar();
+}
+
+export async function renomearCentro(formData: FormData): Promise<void> {
+  await requireSession();
+
+  const id = String(formData.get("id") ?? "");
+  const nome = String(formData.get("name") ?? "").trim();
+  if (!id || !nome) return;
+
+  await salvarCentroDeCusto(fromPostgres(getSql()), id, { name: nome });
   revalidar();
 }
