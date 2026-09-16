@@ -4904,11 +4904,26 @@ ul.produtos {
   border-radius: 999px;
 }
 
+/* O rotulo dentro do botao de abrir: um item de flex so, para o conteudo
+   voltar a ser texto corrido — com o espaco antes do separador preservado e o
+   badge assentando na linha de base, como nas linhas que nao abrem. */
+.gr-rotulo {
+  min-width: 0;
+}
+
 /* A categoria aberta vira cabecalho do proprio grupo: e o que amarra o bloco
    recuado abaixo dela ao titulo que o abriu. */
 .gr-arvore tbody.aberto > tr:first-child > th,
 .gr-arvore tbody.aberto > tr:first-child > td {
   background: var(--bg-weak);
+}
+
+/* O badge e cinza-fraco, e o cabecalho do grupo aberto tambem: um em cima do
+   outro, a pilula some e a contagem vira um numero solto justamente na linha
+   que mais interessa. Um tom a mais devolve a borda. */
+.gr-arvore tbody.aberto > tr:first-child .gr-badge,
+.gr-arvore tbody tr:hover .gr-badge {
+  background: var(--bg-soft);
 }
 
 /* O realce de linha inteira do app so pinta os `td`. Aqui a primeira celula e

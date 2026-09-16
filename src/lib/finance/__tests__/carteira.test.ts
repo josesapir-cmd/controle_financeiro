@@ -130,8 +130,9 @@ describe("agruparPapeis", () => {
     expect(linha.vence).toBe("2084-12-15");
   });
 
-  it("nao junta o mesmo titulo em custodias diferentes", () => {
-    // Sao dois resgates distintos; junta-los esconderia onde o dinheiro esta.
+  it("soma as custodias numa linha e guarda cada uma por dentro", () => {
+    // O total do instrumento e a pergunta de cima; onde esta custodiado e a de
+    // baixo, e so importa na hora de resgatar.
     const linhas = agruparPapeis([
       papel({
         id: "a",
@@ -149,8 +150,64 @@ describe("agruparPapeis", () => {
       }),
     ]);
 
-    expect(linhas).toHaveLength(2);
-    expect(linhas.map((l) => l.instituicao)).toEqual(["XP", "BTG"]);
+    expect(linhas).toHaveLength(1);
+    expect(linhas[0].saldo).toBe(300);
+    expect(linhas[0].custodias.map((c) => [c.instituicao, c.saldo])).toEqual([
+      ["XP", 200],
+      ["BTG", 100],
+    ]);
+  });
+
+  it("nao escolhe uma custodia para representar as outras", () => {
+    const [linha] = agruparPapeis([
+      papel({ id: "a", nome: "NTN-B", instituicao: "BTG", saldo: 100 }),
+      papel({ id: "b", nome: "NTN-B", instituicao: "XP", saldo: 900 }),
+    ]);
+
+    // Escrever "XP" ali diria que os 1.000 estao la, e 100 estao no BTG.
+    expect(linha.instituicao).toBe("2 custodias");
+  });
+
+  it("com uma custodia so, o nome dela e o da linha", () => {
+    const [linha] = agruparPapeis([
+      papel({ id: "a", nome: "CDB", instituicao: "BTG", saldo: 100 }),
+      papel({ id: "b", nome: "CDB", instituicao: "BTG", saldo: 200 }),
+    ]);
+
+    expect(linha.instituicao).toBe("BTG");
+    expect(linha.custodias).toHaveLength(1);
+    expect(linha.custodias[0].posicoes).toBe(2);
+  });
+
+  it("pondera a taxa dentro de cada custodia, e nao so no total", () => {
+    const [linha] = agruparPapeis([
+      papel({
+        id: "a",
+        nome: "CDB",
+        instituicao: "BTG",
+        saldo: 1000,
+        taxa: 10,
+      }),
+      papel({
+        id: "b",
+        nome: "CDB",
+        instituicao: "BTG",
+        saldo: 3000,
+        taxa: 14,
+      }),
+      papel({ id: "c", nome: "CDB", instituicao: "XP", saldo: 1000, taxa: 20 }),
+    ]);
+
+    const porNome = Object.fromEntries(
+      linha.custodias.map((c) => [c.instituicao, c.taxa]),
+    );
+    expect(porNome.BTG).toBeCloseTo(13, 10);
+    expect(porNome.XP).toBe(20);
+    // O total pondera as cinco mil, nao a media das duas custodias.
+    expect(linha.taxa).toBeCloseTo(
+      (10 * 1000 + 14 * 3000 + 20 * 1000) / 5000,
+      10,
+    );
   });
 
   it("nao junta vencimentos diferentes do mesmo emissor", () => {

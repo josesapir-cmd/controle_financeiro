@@ -1,6 +1,7 @@
 import { dataCompleta } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
 import type { Carteira } from "@/lib/finance/service";
+import { TabelaDePapeis } from "./TabelaDePapeis";
 
 /**
  * A carteira que veio do Open Finance.
@@ -13,36 +14,6 @@ import type { Carteira } from "@/lib/finance/service";
  * Uma matiz so nas barras: o nome da classe ja esta escrito na linha, e dar uma
  * cor a cada uma acrescentaria arco-iris, nao informacao.
  */
-/**
- * Marca do ativo digitado a mao.
- *
- * Um losango vazado, nao um emoji: a tabela inteira e texto e numero, e um
- * emoji colorido no meio pesaria mais que o aviso que ele da. O que a marca
- * precisa dizer e "este numero nao se atualiza sozinho".
- *
- * O aviso vai tambem em texto, e nao so no `title`: quem le a tela por leitor
- * de tela nao passa o mouse em cima de nada.
- */
-function MarcaManual({ avaliadoEm }: { avaliadoEm?: string | null }) {
-  const legenda = avaliadoEm
-    ? `Ativo digitado a mao — valor apurado em ${dataCompleta(avaliadoEm)}`
-    : "Ativo digitado a mao, fora do Open Finance";
-
-  return (
-    <span className="gr-manual" title={legenda}>
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <path
-          d="M12 3 21 12 12 21 3 12Z"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <span className="sr-only">{legenda}</span>
-    </span>
-  );
-}
-
 export function CarteiraDeInvestimentos({ carteira }: { carteira: Carteira }) {
   if (carteira.papeis.length === 0) {
     return (
@@ -198,81 +169,7 @@ export function CarteiraDeInvestimentos({ carteira }: { carteira: Carteira }) {
         </div>
       </figure>
 
-      <figure className="gr">
-        <figcaption className="gr-titulo">
-          Papeis · uma linha por instrumento, vencimento e custodia
-        </figcaption>
-        <div className="gr-rolagem">
-          <table className="gr-tabela">
-            <thead>
-              <tr>
-                <th scope="col">Papel</th>
-                <th scope="col" className="gr-so-largo">
-                  Vencimento
-                </th>
-                <th scope="col" className="gr-num gr-so-largo">
-                  Taxa
-                </th>
-                <th scope="col" className="gr-num gr-so-largo">
-                  Lucro
-                </th>
-                <th scope="col" className="gr-num">
-                  Valor
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {carteira.papeis.map((papel) => (
-                <tr key={papel.id}>
-                  <th scope="row">
-                    {papel.manual ? (
-                      <MarcaManual avaliadoEm={papel.avaliadoEm} />
-                    ) : null}
-                    {papel.nome}
-                    <span className="account-meta"> · {papel.instituicao}</span>
-                    {/* So aparece quando ha o que somar: um "1" em toda linha
-                        seria ruido, e o silencio ja diz posicao unica. */}
-                    {papel.posicoes > 1 ? (
-                      <span
-                        className="gr-badge"
-                        title={`${papel.posicoes} posicoes somadas`}
-                      >
-                        {papel.posicoes}
-                      </span>
-                    ) : null}
-                  </th>
-                  <td className="gr-so-largo">
-                    <span className="gr-data">
-                      {papel.vence
-                        ? dataCompleta(papel.vence)
-                        : papel.manual && papel.avaliadoEm
-                          ? `avaliado em ${dataCompleta(papel.avaliadoEm)}`
-                          : "—"}
-                    </span>
-                  </td>
-                  {/* Renda fixa tem taxa contratada; fundo nao. O traco diz
-                      "nao se aplica", e nao "zero". */}
-                  <td className="gr-num gr-so-largo">
-                    {papel.taxa !== null ? `${papel.taxa.toFixed(2)}%` : "—"}
-                  </td>
-                  <td className="gr-num gr-so-largo">
-                    {papel.lucro !== null ? (
-                      <span
-                        className={papel.lucro < 0 ? "negative" : "positive"}
-                      >
-                        {formatBRL(papel.lucro)}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="gr-num">{formatBRL(papel.saldo)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </figure>
+      <TabelaDePapeis papeis={carteira.papeis} />
     </>
   );
 }

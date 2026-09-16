@@ -91,24 +91,35 @@ export function agrupar(
   return [...mapa.values()].sort((a, b) => b.total - a.total);
 }
 
-/** Um instrumento, somando as posicoes que a corretora manda separadas. */
-export interface PapelAgrupado extends PapelNaCarteira {
-  /** Quantas posicoes a corretora mandou para este mesmo instrumento. */
+/** Onde um instrumento esta custodiado, e quanto dele esta ali. */
+export interface CustodiaDoPapel {
+  instituicao: string;
+  saldo: number;
+  lucro: number | null;
+  taxa: number | null;
   posicoes: number;
 }
 
+/** Um instrumento, somando as posicoes que a corretora manda separadas. */
+export interface PapelAgrupado extends PapelNaCarteira {
+  /** Quantas posicoes foram somadas, contando todas as custodias. */
+  posicoes: number;
+  /** Sempre com pelo menos uma; mais de uma e o que merece expandir. */
+  custodias: CustodiaDoPapel[];
+}
+
 /**
- * Uma linha por instrumento, vencimento e custodia.
+ * Uma linha por instrumento, com as custodias por dentro.
  *
  * A Pluggy manda uma posicao por lote comprado: cinco NTN-B 2084 compradas em
  * datas diferentes chegam como cinco linhas identicas no nome e no vencimento,
  * separadas so pelo valor. Isso e verdade contabil e ruido na leitura — quem
- * olha a tela quer saber quanto tem em NTN-B 2084 no BTG, nao em qual ordem
- * comprou.
+ * olha a tela quer saber quanto tem em Renda+ 2065, nao em qual ordem comprou.
  *
- * A custodia entra na chave de proposito: o MESMO titulo em duas corretoras sao
- * duas posicoes que se resgatam separado, e junta-las esconderia onde o dinheiro
- * esta.
+ * A custodia NAO entra na chave, mas tambem nao se perde: ela vira o nivel de
+ * dentro. O total do instrumento e a pergunta de cima ("quanto tenho nisso"),
+ * e onde esta custodiado e a pergunta de baixo — que so importa na hora de
+ * resgatar, e por isso pode ficar guardada atras de um clique.
  */
 export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
   const mapa = new Map<string, PapelAgrupado>();
@@ -117,40 +128,87 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
   // esta na mao.
   const taxaPonderada = new Map<string, { soma: number; peso: number }>();
 
+  function ponderar(chave: string, papel: PapelNaCarteira) {
+    // So as posicoes que informam taxa entram na media. Tratar a que nao
+    // informa como zero diria que ela rendeu zero, que e outra afirmacao.
+    if (papel.taxa === null || papel.saldo === 0) return;
+
+    const acumulado = taxaPonderada.get(chave) ?? { soma: 0, peso: 0 };
+    acumulado.soma += papel.taxa * papel.saldo;
+    acumulado.peso += papel.saldo;
+    taxaPonderada.set(chave, acumulado);
+  }
+
   for (const papel of papeis) {
-    const chave = `${papel.nome}|${papel.vence ?? ""}|${papel.instituicao}`;
+    const chave = `${papel.nome}|${papel.vence ?? ""}`;
+    const chaveDaCustodia = `${chave}|${papel.instituicao}`;
     const atual = mapa.get(chave);
 
     if (!atual) {
-      mapa.set(chave, { ...papel, posicoes: 1 });
+      mapa.set(chave, {
+        ...papel,
+        posicoes: 1,
+        custodias: [
+          {
+            instituicao: papel.instituicao,
+            saldo: papel.saldo,
+            lucro: papel.lucro,
+            taxa: papel.taxa,
+            posicoes: 1,
+          },
+        ],
+      });
     } else {
       atual.posicoes += 1;
       atual.saldo += papel.saldo;
+      atual.aportado = somar(atual.aportado, papel.aportado);
+      atual.lucro = somar(atual.lucro, papel.lucro);
       // Basta um membro digitado a mao para o grupo inteiro precisar do aviso:
       // parte do numero nao se re-sincroniza.
       atual.manual = atual.manual || papel.manual;
-      atual.aportado = somar(atual.aportado, papel.aportado);
-      atual.lucro = somar(atual.lucro, papel.lucro);
+
+      const custodia = atual.custodias.find(
+        (c) => c.instituicao === papel.instituicao,
+      );
+      if (custodia) {
+        custodia.posicoes += 1;
+        custodia.saldo += papel.saldo;
+        custodia.lucro = somar(custodia.lucro, papel.lucro);
+      } else {
+        atual.custodias.push({
+          instituicao: papel.instituicao,
+          saldo: papel.saldo,
+          lucro: papel.lucro,
+          taxa: papel.taxa,
+          posicoes: 1,
+        });
+      }
     }
 
-    // So as posicoes que informam taxa entram na media. Tratar a que nao
-    // informa como zero diria que ela rendeu zero, que e outra afirmacao.
-    if (papel.taxa !== null && papel.saldo !== 0) {
-      const acumulado = taxaPonderada.get(chave) ?? { soma: 0, peso: 0 };
-      acumulado.soma += papel.taxa * papel.saldo;
-      acumulado.peso += papel.saldo;
-      taxaPonderada.set(chave, acumulado);
-    }
+    ponderar(chave, papel);
+    ponderar(chaveDaCustodia, papel);
   }
 
-  // A taxa do grupo e a media ponderada pelo saldo — a taxa daquela posicao
-  // inteira, e nao a de um lote escolhido a esmo.
+  // A taxa e a media ponderada pelo saldo — a taxa daquela posicao inteira, e
+  // nao a de um lote escolhido a esmo.
   for (const [chave, grupo] of mapa) {
-    const acumulado = taxaPonderada.get(chave);
-    grupo.taxa =
-      acumulado && acumulado.peso !== 0
-        ? acumulado.soma / acumulado.peso
-        : null;
+    const media = (k: string) => {
+      const a = taxaPonderada.get(k);
+      return a && a.peso !== 0 ? a.soma / a.peso : null;
+    };
+
+    grupo.taxa = media(chave);
+    for (const custodia of grupo.custodias) {
+      custodia.taxa = media(`${chave}|${custodia.instituicao}`);
+    }
+
+    grupo.custodias.sort((a, b) => b.saldo - a.saldo);
+    // Com uma custodia so, o nome dela e o do grupo; com varias, dizer o nome
+    // de uma seria escolher uma para representar as outras.
+    grupo.instituicao =
+      grupo.custodias.length === 1
+        ? grupo.custodias[0].instituicao
+        : `${grupo.custodias.length} custodias`;
   }
 
   return [...mapa.values()].sort((a, b) => b.saldo - a.saldo);

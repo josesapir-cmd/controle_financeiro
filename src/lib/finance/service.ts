@@ -2261,7 +2261,8 @@ export async function loadCarteira(): Promise<Carteira> {
 
   // Agrupa antes de somar qualquer coisa: a corretora manda uma posicao por
   // lote comprado, e o resumo tem que contar instrumentos, nao ordens de compra.
-  const papeis = agruparPapeis(semZerados([...posicoesLidas, ...manuais]));
+  const porCustodia = semZerados([...posicoesLidas, ...manuais]);
+  const papeis = agruparPapeis(porCustodia);
 
   const comLucro = papeis.filter((papel) => papel.lucro !== null);
 
@@ -2270,7 +2271,10 @@ export async function loadCarteira(): Promise<Carteira> {
     porClasse: agrupar(papeis, (papel) =>
       classeDoPapel(papel.tipo, papel.subtipo),
     ),
-    porInstituicao: agrupar(papeis, (papel) => papel.instituicao),
+    // Por instituicao sai da lista ANTES do agrupamento: depois dele um papel
+    // custodiado em dois lugares vira uma linha so, e somar essa linha inteira
+    // para uma das duas daria a ela o dinheiro que esta na outra.
+    porInstituicao: agrupar(porCustodia, (papel) => papel.instituicao),
     total: papeis.reduce((soma, papel) => soma + papel.saldo, 0),
     // `null` quando NENHUM papel informa lucro, e nao zero: zero diria que a
     // carteira nao rendeu nada, que e outra afirmacao.
