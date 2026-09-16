@@ -24,7 +24,8 @@
     "produtos": "node scripts/probe-produtos.mjs",
     "cartao": "node scripts/inspecionar-cartao.mjs",
     "recebidos": "node scripts/recebidos.mjs",
-    "ativo": "node scripts/ativo.mjs"
+    "ativo": "node scripts/ativo.mjs",
+    "carteira": "node scripts/carteira.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

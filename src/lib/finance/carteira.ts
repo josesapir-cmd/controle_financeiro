@@ -121,6 +121,22 @@ export interface PapelAgrupado extends PapelNaCarteira {
  * e onde esta custodiado e a pergunta de baixo — que so importa na hora de
  * resgatar, e por isso pode ficar guardada atras de um clique.
  */
+/**
+ * A chave do instrumento, indiferente ao que nao o distingue.
+ *
+ * O nome vem digitado pela corretora, e a mesma NTN-B chega ora com dois
+ * espacos, ora com um, ora em caixa diferente. Isso nao faz dela outro papel —
+ * mas separa as linhas na tela, e o sintoma e justamente o que se queria
+ * resolver: lotes identicos que nao somam.
+ *
+ * O vencimento continua exato. Ele e o que separa de verdade dois titulos de
+ * nome parecido, e normalizar data seria deixar de distinguir o que distingue.
+ */
+function chaveDoInstrumento(papel: PapelNaCarteira): string {
+  const nome = papel.nome.trim().replace(/\s+/g, " ").toLocaleUpperCase("pt-BR");
+  return `${nome}|${papel.vence ?? ""}`;
+}
+
 export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
   const mapa = new Map<string, PapelAgrupado>();
   // Numerador e denominador da media de taxa, acumulados junto com o resto:
@@ -140,7 +156,7 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
   }
 
   for (const papel of papeis) {
-    const chave = `${papel.nome}|${papel.vence ?? ""}`;
+    const chave = chaveDoInstrumento(papel);
     const chaveDaCustodia = `${chave}|${papel.instituicao}`;
     const atual = mapa.get(chave);
 

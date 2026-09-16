@@ -321,6 +321,64 @@ describe("agruparPapeis", () => {
     expect(linha.taxa).toBe(10);
   });
 
+  it("junta lotes que so diferem em espaco ou caixa no nome", () => {
+    // O que a corretora manda nao e estavel: a mesma NTN-B chega ora com dois
+    // espacos, ora em caixa diferente. Isso nao faz dela outro papel, mas
+    // separava as linhas — o sintoma exato que o agrupamento existe para tirar.
+    const linhas = agruparPapeis([
+      papel({
+        id: "a",
+        nome: "TESOURO DIRETO - NTN-B1",
+        instituicao: "BTG",
+        vence: "2084-12-15",
+        saldo: 100,
+      }),
+      papel({
+        id: "b",
+        nome: "TESOURO  DIRETO - NTN-B1 ",
+        instituicao: "BTG",
+        vence: "2084-12-15",
+        saldo: 200,
+      }),
+      papel({
+        id: "c",
+        nome: "Tesouro Direto - NTN-B1",
+        instituicao: "BTG",
+        vence: "2084-12-15",
+        saldo: 300,
+      }),
+    ]);
+
+    expect(linhas).toHaveLength(1);
+    expect(linhas[0].saldo).toBe(600);
+    expect(linhas[0].posicoes).toBe(3);
+    // O nome exibido e o do primeiro lote, cru: normalizar a chave nao e
+    // reescrever o que a corretora chamou o papel.
+    expect(linhas[0].nome).toBe("TESOURO DIRETO - NTN-B1");
+  });
+
+  it("nao junta vencimentos diferentes, mesmo com o nome identico", () => {
+    // A data e o que separa de verdade dois titulos de nome parecido.
+    const linhas = agruparPapeis([
+      papel({
+        id: "a",
+        nome: "NTN-B",
+        instituicao: "BTG",
+        vence: "2084-12-15",
+        saldo: 100,
+      }),
+      papel({
+        id: "b",
+        nome: "NTN-B",
+        instituicao: "BTG",
+        vence: "2065-12-15",
+        saldo: 200,
+      }),
+    ]);
+
+    expect(linhas).toHaveLength(2);
+  });
+
   it("ordena do maior saldo para o menor", () => {
     const linhas = agruparPapeis([
       papel({ id: "a", nome: "Pequeno", instituicao: "BTG", saldo: 10 }),
