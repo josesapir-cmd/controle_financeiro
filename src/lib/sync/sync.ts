@@ -151,7 +151,13 @@ export async function syncConnection(
         posicoes.map((posicao) => ({
           id: posicao.id,
           itemId,
-          institution: posicao.institution?.name || connectorName,
+          // O nome do conector, e nao `institution.name` da posicao: uma
+          // conexao e uma instituicao, e e assim que o resto do app a chama —
+          // nas contas, em Conexoes, na cor do grafico. O nome que vem dentro
+          // da posicao varia de linha para linha ("BTG Pactual" numa,
+          // "BTGPactual" noutra), e duas grafias do mesmo banco partiriam o
+          // total dele em dois sem nunca dar erro.
+          institution: connectorName,
           type: posicao.type,
           subtype: posicao.subtype ?? null,
           name: posicao.name ?? null,

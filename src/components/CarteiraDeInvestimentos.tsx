@@ -28,7 +28,10 @@ export function CarteiraDeInvestimentos({ carteira }: { carteira: Carteira }) {
   }
 
   const maiorClasse = Math.max(...carteira.porClasse.map((g) => g.total), 1);
-  const maiorInstituicao = Math.max(...carteira.porInstituicao.map((g) => g.total), 1);
+  const maiorInstituicao = Math.max(
+    ...carteira.porInstituicao.map((g) => g.total),
+    1,
+  );
   const rendimento =
     carteira.lucro !== null && carteira.total - carteira.lucro > 0
       ? carteira.lucro / (carteira.total - carteira.lucro)
@@ -167,7 +170,7 @@ export function CarteiraDeInvestimentos({ carteira }: { carteira: Carteira }) {
 
       <figure className="gr">
         <figcaption className="gr-titulo">
-          Papeis · do maior para o menor
+          Papeis · uma linha por instrumento, vencimento e custodia
         </figcaption>
         <div className="gr-rolagem">
           <table className="gr-tabela">
@@ -194,9 +197,21 @@ export function CarteiraDeInvestimentos({ carteira }: { carteira: Carteira }) {
                   <th scope="row">
                     {papel.nome}
                     <span className="account-meta"> · {papel.instituicao}</span>
+                    {/* So aparece quando ha o que somar: um "1" em toda linha
+                        seria ruido, e o silencio ja diz posicao unica. */}
+                    {papel.posicoes > 1 ? (
+                      <span
+                        className="gr-badge"
+                        title={`${papel.posicoes} posicoes somadas`}
+                      >
+                        {papel.posicoes}
+                      </span>
+                    ) : null}
                   </th>
                   <td className="gr-so-largo">
-                    <span className="gr-data">{papel.vence ? dataCompleta(papel.vence) : "—"}</span>
+                    <span className="gr-data">
+                      {papel.vence ? dataCompleta(papel.vence) : "—"}
+                    </span>
                   </td>
                   {/* Renda fixa tem taxa contratada; fundo nao. O traco diz
                       "nao se aplica", e nao "zero". */}

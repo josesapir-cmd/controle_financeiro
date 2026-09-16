@@ -74,8 +74,11 @@ import { classificar, estaClassificado, type Atribuicao } from "./classificacao"
 import { montarCarteira, type CarteiraDeCompromissos } from "./compromissos";
 import {
   agrupar,
+  agruparPapeis,
   classeDoPapel,
+  semZerados,
   type GrupoDaCarteira,
+  type PapelAgrupado,
   type PapelNaCarteira,
 } from "./carteira";
 import {
@@ -2196,10 +2199,10 @@ export async function loadBuscaDeContrapartes(
   };
 }
 
-export type { GrupoDaCarteira, PapelNaCarteira };
+export type { GrupoDaCarteira, PapelAgrupado, PapelNaCarteira };
 
 export interface Carteira {
-  papeis: PapelNaCarteira[];
+  papeis: PapelAgrupado[];
   porClasse: GrupoDaCarteira[];
   porInstituicao: GrupoDaCarteira[];
   total: number;
@@ -2220,7 +2223,7 @@ export interface Carteira {
 export async function loadCarteira(): Promise<Carteira> {
   const posicoes = await listPosicoes(db()).catch(() => []);
 
-  const papeis: PapelNaCarteira[] = posicoes.map((posicao) => ({
+  const posicoesLidas: PapelNaCarteira[] = posicoes.map((posicao) => ({
     id: posicao.id,
     // Sem nome, o tipo ja diz mais que um id opaco.
     nome: posicao.name || classeDoPapel(posicao.type, posicao.subtype),
@@ -2233,6 +2236,10 @@ export async function loadCarteira(): Promise<Carteira> {
     taxa: posicao.annualRate,
     vence: posicao.dueDate,
   }));
+
+  // Agrupa antes de somar qualquer coisa: a corretora manda uma posicao por
+  // lote comprado, e o resumo tem que contar instrumentos, nao ordens de compra.
+  const papeis = agruparPapeis(semZerados(posicoesLidas));
 
   const comLucro = papeis.filter((papel) => papel.lucro !== null);
 
