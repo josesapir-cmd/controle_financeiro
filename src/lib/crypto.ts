@@ -1,6 +1,8 @@
 import "server-only";
 
-import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
+
+import { cifrarCom, decifrarCom } from "./cifra.mjs";
 
 import { fingerprintWith } from "./fingerprint.mjs";
 
@@ -21,11 +23,11 @@ import { fingerprintWith } from "./fingerprint.mjs";
  * Formato do valor guardado: "v1.<nonce base64url>.<cifra+tag base64url>".
  * O prefixo de versao existe para permitir trocar de algoritmo depois sem
  * precisar adivinhar o formato de cada linha antiga.
+ *
+ * O algoritmo em si mora em `cifra.mjs`, que os scripts de linha de comando
+ * tambem importam — este modulo tem `server-only` e cuida da chave.
  */
 
-const VERSAO = "v1";
-const ALGORITMO = "aes-256-gcm";
-const TAMANHO_NONCE = 12;
 const TAMANHO_CHAVE = 32;
 
 let chaveEmCache: Buffer | null = null;
@@ -57,35 +59,11 @@ export function resetKeyCache(): void {
 }
 
 export function encrypt(texto: string): string {
-  const nonce = randomBytes(TAMANHO_NONCE);
-  const cifrador = createCipheriv(ALGORITMO, lerChave(), nonce);
-
-  const cifrado = Buffer.concat([cifrador.update(texto, "utf8"), cifrador.final()]);
-  const tag = cifrador.getAuthTag();
-
-  return [
-    VERSAO,
-    nonce.toString("base64url"),
-    Buffer.concat([cifrado, tag]).toString("base64url"),
-  ].join(".");
+  return cifrarCom(lerChave(), texto);
 }
 
 export function decrypt(guardado: string): string {
-  const partes = guardado.split(".");
-  if (partes.length !== 3 || partes[0] !== VERSAO) {
-    throw new Error("Valor cifrado em formato desconhecido.");
-  }
-
-  const nonce = Buffer.from(partes[1], "base64url");
-  const corpo = Buffer.from(partes[2], "base64url");
-
-  const cifrado = corpo.subarray(0, corpo.length - 16);
-  const tag = corpo.subarray(corpo.length - 16);
-
-  const decifrador = createDecipheriv(ALGORITMO, lerChave(), nonce);
-  decifrador.setAuthTag(tag);
-
-  return Buffer.concat([decifrador.update(cifrado), decifrador.final()]).toString("utf8");
+  return decifrarCom(lerChave(), guardado);
 }
 
 /** Cifra apenas quando ha conteudo, para nao encher o banco de nulos cifrados. */
