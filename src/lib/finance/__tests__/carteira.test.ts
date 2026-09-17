@@ -426,6 +426,66 @@ describe("agruparPapeis", () => {
     expect(linhas[0].vence).toBe("2084-12-15");
   });
 
+  it("nao mostra o vencimento de um quando o grupo tem varios", () => {
+    // Juntar CDBs de bancos diferentes junta vencimentos de verdade diferentes.
+    // Mostrar o primeiro diria que a posicao inteira vence naquele dia.
+    const [linha] = agruparPapeis([
+      papel({
+        id: "a",
+        nome: "CDB",
+        instituicao: "BTG",
+        vence: "2027-11-30",
+        saldo: 100,
+        apelidado: true,
+      }),
+      papel({
+        id: "b",
+        nome: "CDB",
+        instituicao: "Inter",
+        vence: "2029-03-05",
+        saldo: 200,
+        apelidado: true,
+      }),
+    ]);
+
+    expect(linha.saldo).toBe(300);
+    expect(linha.vence).toBeNull();
+    expect(linha.vencimentosVariados).toBe(true);
+  });
+
+  it("um vencimento que reaparece depois nao ressuscita a data", () => {
+    // Tres lotes, dois com a mesma data: uma vez que o grupo virou variado, ele
+    // nao volta atras so porque o terceiro coincide com o primeiro.
+    const [linha] = agruparPapeis([
+      papel({
+        id: "a",
+        nome: "CDB",
+        instituicao: "BTG",
+        vence: "2027-11-30",
+        saldo: 100,
+        apelidado: true,
+      }),
+      papel({
+        id: "b",
+        nome: "CDB",
+        instituicao: "Inter",
+        vence: "2029-03-05",
+        saldo: 200,
+        apelidado: true,
+      }),
+      papel({
+        id: "c",
+        nome: "CDB",
+        instituicao: "Nubank",
+        vence: "2027-11-30",
+        saldo: 300,
+        apelidado: true,
+      }),
+    ]);
+
+    expect(linha.vence).toBeNull();
+  });
+
   it("sem apelido, o vencimento continua separando", () => {
     // A data e o que separa de verdade dois titulos de nome parecido.
     const linhas = agruparPapeis([

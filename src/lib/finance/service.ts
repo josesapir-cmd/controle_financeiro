@@ -11,6 +11,7 @@ import {
   instrumentFingerprint,
   listApelidosDeInstrumento,
   listAtivosManuais,
+  listCotacoes,
   listPosicoes,
   listRegrasDeCartao,
   listRotulosDeCompra,
@@ -2224,10 +2225,11 @@ export interface Carteira {
  * ainda nao aportado.
  */
 export async function loadCarteira(): Promise<Carteira> {
-  const [posicoes, ativos, apelidos] = await Promise.all([
+  const [posicoes, ativos, apelidos, cotacoes] = await Promise.all([
     listPosicoes(db()).catch(() => []),
     listAtivosManuais(db()).catch(() => []),
     listApelidosDeInstrumento(db()).catch(() => []),
+    listCotacoes(db()).catch(() => []),
   ]);
 
   // A mesma NTN-B chega com quatro nomes, um por custodia. Nenhuma regra de
@@ -2237,14 +2239,21 @@ export async function loadCarteira(): Promise<Carteira> {
   const porFingerprint = new Map(apelidos.map((a) => [a.fingerprint, a.alias]));
   const apelidar = (nome: string) => porFingerprint.get(instrumentFingerprint(nome)) ?? null;
 
+  // A cotacao e procurada pelo nome JA apelidado: e uma marcacao por
+  // instrumento como a tela o mostra, e nao uma por grafia de custodia.
+  const porCotacao = new Map(cotacoes.map((c) => [c.fingerprint, c]));
+  const marcacao = (nome: string) => porCotacao.get(instrumentFingerprint(nome)) ?? null;
+
   const posicoesLidas: PapelNaCarteira[] = posicoes.map((posicao) => {
     // Sem nome, o tipo ja diz mais que um id opaco.
     const cru = posicao.name || classeDoPapel(posicao.type, posicao.subtype);
     const apelido = apelidar(cru);
+    const nome = apelido ?? cru;
+    const marcada = marcacao(nome);
 
     return {
       id: posicao.id,
-      nome: apelido ?? cru,
+      nome,
       instituicao: posicao.institution,
       tipo: posicao.type,
       subtipo: posicao.subtype,
@@ -2254,6 +2263,8 @@ export async function loadCarteira(): Promise<Carteira> {
       taxa: posicao.annualRate,
       vence: posicao.dueDate,
       apelidado: apelido !== null,
+      taxaMarcada: marcada?.rateLabel ?? null,
+      taxaMarcadaEm: marcada?.quotedAt ?? null,
     };
   });
 
@@ -2264,6 +2275,8 @@ export async function loadCarteira(): Promise<Carteira> {
     id: `manual:${ativo.id}`,
     nome: apelidar(ativo.name) ?? ativo.name,
     apelidado: apelidar(ativo.name) !== null,
+    taxaMarcada: marcacao(apelidar(ativo.name) ?? ativo.name)?.rateLabel ?? null,
+    taxaMarcadaEm: marcacao(apelidar(ativo.name) ?? ativo.name)?.quotedAt ?? null,
     instituicao: ativo.institution || "fora do Open Finance",
     tipo: ativo.type,
     subtipo: ativo.subtype,

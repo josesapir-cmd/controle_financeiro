@@ -27,6 +27,17 @@ export interface PapelNaCarteira {
    * uniao que a pessoa acabou de fazer a mao.
    */
   apelidado?: boolean;
+  /**
+   * A taxa de hoje, digitada a mao.
+   *
+   * Texto, e nao numero: "IPCA + 7,02%" nao e uma taxa, e um indice mais um
+   * cupom. Quando existe, ela vence a `taxa` que veio da corretora — a de la e
+   * a contratada na compra, esta e a que o mercado esta marcando, e sao
+   * perguntas diferentes.
+   */
+  taxaMarcada?: string | null;
+  /** Quando essa taxa foi lida. Taxa marcada envelhece em dias. */
+  taxaMarcadaEm?: string | null;
 }
 
 export interface GrupoDaCarteira {
@@ -112,6 +123,8 @@ export interface CustodiaDoPapel {
 export interface PapelAgrupado extends PapelNaCarteira {
   /** Quantas posicoes foram somadas, contando todas as custodias. */
   posicoes: number;
+  /** O grupo reune papeis de vencimentos diferentes, entao `vence` e nulo. */
+  vencimentosVariados?: boolean;
   /** Sempre com pelo menos uma; mais de uma e o que merece expandir. */
   custodias: CustodiaDoPapel[];
 }
@@ -141,7 +154,10 @@ export interface PapelAgrupado extends PapelNaCarteira {
  * nome parecido, e normalizar data seria deixar de distinguir o que distingue.
  */
 function chaveDoInstrumento(papel: PapelNaCarteira): string {
-  const nome = papel.nome.trim().replace(/\s+/g, " ").toLocaleUpperCase("pt-BR");
+  const nome = papel.nome
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleUpperCase("pt-BR");
   // A declaracao do usuario e a autoridade: ela ja disse quais papeis sao o
   // mesmo, e o vencimento nao tem mais o que acrescentar.
   return papel.apelidado ? `apelido|${nome}` : `${nome}|${papel.vence ?? ""}`;
@@ -192,9 +208,22 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
       // Basta um membro digitado a mao para o grupo inteiro precisar do aviso:
       // parte do numero nao se re-sincroniza.
       atual.manual = atual.manual || papel.manual;
-      // O vencimento fica o primeiro que aparecer: unidos a mao, os lotes podem
-      // vir uns com data e outros sem, e um "—" apagaria a data que existe.
-      atual.vence = atual.vence ?? papel.vence;
+      // A marcacao e do instrumento, e nao do lote: o primeiro que a tiver
+      // vale para o grupo, porque e o mesmo papel.
+      atual.taxaMarcada = atual.taxaMarcada ?? papel.taxaMarcada;
+      atual.taxaMarcadaEm = atual.taxaMarcadaEm ?? papel.taxaMarcadaEm;
+      // O vencimento so sobrevive se for o mesmo em todo o grupo.
+      //
+      // Data ausente e data desconhecida, nao data diferente: a XP manda a
+      // NTN-B sem vencimento e o BTG manda com, e e a mesma. Mas juntar CDBs
+      // de bancos diferentes junta vencimentos de verdade diferentes, e
+      // mostrar o primeiro diria que os R$ 447 mil inteiros vencem naquele dia.
+      if (papel.vence && atual.vence && papel.vence !== atual.vence) {
+        atual.vence = null;
+        atual.vencimentosVariados = true;
+      } else if (!atual.vencimentosVariados) {
+        atual.vence = atual.vence ?? papel.vence;
+      }
 
       const custodia = atual.custodias.find(
         (c) => c.instituicao === papel.instituicao,

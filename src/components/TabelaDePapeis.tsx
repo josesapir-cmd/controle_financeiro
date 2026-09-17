@@ -54,7 +54,45 @@ function MarcaManual({ avaliadoEm }: { avaliadoEm?: string | null }) {
   );
 }
 
-function Taxa({ valor }: { valor: number | null }) {
+/**
+ * A taxa da linha.
+ *
+ * Duas taxas disputam essa coluna e sao respostas a perguntas diferentes: a que
+ * a corretora manda e a CONTRATADA na compra — o que se recebe levando ao
+ * vencimento — e a digitada e a MARCADA hoje, que e o que se recebe vendendo
+ * agora. Quando ha a marcada, e ela que aparece: e a que explica o saldo do
+ * lado, que tambem e de hoje.
+ *
+ * A data vem junto, apagada. Taxa marcada envelhece em dias, e uma de tres
+ * meses atras ao lado de um saldo de hoje e pior que traco nenhum.
+ */
+function Taxa({
+  valor,
+  marcada,
+  marcadaEm,
+}: {
+  valor: number | null;
+  marcada?: string | null;
+  marcadaEm?: string | null;
+}) {
+  if (marcada) {
+    return (
+      <span
+        className="gr-marcada"
+        title={
+          marcadaEm
+            ? `Taxa marcada a mao, lida em ${dataCompleta(marcadaEm)}`
+            : "Taxa marcada a mao"
+        }
+      >
+        {marcada}
+        {marcadaEm ? (
+          <span className="gr-marcada-em">{dataCompleta(marcadaEm)}</span>
+        ) : null}
+      </span>
+    );
+  }
+
   // Renda fixa tem taxa contratada; fundo nao. O traco diz "nao se aplica",
   // e nao "zero".
   return <>{valor !== null ? `${valor.toFixed(2)}%` : "—"}</>;
@@ -167,7 +205,11 @@ export function TabelaDePapeis({ papeis }: { papeis: PapelAgrupado[] }) {
                     </span>
                   </td>
                   <td className="gr-num gr-so-largo">
-                    <Taxa valor={papel.taxa} />
+                    <Taxa
+                      valor={papel.taxa}
+                      marcada={papel.taxaMarcada}
+                      marcadaEm={papel.taxaMarcadaEm}
+                    />
                   </td>
                   <td className="gr-num gr-so-largo">
                     <Lucro valor={papel.lucro} />
@@ -188,7 +230,13 @@ export function TabelaDePapeis({ papeis }: { papeis: PapelAgrupado[] }) {
                         </th>
                         <td className="gr-so-largo" />
                         <td className="gr-num gr-so-largo">
-                          <Taxa valor={custodia.taxa} />
+                          {/* Com o instrumento marcado a mao, a taxa e dele e
+                              nao da custodia. Repeti-la em cada linha seria
+                              ruido, e um traco se leria como "esta nao tem". */}
+                          {papel.taxaMarcada &&
+                          custodia.taxa === null ? null : (
+                            <Taxa valor={custodia.taxa} />
+                          )}
                         </td>
                         <td className="gr-num gr-so-largo">
                           <Lucro valor={custodia.lucro} />

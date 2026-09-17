@@ -4711,6 +4711,22 @@ ul.produtos {
   vertical-align: -1px;
 }
 
+/* A taxa digitada a mao ocupa mais que "13,45%": "IPCA + 7,02%" nao cabe numa
+   coluna dimensionada para um numero, e a data entra numa segunda linha para
+   nao empurrar a tabela. */
+.gr-marcada {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.gr-marcada-em {
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
 /* Data de vencimento na tabela de papeis: apagada como o resto do que e
    contexto, mas sem `.account-meta` — aquela regra vira `display: block` no
    celular e venceria o `display: none` da coluna que some ali. */
