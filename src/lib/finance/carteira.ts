@@ -19,6 +19,14 @@ export interface PapelNaCarteira {
   manual?: boolean;
   /** So para o manual: quando este valor foi apurado. */
   avaliadoEm?: string | null;
+  /**
+   * O usuario declarou que este papel e aquele instrumento.
+   *
+   * Quando ha declaracao ela manda sozinha: o vencimento sai da chave. Uma das
+   * custodias pode nao informar data, e exigir que ela confira desfaria a
+   * uniao que a pessoa acabou de fazer a mao.
+   */
+  apelidado?: boolean;
 }
 
 export interface GrupoDaCarteira {
@@ -134,7 +142,9 @@ export interface PapelAgrupado extends PapelNaCarteira {
  */
 function chaveDoInstrumento(papel: PapelNaCarteira): string {
   const nome = papel.nome.trim().replace(/\s+/g, " ").toLocaleUpperCase("pt-BR");
-  return `${nome}|${papel.vence ?? ""}`;
+  // A declaracao do usuario e a autoridade: ela ja disse quais papeis sao o
+  // mesmo, e o vencimento nao tem mais o que acrescentar.
+  return papel.apelidado ? `apelido|${nome}` : `${nome}|${papel.vence ?? ""}`;
 }
 
 export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
@@ -182,6 +192,9 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
       // Basta um membro digitado a mao para o grupo inteiro precisar do aviso:
       // parte do numero nao se re-sincroniza.
       atual.manual = atual.manual || papel.manual;
+      // O vencimento fica o primeiro que aparecer: unidos a mao, os lotes podem
+      // vir uns com data e outros sem, e um "—" apagaria a data que existe.
+      atual.vence = atual.vence ?? papel.vence;
 
       const custodia = atual.custodias.find(
         (c) => c.instituicao === papel.instituicao,

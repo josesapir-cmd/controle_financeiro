@@ -357,7 +357,76 @@ describe("agruparPapeis", () => {
     expect(linhas[0].nome).toBe("TESOURO DIRETO - NTN-B1");
   });
 
-  it("nao junta vencimentos diferentes, mesmo com o nome identico", () => {
+  it("com apelido, une nomes sem nada em comum", () => {
+    // A mesma NTN-B chega com quatro nomes, um por custodia. Depois que o
+    // usuario declara que sao o mesmo papel, o servico entrega o apelido em
+    // `nome` e marca `apelidado` — e o agrupamento passa a olhar so para ele.
+    const linhas = agruparPapeis([
+      papel({
+        id: "a",
+        nome: "Renda+ 2065",
+        instituicao: "Inter",
+        saldo: 100,
+        apelidado: true,
+      }),
+      papel({
+        id: "b",
+        nome: "Renda+ 2065",
+        instituicao: "Nubank",
+        saldo: 200,
+        apelidado: true,
+      }),
+      papel({
+        id: "c",
+        nome: "Renda+ 2065",
+        instituicao: "XP",
+        saldo: 300,
+        apelidado: true,
+      }),
+      papel({
+        id: "d",
+        nome: "Renda+ 2065",
+        instituicao: "BTG",
+        saldo: 400,
+        apelidado: true,
+      }),
+    ]);
+
+    expect(linhas).toHaveLength(1);
+    expect(linhas[0].saldo).toBe(1000);
+    expect(linhas[0].custodias).toHaveLength(4);
+    expect(linhas[0].instituicao).toBe("4 custodias");
+  });
+
+  it("apelidado ignora o vencimento, inclusive quando so uma custodia informa", () => {
+    // A XP manda "NTN-B1" sem data. Exigir que o vencimento confira desfaria a
+    // uniao que a pessoa acabou de fazer a mao.
+    const linhas = agruparPapeis([
+      // A sem data vem PRIMEIRO de proposito: e o grupo que herdaria o nulo.
+      papel({
+        id: "a",
+        nome: "Renda+ 2065",
+        instituicao: "XP",
+        vence: null,
+        saldo: 200,
+        apelidado: true,
+      }),
+      papel({
+        id: "b",
+        nome: "Renda+ 2065",
+        instituicao: "BTG",
+        vence: "2084-12-15",
+        saldo: 100,
+        apelidado: true,
+      }),
+    ]);
+
+    expect(linhas).toHaveLength(1);
+    // E a data que existe nao se perde para o nulo do vizinho.
+    expect(linhas[0].vence).toBe("2084-12-15");
+  });
+
+  it("sem apelido, o vencimento continua separando", () => {
     // A data e o que separa de verdade dois titulos de nome parecido.
     const linhas = agruparPapeis([
       papel({

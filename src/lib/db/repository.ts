@@ -1973,3 +1973,67 @@ export async function arquivarAtivoManual(db: Db, id: string): Promise<void> {
     [id],
   );
 }
+
+/* ==========================================================================
+   Apelido de instrumento — o mesmo titulo com nomes diferentes por custodia
+   ========================================================================== */
+
+export interface ApelidoDeInstrumento {
+  /** O nome cru, do jeito que a custodia escreveu. */
+  rawName: string | null;
+  /** O nome que passa a aparecer na tela. */
+  alias: string;
+  fingerprint: string;
+}
+
+/** Espaco de chave proprio: o mesmo texto como contraparte e outra coisa. */
+export function instrumentFingerprint(nome: string): string {
+  return fingerprint("instrumento", nome);
+}
+
+export async function listApelidosDeInstrumento(db: Db): Promise<ApelidoDeInstrumento[]> {
+  const linhas = await db.query<Record<string, unknown>>(
+    "SELECT fingerprint, alias_enc, raw_name_enc FROM instrument_aliases",
+  );
+
+  return linhas.map((linha) => ({
+    fingerprint: String(linha.fingerprint),
+    alias: decryptOptional(linha.alias_enc as string | null) ?? "",
+    rawName: decryptOptional(linha.raw_name_enc as string | null),
+  }));
+}
+
+/**
+ * Declara que este nome cru e, na verdade, aquele instrumento.
+ *
+ * Idempotente pelo nome cru: declarar de novo troca o apelido em vez de criar
+ * uma segunda decisao para o mesmo papel.
+ */
+export async function salvarApelidoDeInstrumento(
+  db: Db,
+  nomeCru: string,
+  apelido: string,
+): Promise<void> {
+  const cru = nomeCru.trim();
+  const novo = apelido.trim();
+  if (!cru || !novo) return;
+
+  await db.query(
+    `INSERT INTO instrument_aliases (fingerprint, alias_fingerprint, alias_enc, raw_name_enc)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (fingerprint) DO UPDATE
+       SET alias_fingerprint = EXCLUDED.alias_fingerprint,
+           alias_enc = EXCLUDED.alias_enc,
+           raw_name_enc = EXCLUDED.raw_name_enc,
+           decided_at = now()`,
+    [instrumentFingerprint(cru), instrumentFingerprint(novo), encrypt(novo), encrypt(cru)],
+  );
+}
+
+export async function apagarApelidoDeInstrumento(db: Db, nomeCru: string): Promise<void> {
+  const cru = nomeCru.trim();
+  if (!cru) return;
+  await db.query("DELETE FROM instrument_aliases WHERE fingerprint = $1", [
+    instrumentFingerprint(cru),
+  ]);
+}

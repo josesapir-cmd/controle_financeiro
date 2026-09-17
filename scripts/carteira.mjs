@@ -8,15 +8,23 @@
  * mais, e nenhuma tela mostra isso. Aqui o nome sai entre colchetes e o
  * agrupamento e mostrado do jeito que o codigo o calcula.
  *
+ * E onde se declara que dois nomes sao o mesmo papel. A mesma NTN-B chega como
+ * "NTN-B1" na XP e "TESOURO DIRETO - NTN-B1" no BTG; nenhuma regra de texto
+ * junta isso sem risco, porque dois bancos emitem CDB de mesmo vencimento e sao
+ * papeis diferentes. Quem decide e quem sabe.
+ *
  * Uso:
  *   node scripts/carteira.mjs
+ *   node scripts/carteira.mjs --unir "NTN-B1" --como "Renda+ 2065"
+ *   node scripts/carteira.mjs --separar "NTN-B1"
  */
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { abrirBanco } from "./conectar.mjs";
 import { morrerComExplicacao } from "./erro-de-banco.mjs";
-import { decifrarCom, lerChaveDoAmbiente } from "../src/lib/cifra.mjs";
+import { decifrarCom, cifrarCom, lerChaveDoAmbiente } from "../src/lib/cifra.mjs";
+import { fingerprintWith } from "../src/lib/fingerprint.mjs";
 
 async function lerEnv() {
   for (const arquivo of [".env.local", ".env"]) {
@@ -41,6 +49,13 @@ async function lerEnv() {
 
 const dinheiro = (v) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+const argumentos = process.argv.slice(2);
+
+function opcao(nome) {
+  const i = argumentos.indexOf(`--${nome}`);
+  return i === -1 ? null : (argumentos[i + 1] ?? null);
+}
+
 const dia = (v) =>
   !v ? "" : v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10);
 
@@ -49,7 +64,42 @@ await lerEnv();
 const chave = lerChaveDoAmbiente();
 const banco = await abrirBanco().catch(morrerComExplicacao);
 
+/**
+ * O mesmo fingerprint que o app gera — no repositorio ele se chama
+ * `instrumentFingerprint`. `fingerprintWith` ja apara e baixa a caixa por
+ * dentro; repetir isso aqui daria outro valor e a uniao nao casaria.
+ */
+const fp = (nome) => fingerprintWith(chave, "instrumento", nome);
+
 try {
+  const unir = opcao("unir");
+  const como = opcao("como");
+  const separar = opcao("separar");
+
+  if (separar) {
+    await banco.query("DELETE FROM instrument_aliases WHERE fingerprint = $1", [fp(separar)]);
+    console.log(`"${separar}" voltou a ser papel proprio.\n`);
+  }
+
+  if (unir) {
+    if (!como) {
+      console.error('Diga com que nome: --unir "NTN-B1" --como "Renda+ 2065"');
+      process.exit(1);
+    }
+
+    await banco.query(
+      `INSERT INTO instrument_aliases (fingerprint, alias_fingerprint, alias_enc, raw_name_enc)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (fingerprint) DO UPDATE
+         SET alias_fingerprint = EXCLUDED.alias_fingerprint,
+             alias_enc = EXCLUDED.alias_enc,
+             raw_name_enc = EXCLUDED.raw_name_enc,
+             decided_at = now()`,
+      [fp(unir), fp(como), cifrarCom(chave, como.trim()), cifrarCom(chave, unir.trim())],
+    );
+    console.log(`"${unir}" agora aparece como "${como}".\n`);
+  }
+
   const linhas = await banco.query(
     `SELECT id, institution, type, subtype, name_enc, balance, due_date, seen_at
        FROM investments
@@ -71,18 +121,29 @@ try {
     }
   };
 
+  const apelidos = new Map(
+    (await banco.query("SELECT fingerprint, alias_enc FROM instrument_aliases")).map((a) => [
+      a.fingerprint,
+      abrir(a.alias_enc),
+    ]),
+  );
+
   const grupos = new Map();
   console.log(`${linhas.length} posicao(oes)\n`);
 
   for (const linha of linhas) {
-    const nome = abrir(linha.name_enc) ?? "(sem nome)";
+    const cru = abrir(linha.name_enc) ?? "(sem nome)";
+    const apelido = apelidos.get(fp(cru)) ?? null;
+    const nome = apelido ?? cru;
     const vence = dia(linha.due_date);
     // A mesma chave que `agruparPapeis` usa. Se duas linhas que deveriam somar
     // mostram chaves diferentes, a diferenca esta escrita aqui.
-    const chaveDoGrupo = `${nome}|${vence}`;
+    const chaveDoGrupo = apelido
+      ? `apelido|${nome.trim().replace(/\s+/g, " ").toUpperCase()}`
+      : `${nome.trim().replace(/\s+/g, " ").toUpperCase()}|${vence}`;
 
     // Colchetes para o espaco sobrando aparecer.
-    console.log(`  [${nome}]`);
+    console.log(`  [${cru}]${apelido ? `  ->  ${apelido}` : ""}`);
     console.log(
       `     ${dinheiro(Number(linha.balance ?? 0)).padEnd(18)} ${linha.type}` +
         `${linha.subtype ? `/${linha.subtype}` : ""} · ${linha.institution}` +
@@ -106,8 +167,8 @@ try {
 
   if (grupos.size === linhas.length && linhas.length > 1) {
     console.log(
-      "\nNenhum agrupamento aconteceu. Se dois papeis parecem iguais na tela, compare os\n" +
-        "nomes entre colchetes acima: a diferenca costuma ser um espaco ou a data de vencimento.",
+      "\nNenhum agrupamento aconteceu. Compare os nomes entre colchetes acima: quando a\n" +
+        'custodia escreve o mesmo papel de outro jeito, una com --unir "<nome>" --como "<apelido>".',
     );
   }
 } finally {

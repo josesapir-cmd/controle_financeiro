@@ -4,9 +4,13 @@ import { resetKeyCache } from "@/lib/crypto";
 import type { Db } from "../adapter";
 import { migrate } from "../migrate.mjs";
 import {
+  apagarApelidoDeInstrumento,
   arquivarAtivoManual,
+  instrumentFingerprint,
+  listApelidosDeInstrumento,
   listAtivosManuais,
   listPosicoes,
+  salvarApelidoDeInstrumento,
   salvarAtivoManual,
   substituirPosicoes,
   upsertConnection,
@@ -337,5 +341,77 @@ describe("ativos manuais", () => {
       "SELECT count(*)::text AS n FROM manual_investments",
     );
     expect(linha.n).toBe("1");
+  });
+});
+
+describe("apelido de instrumento", () => {
+  it("une nomes que nenhuma regra de texto juntaria", async () => {
+    // O caso real: a mesma NTN-B Renda+ 2065 chega com quatro nomes, um por
+    // custodia. Aparar espaco e baixar caixa nao aproxima "NTN-B1" de
+    // "Tesouro Renda+ Aposentadoria Extra 2065".
+    const nomes = [
+      "Tesouro Renda+ Aposentadoria Extra 2065",
+      "Tesouro RendA+ 2065",
+      "NTN-B1",
+      "TESOURO DIRETO - NTN-B1",
+    ];
+
+    for (const nome of nomes) {
+      await salvarApelidoDeInstrumento(db, nome, "Renda+ 2065");
+    }
+
+    const apelidos = await listApelidosDeInstrumento(db);
+    expect(apelidos).toHaveLength(4);
+    expect(new Set(apelidos.map((a) => a.alias))).toEqual(new Set(["Renda+ 2065"]));
+    // Os quatro caem no mesmo fingerprint de apelido, que e o que os une.
+    const [linha] = await db.query<{ n: string }>(
+      "SELECT count(DISTINCT alias_fingerprint)::text AS n FROM instrument_aliases",
+    );
+    expect(linha.n).toBe("1");
+  });
+
+  it("guarda o nome cru para a tela poder mostrar o que foi unido", async () => {
+    await salvarApelidoDeInstrumento(db, "NTN-B1", "Renda+ 2065");
+
+    const [apelido] = await listApelidosDeInstrumento(db);
+    expect(apelido.rawName).toBe("NTN-B1");
+    expect(apelido.alias).toBe("Renda+ 2065");
+  });
+
+  it("nao guarda nome em claro", async () => {
+    await salvarApelidoDeInstrumento(db, "NTN-B1", "Renda+ 2065");
+
+    const [cru] = await db.query<{ alias_enc: string; raw_name_enc: string }>(
+      "SELECT alias_enc, raw_name_enc FROM instrument_aliases",
+    );
+    expect(cru.alias_enc).not.toContain("Renda");
+    expect(cru.raw_name_enc).not.toContain("NTN");
+  });
+
+  it("declarar de novo troca o apelido em vez de duplicar", async () => {
+    await salvarApelidoDeInstrumento(db, "NTN-B1", "Renda+ 2065");
+    await salvarApelidoDeInstrumento(db, "NTN-B1", "Renda+ 2065 (aposentadoria)");
+
+    const apelidos = await listApelidosDeInstrumento(db);
+    expect(apelidos).toHaveLength(1);
+    expect(apelidos[0].alias).toBe("Renda+ 2065 (aposentadoria)");
+  });
+
+  it("o fingerprint ignora caixa e espaco nas pontas", async () => {
+    expect(instrumentFingerprint("  NTN-B1  ")).toBe(instrumentFingerprint("ntn-b1"));
+  });
+
+  it("separar devolve o papel para si mesmo", async () => {
+    await salvarApelidoDeInstrumento(db, "NTN-B1", "Renda+ 2065");
+    await apagarApelidoDeInstrumento(db, "NTN-B1");
+
+    expect(await listApelidosDeInstrumento(db)).toHaveLength(0);
+  });
+
+  it("nao aceita declaracao pela metade", async () => {
+    await salvarApelidoDeInstrumento(db, "   ", "Renda+ 2065");
+    await salvarApelidoDeInstrumento(db, "NTN-B1", "  ");
+
+    expect(await listApelidosDeInstrumento(db)).toHaveLength(0);
   });
 });
