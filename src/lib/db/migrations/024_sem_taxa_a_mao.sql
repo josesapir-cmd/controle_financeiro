@@ -1,0 +1,22 @@
+-- Fim da taxa marcada a mao.
+--
+-- A 021 criou `instrument_quotes` para o caso do Tesouro, em que a Pluggy manda
+-- `annualRate` nulo e a taxa e justamente o que importa. A ideia era digitar a
+-- taxa de hoje e mostra-la ao lado do saldo de hoje.
+--
+-- Na pratica ela fez o contrario do que prometia. Ficou marcada em IPCA + 7,10%
+-- e envelheceu em silencio: na conciliacao com o site do Tesouro a taxa real da
+-- posicao era 7,14% (a de compra, 7,02%, mais os 12 bps de spread de recompra).
+-- Quatro pontos-base de rotulo errado colados num numero certo, justamente na
+-- hora em que alguem estava conferindo se os dois batiam.
+--
+-- O defeito nao era o valor, era a natureza do campo: um numero que so muda
+-- quando alguem lembra de muda-lo, exibido sem nada que diga ha quanto tempo
+-- ninguem lembra. A data ao lado nao resolve — ela explica o erro depois de ele
+-- ja ter sido lido.
+--
+-- A taxa CONTRATADA continua na tela: aquela vem da instituicao a cada
+-- sincronizacao e responde "quanto rende levando ao vencimento". A taxa de
+-- hoje sai da tela ate existir de onde busca-la sem digitacao.
+
+DROP TABLE IF EXISTS instrument_quotes;

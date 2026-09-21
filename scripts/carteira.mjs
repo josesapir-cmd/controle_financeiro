@@ -19,8 +19,6 @@
  *   node scripts/carteira.mjs --separar "NTN-B1"
  *   node scripts/carteira.mjs --unir-classe CDB
  *   node scripts/carteira.mjs --unir-classe CDB --como "CDB dos bancos"
- *   node scripts/carteira.mjs --marcar "Renda+ 2065" --taxa "IPCA + 7,02%" --pu 196,46
- *   node scripts/carteira.mjs --desmarcar "Renda+ 2065"
  */
 
 import { readFile } from "node:fs/promises";
@@ -90,55 +88,6 @@ try {
   const como = opcao("como");
   const separar = opcao("separar");
   const unirClasse = opcao("unir-classe");
-  const marcar = opcao("marcar");
-  const desmarcar = opcao("desmarcar");
-
-  if (desmarcar) {
-    await banco.query("DELETE FROM instrument_quotes WHERE fingerprint = $1", [fp(desmarcar)]);
-    console.log(`"${desmarcar}" voltou a mostrar a taxa que a corretora manda.\n`);
-  }
-
-  if (marcar) {
-    const taxa = opcao("taxa");
-    if (!taxa) {
-      console.error('Diga a taxa: --marcar "Renda+ 2065" --taxa "IPCA + 7,02%"');
-      process.exit(1);
-    }
-
-    // Aceita "196,46" e "196.46": ninguem digita do mesmo jeito.
-    const pu = opcao("pu");
-    const preco = pu === null ? null : Number(pu.replace(/\./g, "").replace(",", "."));
-    if (pu !== null && !Number.isFinite(preco)) {
-      console.error(`--pu nao e um numero: "${pu}".`);
-      process.exit(1);
-    }
-
-    const em = opcao("em") ?? new Date().toISOString().slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(em)) {
-      console.error(`--em precisa ser AAAA-MM-DD; recebi "${em}".`);
-      process.exit(1);
-    }
-
-    const nota = opcao("nota");
-
-    await banco.query(
-      `INSERT INTO instrument_quotes (fingerprint, rate_label, unit_price, quoted_at, note_enc)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (fingerprint) DO UPDATE
-         SET rate_label = EXCLUDED.rate_label,
-             unit_price = EXCLUDED.unit_price,
-             quoted_at = EXCLUDED.quoted_at,
-             note_enc = EXCLUDED.note_enc,
-             updated_at = now()`,
-      [fp(marcar), taxa.trim(), preco, em, nota ? cifrarCom(chave, nota) : null],
-    );
-
-    console.log(
-      `"${marcar}" marcado a ${taxa.trim()}` +
-        `${preco !== null ? `, PU ${preco.toFixed(2)}` : ""} em ${em}.\n`,
-    );
-  }
-
   if (unirClasse) {
     // A declaracao por classe vira uma decisao por nome, e nao uma regra
     // guardada: regra pegaria sozinha o CDB que chegar amanha, e quem nao
@@ -247,19 +196,11 @@ try {
     grupos.set(chaveDoGrupo, atual);
   }
 
-  const marcacoes = new Map(
-    (await banco.query("SELECT fingerprint, rate_label, quoted_at FROM instrument_quotes")).map(
-      (m) => [m.fingerprint, m],
-    ),
-  );
-
   console.log(`\n${grupos.size} linha(s) depois do agrupamento:\n`);
   for (const [chaveDoGrupo, g] of [...grupos].sort((a, b) => b[1].total - a[1].total)) {
-    const marca = marcacoes.get(fp(g.nome));
     console.log(
       `  ${dinheiro(g.total).padStart(18)}   ${g.n} posicao(oes)` +
-        `   ${g.custodias.size} custodia(s)   ${g.nome}` +
-        (marca ? `   [${marca.rate_label} em ${dia(marca.quoted_at)}]` : ""),
+        `   ${g.custodias.size} custodia(s)   ${g.nome}`,
     );
   }
 

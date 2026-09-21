@@ -5,15 +5,12 @@ import type { Db } from "../adapter";
 import { migrate } from "../migrate.mjs";
 import {
   apagarApelidoDeInstrumento,
-  apagarCotacao,
   arquivarAtivoManual,
   instrumentFingerprint,
   listApelidosDeInstrumento,
-  listCotacoes,
   listAtivosManuais,
   listPosicoes,
   salvarApelidoDeInstrumento,
-  salvarCotacao,
   salvarAtivoManual,
   substituirPosicoes,
   upsertConnection,
@@ -424,84 +421,6 @@ describe("apelido de instrumento", () => {
     await salvarApelidoDeInstrumento(db, "NTN-B1", "  ");
 
     expect(await listApelidosDeInstrumento(db)).toHaveLength(0);
-  });
-});
-
-describe("taxa marcada", () => {
-  it("guarda a taxa como texto, porque IPCA + 7,02% nao e um numero", async () => {
-    await salvarCotacao(db, "Renda+ 2065", {
-      rateLabel: "IPCA + 7,02%",
-      unitPrice: 196.46,
-      quotedAt: "2026-09-16",
-      note: "tela de compra do Tesouro Direto",
-    });
-
-    const [cotacao] = await listCotacoes(db);
-    expect(cotacao.rateLabel).toBe("IPCA + 7,02%");
-    expect(cotacao.unitPrice).toBe(196.46);
-    expect(cotacao.quotedAt).toBe("2026-09-16");
-    expect(cotacao.note).toBe("tela de compra do Tesouro Direto");
-  });
-
-  it("encontra a cotacao pelo nome, ignorando caixa e espaco", async () => {
-    await salvarCotacao(db, "Renda+ 2065", {
-      rateLabel: "IPCA + 7,02%",
-      quotedAt: "2026-09-16",
-    });
-
-    const [cotacao] = await listCotacoes(db);
-    expect(cotacao.fingerprint).toBe(instrumentFingerprint("  renda+ 2065 "));
-  });
-
-  it("marcar de novo atualiza, em vez de guardar duas taxas do mesmo papel", async () => {
-    // Duas marcacoes nao sao historico: sao uma certa e uma velha, e a tela
-    // mostraria a errada metade das vezes.
-    await salvarCotacao(db, "Renda+ 2065", {
-      rateLabel: "IPCA + 7,02%",
-      quotedAt: "2026-09-16",
-    });
-    await salvarCotacao(db, "Renda+ 2065", {
-      rateLabel: "IPCA + 7,14%",
-      quotedAt: "2026-09-17",
-    });
-
-    const cotacoes = await listCotacoes(db);
-    expect(cotacoes).toHaveLength(1);
-    expect(cotacoes[0].rateLabel).toBe("IPCA + 7,14%");
-    expect(cotacoes[0].quotedAt).toBe("2026-09-17");
-  });
-
-  it("aceita cotacao sem preco unitario", async () => {
-    await salvarCotacao(db, "CDB", {
-      rateLabel: "110% do CDI",
-      quotedAt: "2026-09-16",
-    });
-
-    const [cotacao] = await listCotacoes(db);
-    expect(cotacao.unitPrice).toBeNull();
-  });
-
-  it("nao grava sem taxa nem sem data", async () => {
-    await salvarCotacao(db, "Renda+ 2065", {
-      rateLabel: "  ",
-      quotedAt: "2026-09-16",
-    });
-    await salvarCotacao(db, "Renda+ 2065", {
-      rateLabel: "IPCA + 7,02%",
-      quotedAt: "",
-    });
-
-    expect(await listCotacoes(db)).toHaveLength(0);
-  });
-
-  it("desmarcar devolve a linha para a taxa da corretora", async () => {
-    await salvarCotacao(db, "Renda+ 2065", {
-      rateLabel: "IPCA + 7,02%",
-      quotedAt: "2026-09-16",
-    });
-    await apagarCotacao(db, "Renda+ 2065");
-
-    expect(await listCotacoes(db)).toHaveLength(0);
   });
 });
 

@@ -28,17 +28,6 @@ export interface PapelNaCarteira {
    */
   apelidado?: boolean;
   /**
-   * A taxa de hoje, digitada a mao.
-   *
-   * Texto, e nao numero: "IPCA + 7,02%" nao e uma taxa, e um indice mais um
-   * cupom. Quando existe, ela vence a `taxa` que veio da corretora — a de la e
-   * a contratada na compra, esta e a que o mercado esta marcando, e sao
-   * perguntas diferentes.
-   */
-  taxaMarcada?: string | null;
-  /** Quando essa taxa foi lida. Taxa marcada envelhece em dias. */
-  taxaMarcadaEm?: string | null;
-  /**
    * O mesmo papel depois do imposto, quando a instituicao informa.
    *
    * Anda junto com o bruto em vez de substitui-lo porque os dois sao
@@ -204,10 +193,6 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
       // Basta um membro digitado a mao para o grupo inteiro precisar do aviso:
       // parte do numero nao se re-sincroniza.
       atual.manual = atual.manual || papel.manual;
-      // A marcacao e do instrumento, e nao do lote: o primeiro que a tiver
-      // vale para o grupo, porque e o mesmo papel.
-      atual.taxaMarcada = atual.taxaMarcada ?? papel.taxaMarcada;
-      atual.taxaMarcadaEm = atual.taxaMarcadaEm ?? papel.taxaMarcadaEm;
       // O vencimento so sobrevive se for o mesmo em todo o grupo.
       //
       // Data ausente e data desconhecida, nao data diferente: a XP manda a

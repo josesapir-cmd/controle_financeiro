@@ -60,52 +60,18 @@ function MarcaManual({ avaliadoEm }: { avaliadoEm?: string | null }) {
 }
 
 /**
- * A taxa da linha.
+ * A taxa colada no nome: "CDB BTG 2027 @ 13,45%".
  *
- * Duas taxas disputam essa coluna e sao respostas a perguntas diferentes: a que
- * a corretora manda e a CONTRATADA na compra — o que se recebe levando ao
- * vencimento — e a digitada e a MARCADA hoje, que e o que se recebe vendendo
- * agora. Quando ha a marcada, e ela que aparece: e a que explica o saldo do
- * lado, que tambem e de hoje.
- *
- * A data vem junto, apagada. Taxa marcada envelhece em dias, e uma de tres
- * meses atras ao lado de um saldo de hoje e pior que traco nenhum.
- */
-/**
- * A taxa colada no nome: "Renda+ 2065 @ 7,02%".
- *
- * Ela deixou de ser coluna porque so renda fixa tem taxa — uma coluna inteira
- * de tracos para os fundos custava mais largura do que informava. No nome ela
+ * Deixou de ser coluna porque so renda fixa tem taxa — uma coluna inteira de
+ * tracos para os fundos custava mais largura do que informava. No nome ela
  * aparece exatamente onde existe.
  *
- * A marcada a mao vence a contratada: e a que explica o valor do lado, que
- * tambem e de hoje. Fundo nao tem nenhuma das duas e fica so com o nome.
+ * E sempre a CONTRATADA na compra, a que a instituicao informa: o que se recebe
+ * levando ao vencimento. A taxa de hoje — a que se recebe vendendo agora — nao
+ * aparece aqui, porque nao ha de onde busca-la sem alguem digitar, e taxa
+ * digitada envelhece em dias sem nenhum sinal ao lado de um saldo de hoje.
  */
-function Taxa({
-  valor,
-  marcada,
-  marcadaEm,
-}: {
-  valor?: number | null;
-  marcada?: string | null;
-  marcadaEm?: string | null;
-}) {
-  if (marcada) {
-    return (
-      <span
-        className="gr-taxa"
-        title={
-          marcadaEm
-            ? `Taxa marcada a mao, lida em ${dataCompleta(marcadaEm)}`
-            : "Taxa marcada a mao"
-        }
-      >
-        {" @ "}
-        {marcada}
-      </span>
-    );
-  }
-
+function Taxa({ valor }: { valor?: number | null }) {
   if (valor === null || valor === undefined) return null;
 
   return (
@@ -223,11 +189,7 @@ export function TabelaDePapeis({
                               "FIDC" no lugar de "Green FIDC Solar GD" trocaria
                               o nome do papel por um rotulo. */}
                           {unico?.nome ?? classe.nome}
-                          <Taxa
-                            valor={unico?.taxa ?? classe.taxa}
-                            marcada={unico?.taxaMarcada}
-                            marcadaEm={unico?.taxaMarcadaEm}
-                          />
+                          <Taxa valor={unico?.taxa ?? classe.taxa} />
                           <span className="gr-badge">
                             {unico
                               ? unico.custodias.length
@@ -245,11 +207,7 @@ export function TabelaDePapeis({
                           <MarcaManual avaliadoEm={unico.avaliadoEm} />
                         ) : null}
                         {unico?.nome ?? classe.nome}
-                        <Taxa
-                          valor={unico?.taxa}
-                          marcada={unico?.taxaMarcada}
-                          marcadaEm={unico?.taxaMarcadaEm}
-                        />
+                        <Taxa valor={unico?.taxa} />
                         <span className="account-meta">
                           {" "}
                           · {unico?.instituicao}
@@ -320,11 +278,7 @@ export function TabelaDePapeis({
                             <MarcaManual avaliadoEm={papel.avaliadoEm} />
                           ) : null}
                           {papel.nome}
-                          <Taxa
-                            valor={papel.taxa}
-                            marcada={papel.taxaMarcada}
-                            marcadaEm={papel.taxaMarcadaEm}
-                          />
+                          <Taxa valor={papel.taxa} />
                           <span className="account-meta">
                             {" "}
                             · {papel.instituicao}
