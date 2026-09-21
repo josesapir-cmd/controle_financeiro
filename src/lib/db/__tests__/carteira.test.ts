@@ -477,6 +477,29 @@ describe("bruto, liquido e o que a Pluggy manda junto", () => {
     expect(posicao.annualRate).toBe(7.02);
   });
 
+  // O CDB atrelado ao CDI chega com taxa fixa 0 e o indexador em 102: a taxa
+  // dele existe, so nao e um numero fixo. Deixar o 0 passar exibia "0,00% ao
+  // ano" — uma afirmacao falsa — e ainda zerava a media da classe inteira.
+  it("taxa zero e campo em branco, nao rendimento nulo", async () => {
+    await substituirPosicoes(db, BTG, [
+      {
+        id: "cdb-cdi",
+        itemId: BTG,
+        institution: "BTG",
+        type: "FIXED_INCOME",
+        subtype: "CDB",
+        balance: 100,
+        annualRate: 0,
+        indexPercent: 102,
+      },
+    ]);
+
+    const [posicao] = await listPosicoes(db);
+    expect(posicao.annualRate).toBeNull();
+    // O indexador continua la: e onde a remuneracao desse papel mora.
+    expect(posicao.indexPercent).toBe(102);
+  });
+
   it("ordena pelo bruto, e nao pelo liquido", async () => {
     await substituirPosicoes(db, BTG, [
       {

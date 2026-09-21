@@ -1748,6 +1748,19 @@ function opcional(valor: unknown): number | null {
   return valor === null || valor === undefined ? null : numero(valor);
 }
 
+/**
+ * Como `opcional`, mas para campos em que zero significa "nao informado".
+ *
+ * Vale para taxa, e so para ela: saldo zero e um papel resgatado, e imposto
+ * zero e um papel isento — os dois sao fatos. Taxa contratada de 0,00% ao ano
+ * nao e um fato, e o buraco que a instituicao deixou quando a remuneracao esta
+ * no indexador.
+ */
+function semZero(valor: unknown): number | null {
+  const n = opcional(valor);
+  return n === null || n === 0 ? null : n;
+}
+
 export async function listPosicoes(db: Db): Promise<PosicaoRow[]> {
   const linhas = await db.query<Record<string, unknown>>(
     `SELECT id, item_id, institution, type, subtype, name_enc, issuer_enc, balance, amount,
@@ -1781,7 +1794,13 @@ export async function listPosicoes(db: Db): Promise<PosicaoRow[]> {
         : numero(linha.profit),
     // A contratada primeiro: ela e a taxa do papel. `annual_rate` vem nulo em
     // renda fixa, que e por que a coluna mostrava traco justamente no Tesouro.
-    annualRate: opcional(linha.fixed_annual_rate) ?? opcional(linha.annual_rate),
+    //
+    // Zero conta como nao informada. Um CDB atrelado ao CDI chega com a taxa
+    // fixa em 0 e o percentual do indexador em 102 — a taxa dele existe, so
+    // nao e um numero fixo. Deixar o 0 passar nao mostra "sem taxa": mostra
+    // "0,00% ao ano", que e uma afirmacao falsa, e ainda puxa para baixo a
+    // media ponderada da classe inteira.
+    annualRate: semZero(linha.fixed_annual_rate) ?? semZero(linha.annual_rate),
     dueDate: dia(linha.due_date),
     currency: String(linha.currency ?? "BRL"),
     status: linha.status ? String(linha.status) : null,
@@ -1928,10 +1947,9 @@ export async function listAtivosManuais(db: Db): Promise<AtivoManualRow[]> {
       linha.profit === null || linha.profit === undefined
         ? null
         : numero(linha.profit),
-    annualRate:
-      linha.annual_rate === null || linha.annual_rate === undefined
-        ? null
-        : numero(linha.annual_rate),
+    // Mesma regra das posicoes: taxa zero e campo em branco, nao rendimento
+    // nulo. Ninguem digita 0,00% ao ano de proposito.
+    annualRate: semZero(linha.annual_rate),
     dueDate: dia(linha.due_date),
     currency: String(linha.currency ?? "BRL"),
     valuedAt: dia(linha.valued_at) ?? "",
