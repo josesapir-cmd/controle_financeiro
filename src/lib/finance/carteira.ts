@@ -50,13 +50,6 @@ export interface PapelNaCarteira {
   imposto?: number | null;
 }
 
-export interface GrupoDaCarteira {
-  /** Rotulo legivel do tipo ou subtipo — "Tesouro", "CDB", "Fundo". */
-  nome: string;
-  total: number;
-  papeis: number;
-}
-
 /**
  * Como chamar cada classe de papel em portugues.
  *
@@ -101,23 +94,6 @@ export function classeDoPapel(tipo: string, subtipo: string | null): string {
   if (subtipo && NOME_DA_CLASSE[subtipo]) return NOME_DA_CLASSE[subtipo];
   if (NOME_DO_TIPO[tipo]) return NOME_DO_TIPO[tipo];
   return subtipo || tipo;
-}
-
-export function agrupar(
-  papeis: PapelNaCarteira[],
-  chave: (papel: PapelNaCarteira) => string,
-): GrupoDaCarteira[] {
-  const mapa = new Map<string, GrupoDaCarteira>();
-
-  for (const papel of papeis) {
-    const nome = chave(papel);
-    const atual = mapa.get(nome) ?? { nome, total: 0, papeis: 0 };
-    atual.total += papel.saldo;
-    atual.papeis += 1;
-    mapa.set(nome, atual);
-  }
-
-  return [...mapa.values()].sort((a, b) => b.total - a.total);
 }
 
 /** Onde um instrumento esta custodiado, e quanto dele esta ali. */

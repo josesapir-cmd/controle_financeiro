@@ -133,7 +133,14 @@ function Fatia({ valor, total }: { valor: number; total: number }) {
   );
 }
 
-export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
+export function TabelaDePapeis({
+  posicoes,
+  vistoEm,
+}: {
+  posicoes: PapelNaCarteira[];
+  /** Quando a posicao mais antiga foi vista na corretora. */
+  vistoEm?: Date | null;
+}) {
   const [abertos, setAbertos] = useState<ReadonlySet<string>>(new Set());
   const classes = agruparPorClasse(posicoes);
   const total = classes.reduce((s, c) => s + c.saldo, 0);
@@ -152,7 +159,15 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
   return (
     <figure className="gr">
       <figcaption className="gr-titulo">
-        Carteira · por classe, abrindo em instrumento e custodia
+        <span>Carteira · por classe, abrindo em instrumento e custodia</span>
+
+        {/* Um valor de carteira sem data parece sempre de hoje. Esta e a
+            unica coisa do cartao de resumo que nao podia sair com ele. */}
+        {vistoEm ? (
+          <span className="account-meta">
+            posicao de {dataCompleta(vistoEm.toISOString().slice(0, 10))}
+          </span>
+        ) : null}
       </figcaption>
 
       <div className="gr-rolagem">

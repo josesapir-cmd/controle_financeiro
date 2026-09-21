@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  agrupar,
   agruparPapeis,
   classeDoPapel,
   agruparPorClasse,
@@ -60,49 +59,6 @@ describe("classeDoPapel", () => {
     expect(classeDoPapel("CRYPTO", null)).toBe("Cripto");
     expect(classeDoPapel("REAL_ESTATE", null)).toBe("Imovel");
     expect(classeDoPapel("FIXED_INCOME", "FIDC")).toBe("FIDC");
-  });
-});
-
-describe("agrupar", () => {
-  const papeis = [
-    papel({ id: "a", subtipo: "CDB", saldo: 1000 }),
-    papel({ id: "b", subtipo: "CDB", saldo: 500 }),
-    papel({ id: "c", subtipo: "TREASURY", saldo: 3000 }),
-    papel({
-      id: "d",
-      tipo: "MUTUAL_FUND",
-      subtipo: "MULTIMARKET_FUND",
-      saldo: 200,
-    }),
-  ];
-
-  it("soma saldo e conta papeis por classe", () => {
-    const grupos = agrupar(papeis, (p) => classeDoPapel(p.tipo, p.subtipo));
-
-    expect(grupos).toEqual([
-      { nome: "Tesouro Direto", total: 3000, papeis: 1 },
-      { nome: "CDB", total: 1500, papeis: 2 },
-      { nome: "Fundo multimercado", total: 200, papeis: 1 },
-    ]);
-  });
-
-  it("ordena do maior total para o menor", () => {
-    const grupos = agrupar(papeis, (p) => classeDoPapel(p.tipo, p.subtipo));
-    expect(grupos.map((g) => g.total)).toEqual([3000, 1500, 200]);
-  });
-
-  it("nao perde nem duplica saldo: a soma dos grupos e a soma dos papeis", () => {
-    const porClasse = agrupar(papeis, (p) => classeDoPapel(p.tipo, p.subtipo));
-    const porInstituicao = agrupar(papeis, (p) => p.instituicao);
-    const total = papeis.reduce((s, p) => s + p.saldo, 0);
-
-    expect(porClasse.reduce((s, g) => s + g.total, 0)).toBe(total);
-    expect(porInstituicao.reduce((s, g) => s + g.total, 0)).toBe(total);
-    expect(porInstituicao).toHaveLength(1);
-  });
-
-  it("nao inventa grupo quando nao ha papel", () => {
-    expect(agrupar([], (p) => p.instituicao)).toEqual([]);
   });
 });
 

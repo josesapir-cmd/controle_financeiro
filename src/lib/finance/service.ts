@@ -69,19 +69,25 @@ import {
 } from "./dates";
 import { netWorth, normalizeAmount, sumBy } from "./money";
 import { rotuloDoLancamento } from "./rotulo";
-import { fronteiraDeDados, situacaoDoDia, type SituacaoDoDia } from "./situacao";
+import {
+  fronteiraDeDados,
+  situacaoDoDia,
+  type SituacaoDoDia,
+} from "./situacao";
 import { corDeGrafico } from "./cores-de-conta";
 import { dadosDoCartao, rotuloDaParcela } from "./cartao";
 import { categoriaDoMcc } from "./mcc";
 import { chaveDaCompra } from "./parcelamento";
-import { classificar, estaClassificado, type Atribuicao } from "./classificacao";
+import {
+  classificar,
+  estaClassificado,
+  type Atribuicao,
+} from "./classificacao";
 import { montarCarteira, type CarteiraDeCompromissos } from "./compromissos";
 import {
-  agrupar,
   agruparPapeis,
   classeDoPapel,
   semZerados,
-  type GrupoDaCarteira,
   type PapelAgrupado,
   type PapelNaCarteira,
 } from "./carteira";
@@ -174,7 +180,9 @@ function paraRegistro(
 }
 
 /** Converte a linha do banco para a forma que os agregadores ja consomem. */
-function paraTransacao(linha: Awaited<ReturnType<typeof listTransactions>>[number]): Transaction {
+function paraTransacao(
+  linha: Awaited<ReturnType<typeof listTransactions>>[number],
+): Transaction {
   return {
     id: linha.id,
     accountId: linha.accountId,
@@ -220,10 +228,12 @@ async function carregar(
       : todas;
 
     const transacoes = selecionadas.flatMap((conta) =>
-      mockTransactions(conta.id, new Date(`${periodo.to}T12:00:00Z`)).map((t) => ({
-        ...t,
-        amount: normalizeAmount(t.amount, conta.type),
-      })),
+      mockTransactions(conta.id, new Date(`${periodo.to}T12:00:00Z`)).map(
+        (t) => ({
+          ...t,
+          amount: normalizeAmount(t.amount, conta.type),
+        }),
+      ),
     );
 
     return {
@@ -316,12 +326,19 @@ function conciliar(
       nomePara: para ? nome(para) : undefined,
     }));
 
-  if (Object.keys(mapa).length === 0) return { transacoes, sugestoes, decididas };
+  if (Object.keys(mapa).length === 0)
+    return { transacoes, sugestoes, decididas };
 
   return {
     transacoes: transacoes.map((t) =>
       t.counterparty
-        ? { ...t, counterparty: { ...t.counterparty, key: chaveEfetiva(t.counterparty.key, mapa) } }
+        ? {
+            ...t,
+            counterparty: {
+              ...t.counterparty,
+              key: chaveEfetiva(t.counterparty.key, mapa),
+            },
+          }
         : t,
     ),
     sugestoes,
@@ -374,7 +391,10 @@ function opcoes(contas: AccountWithConnector[]): AccountOption[] {
 function falhas(status: SyncStatus[]): { itemId: string; message: string }[] {
   return status
     .filter((s) => s.lastSyncError)
-    .map((s) => ({ itemId: s.itemId, message: `${s.connectorName}: ${s.lastSyncError}` }));
+    .map((s) => ({
+      itemId: s.itemId,
+      message: `${s.connectorName}: ${s.lastSyncError}`,
+    }));
 }
 
 export interface DashboardData {
@@ -399,8 +419,12 @@ export interface DashboardData {
 
 /** Data da sincronizacao mais antiga entre as conexoes: e a que limita a confianca. */
 function sincronizadoEm(status: SyncStatus[]): Date | null {
-  const datas = status.map((s) => s.lastSyncedAt).filter((d): d is Date => Boolean(d));
-  return datas.length ? new Date(Math.min(...datas.map((d) => d.getTime()))) : null;
+  const datas = status
+    .map((s) => s.lastSyncedAt)
+    .filter((d): d is Date => Boolean(d));
+  return datas.length
+    ? new Date(Math.min(...datas.map((d) => d.getTime())))
+    : null;
 }
 
 export async function loadDashboard(
@@ -409,10 +433,11 @@ export async function loadDashboard(
 ): Promise<DashboardData> {
   const period = currentMonthRange(reference);
   const accountIds = options.accountIds ?? [];
-  const [{ contas, todasAsContas, transacoes, status }, importacoesPendentes] = await Promise.all([
-    carregar(period, accountIds),
-    contarImportacoesPendentes(),
-  ]);
+  const [{ contas, todasAsContas, transacoes, status }, importacoesPendentes] =
+    await Promise.all([
+      carregar(period, accountIds),
+      contarImportacoesPendentes(),
+    ]);
 
   const saldos = comSaldo(contas);
 
@@ -463,7 +488,8 @@ export async function loadDay(
   doDia.sort((a, b) => a.date.localeCompare(b.date));
 
   const accountNames: Record<string, string> = {};
-  for (const conta of contas) accountNames[conta.id] = conta.marketingName || conta.name;
+  for (const conta of contas)
+    accountNames[conta.id] = conta.marketingName || conta.name;
 
   return {
     day,
@@ -501,10 +527,8 @@ export async function loadCounterparties(
   options: { includeInternal?: boolean; accountIds?: string[] } = {},
 ): Promise<CounterpartiesData> {
   const accountIds = options.accountIds ?? [];
-  const { contas, todasAsContas, transacoes, registry, status, decisoes } = await carregar(
-    period,
-    accountIds,
-  );
+  const { contas, todasAsContas, transacoes, registry, status, decisoes } =
+    await carregar(period, accountIds);
 
   const conciliado = conciliar(transacoes, decisoes);
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
@@ -513,7 +537,9 @@ export async function loadCounterparties(
   // dinheiro mudou de bolso dentro do proprio patrimonio.
   const relevantes = options.includeInternal
     ? conciliado.transacoes
-    : conciliado.transacoes.filter((t) => !t.counterparty?.self && classify(t) !== "transfer");
+    : conciliado.transacoes.filter(
+        (t) => !t.counterparty?.self && classify(t) !== "transfer",
+      );
 
   const counterparties = aggregateCounterparties(relevantes, cadastro);
 
@@ -560,7 +586,10 @@ export async function loadConnections(): Promise<ConnectionRow[]> {
   }
 
   const conexao = db();
-  const [estado, contas] = await Promise.all([syncStatus(conexao), listAccounts(conexao)]);
+  const [estado, contas] = await Promise.all([
+    syncStatus(conexao),
+    listAccounts(conexao),
+  ]);
 
   return estado.map((s) => ({
     ...s,
@@ -576,7 +605,10 @@ export async function loadConnections(): Promise<ConnectionRow[]> {
  * ja esta gravado nos rotulos entra junto, para nao perder nada que exista so
  * como texto.
  */
-export async function loadTaxonomy(): Promise<{ categories: string[]; subcategories: string[] }> {
+export async function loadTaxonomy(): Promise<{
+  categories: string[];
+  subcategories: string[];
+}> {
   if (useMock()) return { categories: [], subcategories: [] };
 
   const conexao = db();
@@ -639,7 +671,10 @@ export async function loadImportacoes(limite = 5): Promise<ImportacaoResumo[]> {
       images: lote.images,
       envios: lote.envios,
       linhas: lote.linhas.length,
-      saidas: lote.linhas.reduce((total, l) => (l.valor < 0 ? total - l.valor : total), 0),
+      saidas: lote.linhas.reduce(
+        (total, l) => (l.valor < 0 ? total - l.valor : total),
+        0,
+      ),
       decidir: decidir.length,
       conferir: conferir.length,
     };
@@ -669,7 +704,12 @@ export interface CentrosDeCustoData {
    * o mes diz o que esta acontecendo, o ano diz o tamanho da categoria.
    */
   noAno: CategoriaTotal[];
-  semCategoria: { sent: number; received: number; count: number; counterparties: number };
+  semCategoria: {
+    sent: number;
+    received: number;
+    count: number;
+    counterparties: number;
+  };
   period: Period;
   /** Total de saida das categorias de despesa, para o numero do topo. */
   despesas: number;
@@ -716,12 +756,15 @@ export async function loadCentrosDeCusto(
   };
 
   const conexao = db();
-  const [{ todasAsContas, transacoes, registry, decisoes }, categorias, centros] =
-    await Promise.all([
-      carregar(amplo, accountIds),
-      listCategorias(conexao),
-      listCentrosDeCusto(conexao),
-    ]);
+  const [
+    { todasAsContas, transacoes, registry, decisoes },
+    categorias,
+    centros,
+  ] = await Promise.all([
+    carregar(amplo, accountIds),
+    listCategorias(conexao),
+    listCentrosDeCusto(conexao),
+  ]);
 
   const rotulos = Object.fromEntries(
     (await listTransactionLabels(conexao)).map((r) => [
@@ -750,7 +793,10 @@ export async function loadCentrosDeCusto(
       rotulos,
     );
 
-  const { categorias: totais, semCategoria } = noRecorte(period.from, period.to);
+  const { categorias: totais, semCategoria } = noRecorte(
+    period.from,
+    period.to,
+  );
 
   return {
     categorias: totais,
@@ -908,7 +954,12 @@ function chaveDeRegra(t: Transaction): string | null {
  * alcancar um lancamento do Nubank.
  */
 function indexarRegrasDeCartao(
-  regras: { accountId: string; cardNumber: string; categoryId: string | null; costCenterId: string | null }[],
+  regras: {
+    accountId: string;
+    cardNumber: string;
+    categoryId: string | null;
+    costCenterId: string | null;
+  }[],
 ): Map<string, Atribuicao> {
   return new Map(
     regras.map((r) => [
@@ -970,7 +1021,9 @@ function pistasDaCompra(
   const linhas: { label: string; value: string }[] = [];
   const cartao = dadosDoCartao(t.details);
 
-  const compraEm = t.details?.find((d) => d.label === "Cartao · purchaseDate")?.value;
+  const compraEm = t.details?.find(
+    (d) => d.label === "Cartao · purchaseDate",
+  )?.value;
   if (compraEm && cartao.totalDeParcelas && cartao.totalDeParcelas > 1) {
     const quando = new Date(compraEm);
     if (!Number.isNaN(quando.getTime())) {
@@ -983,7 +1036,12 @@ function pistasDaCompra(
 
   // Palpite, e a tela diz que e: mesma loja, mesmo valor, data proxima.
   const plausiveis = pedidosPlausiveis(
-    { dia: localDay(t.date), valor: t.amount, descricao: rotulo, contraparte: nomeDaParte },
+    {
+      dia: localDay(t.date),
+      valor: t.amount,
+      descricao: rotulo,
+      contraparte: nomeDaParte,
+    },
     pedidos,
   );
 
@@ -1024,9 +1082,13 @@ function detalhesDoLancamento(
     linhas.push({ label: "No extrato", value: original });
   }
   if (t.category) {
-    linhas.push({ label: "Categoria da Pluggy", value: translateCategory(t.category) });
+    linhas.push({
+      label: "Categoria da Pluggy",
+      value: translateCategory(t.category),
+    });
   }
-  if (t.counterparty?.name) linhas.push({ label: "Contraparte", value: t.counterparty.name });
+  if (t.counterparty?.name)
+    linhas.push({ label: "Contraparte", value: t.counterparty.name });
   if (t.counterparty?.document) {
     linhas.push({
       label: "Documento",
@@ -1039,7 +1101,12 @@ function detalhesDoLancamento(
   }
 
   // Quando a compra aconteceu, e o que um print ja contou sobre ela.
-  for (const pista of pistasDaCompra(t, rotulo, contexto.nomeDaParte, contexto.pedidos)) {
+  for (const pista of pistasDaCompra(
+    t,
+    rotulo,
+    contexto.nomeDaParte,
+    contexto.pedidos,
+  )) {
     linhas.push(pista);
   }
 
@@ -1052,7 +1119,11 @@ function detalhesDoLancamento(
 
 /** Indexa os rotulos de compra pela chave que ja vem cifrada do banco. */
 function indexarRotulosDeCompra(
-  rotulos: { purchaseKey: string; categoryId: string | null; costCenterId: string | null }[],
+  rotulos: {
+    purchaseKey: string;
+    categoryId: string | null;
+    costCenterId: string | null;
+  }[],
 ): Map<string, Atribuicao> {
   return new Map(
     rotulos.map((r) => [
@@ -1106,7 +1177,10 @@ function daContraparte(
 
 function jaClassificado(
   t: Transaction,
-  rotulos: Map<string, { categoryId: string | null; costCenterId: string | null }>,
+  rotulos: Map<
+    string,
+    { categoryId: string | null; costCenterId: string | null }
+  >,
   cadastro: CounterpartyRegistry,
   porCartao: Map<string, Atribuicao> = new Map(),
   porCompra: Map<string, Atribuicao> = new Map(),
@@ -1187,7 +1261,8 @@ export async function loadSituacaoDaFita(
   const pendentes: Record<string, number> = {};
   for (const t of conciliado.transacoes) {
     if (!isUserInitiatedExpense(t)) continue;
-    if (jaClassificado(t, porId, cadastro, porCartao, porCompra, divididas)) continue;
+    if (jaClassificado(t, porId, cadastro, porCartao, porCompra, divididas))
+      continue;
 
     const dia = localDay(t.date);
     pendentes[dia] = (pendentes[dia] ?? 0) + 1;
@@ -1258,7 +1333,8 @@ export async function loadPendentesDoPeriodo(
   }
 
   const nomeDaConta: Record<string, string> = {};
-  for (const conta of contas) nomeDaConta[conta.id] = conta.marketingName || conta.name;
+  for (const conta of contas)
+    nomeDaConta[conta.id] = conta.marketingName || conta.name;
 
   const frequencia = new Map<string, number>();
   for (const t of conciliado.transacoes) {
@@ -1268,7 +1344,9 @@ export async function loadPendentesDoPeriodo(
 
   const nomeDaParte = (t: Transaction): string | null => {
     const chave = chaveDeRegra(t);
-    return (chave ? cadastro[chave]?.alias : null) || t.counterparty?.name || null;
+    return (
+      (chave ? cadastro[chave]?.alias : null) || t.counterparty?.name || null
+    );
   };
 
   /**
@@ -1280,7 +1358,9 @@ export async function loadPendentesDoPeriodo(
    */
   const sugestaoDe = (t: Transaction): string | null => {
     const nome = categoriaDoMcc(dadosDoCartao(t.details).mcc);
-    return nome ? (idPorNomeDaCategoria.get(normalizeName(nome)) ?? null) : null;
+    return nome
+      ? (idPorNomeDaCategoria.get(normalizeName(nome)) ?? null)
+      : null;
   };
 
   const pendentes = conciliado.transacoes
@@ -1460,10 +1540,14 @@ export async function loadPainelDeDespesas(
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
   const porId = new Map(rotulos.map((r) => [r.transactionId, r]));
   const centroPorId = new Map(centros.map((c) => [c.id, c]));
-  const categoriaPorNome = new Map(categorias.map((c) => [normalizeName(c.name), c] as const));
+  const categoriaPorNome = new Map(
+    categorias.map((c) => [normalizeName(c.name), c] as const),
+  );
   const categoriaPorId = new Map(categorias.map((c) => [c.id, c] as const));
 
-  const idPorNome = new Map([...categoriaPorNome].map(([nome, c]) => [nome, c.id] as const));
+  const idPorNome = new Map(
+    [...categoriaPorNome].map(([nome, c]) => [nome, c.id] as const),
+  );
 
   /** A categoria que vale para o lancamento, na ordem de precedencia unica. */
   const categoriaDe = (t: Transaction): CategoriaRow | null => {
@@ -1481,21 +1565,32 @@ export async function loadPainelDeDespesas(
       if (centro) return categoriaPorId.get(centro.categoryId) ?? null;
     }
 
-    return decidida.categoryId ? (categoriaPorId.get(decidida.categoryId) ?? null) : null;
+    return decidida.categoryId
+      ? (categoriaPorId.get(decidida.categoryId) ?? null)
+      : null;
   };
 
-  const despesas = conciliado.transacoes.filter((t) => classify(t) === "expense");
+  const despesas = conciliado.transacoes.filter(
+    (t) => classify(t) === "expense",
+  );
 
   const nomeDaContraparte = (t: Transaction): string | null => {
     const chave = chaveDeRegra(t);
-    return (chave ? cadastro[chave]?.alias : null) || t.counterparty?.name || null;
+    return (
+      (chave ? cadastro[chave]?.alias : null) || t.counterparty?.name || null
+    );
   };
 
   const nomeDaConta = new Map(contas.map((c) => [c.id, c.name] as const));
-  const bancoDaConta = new Map(contas.map((c) => [c.id, c.connectorName] as const));
+  const bancoDaConta = new Map(
+    contas.map((c) => [c.id, c.connectorName] as const),
+  );
 
   const totalPorConta = new Map<string, number>();
-  const totalPorCategoria = new Map<string, { total: number; contagem: number }>();
+  const totalPorCategoria = new Map<
+    string,
+    { total: number; contagem: number }
+  >();
   /** categoria -> centro (ou "" para o balde sem centro) -> despesas. */
   const arvore = new Map<string, Map<string, DespesaDaCategoria[]>>();
   let semCategoria = { total: 0, contagem: 0 };
@@ -1507,17 +1602,22 @@ export async function loadPainelDeDespesas(
     // cair na categoria do cartao e na subcategoria da contraparte — duas
     // decisoes viradas numa terceira que ninguem tomou.
     const proprio = porId.get(t.id);
-    if (proprio?.costCenterId) return centroPorId.get(proprio.costCenterId) ?? null;
+    if (proprio?.costCenterId)
+      return centroPorId.get(proprio.costCenterId) ?? null;
     if (proprio?.categoryId) return null;
 
     const daSuaCompra = daCompra(t, porCompra);
     if (daSuaCompra) {
-      return daSuaCompra.costCenterId ? (centroPorId.get(daSuaCompra.costCenterId) ?? null) : null;
+      return daSuaCompra.costCenterId
+        ? (centroPorId.get(daSuaCompra.costCenterId) ?? null)
+        : null;
     }
 
     const doCartao = regraDoCartao(t, porCartao);
     if (doCartao) {
-      return doCartao.costCenterId ? (centroPorId.get(doCartao.costCenterId) ?? null) : null;
+      return doCartao.costCenterId
+        ? (centroPorId.get(doCartao.costCenterId) ?? null)
+        : null;
     }
 
     const chave = chaveDeRegra(t);
@@ -1556,8 +1656,12 @@ export async function loadPainelDeDespesas(
       // id da cobranca colidiriam na lista.
       chave: `${t.id}#${i}`,
       valor: parte.amount,
-      categoria: parte.categoryId ? (categoriaPorId.get(parte.categoryId) ?? null) : null,
-      centro: parte.costCenterId ? (centroPorId.get(parte.costCenterId) ?? null) : null,
+      categoria: parte.categoryId
+        ? (categoriaPorId.get(parte.categoryId) ?? null)
+        : null,
+      centro: parte.costCenterId
+        ? (centroPorId.get(parte.costCenterId) ?? null)
+        : null,
       sufixo: parte.owedBy ? ` · ${parte.owedBy}` : " · parte",
     }));
   };
@@ -1573,14 +1677,23 @@ export async function loadPainelDeDespesas(
       if (categoria && categoria.kind !== "despesa") continue;
 
       total += valor;
-      totalPorConta.set(t.accountId, (totalPorConta.get(t.accountId) ?? 0) + valor);
+      totalPorConta.set(
+        t.accountId,
+        (totalPorConta.get(t.accountId) ?? 0) + valor,
+      );
 
       if (!categoria) {
-        semCategoria = { total: semCategoria.total + valor, contagem: semCategoria.contagem + 1 };
+        semCategoria = {
+          total: semCategoria.total + valor,
+          contagem: semCategoria.contagem + 1,
+        };
         continue;
       }
 
-      const atual = totalPorCategoria.get(categoria.id) ?? { total: 0, contagem: 0 };
+      const atual = totalPorCategoria.get(categoria.id) ?? {
+        total: 0,
+        contagem: 0,
+      };
       totalPorCategoria.set(categoria.id, {
         total: atual.total + valor,
         contagem: atual.contagem + 1,
@@ -1590,9 +1703,11 @@ export async function loadPainelDeDespesas(
       // contraparte pode ter sido movido de categoria depois, e pendura-lo aqui
       // somaria uma subcategoria que nao pertence a linha.
       const centro = pedaco.centro;
-      const chaveDoCentro = centro && centro.categoryId === categoria.id ? centro.id : "";
+      const chaveDoCentro =
+        centro && centro.categoryId === categoria.id ? centro.id : "";
 
-      const daCategoria = arvore.get(categoria.id) ?? new Map<string, DespesaDaCategoria[]>();
+      const daCategoria =
+        arvore.get(categoria.id) ?? new Map<string, DespesaDaCategoria[]>();
       const doCentro = daCategoria.get(chaveDoCentro) ?? [];
       doCentro.push({
         id: pedaco.chave,
@@ -1606,16 +1721,18 @@ export async function loadPainelDeDespesas(
     }
   }
 
-  const porConta: DespesaPorConta[] = [...totalPorConta.entries()].map(([id, valor]) => {
-    const banco = bancoDaConta.get(id) ?? "";
-    return {
-      id,
-      nome: nomeDaConta.get(id) ?? banco,
-      connectorName: banco,
-      total: valor,
-      cor: corDeGrafico(banco),
-    };
-  });
+  const porConta: DespesaPorConta[] = [...totalPorConta.entries()].map(
+    ([id, valor]) => {
+      const banco = bancoDaConta.get(id) ?? "";
+      return {
+        id,
+        nome: nomeDaConta.get(id) ?? banco,
+        connectorName: banco,
+        total: valor,
+        cor: corDeGrafico(banco),
+      };
+    },
+  );
 
   return {
     period,
@@ -1623,9 +1740,12 @@ export async function loadPainelDeDespesas(
     categorias: [...totalPorCategoria.entries()]
       .map(([id, dados]) => {
         const categoria = categoriaPorId.get(id);
-        const daCategoria = arvore.get(id) ?? new Map<string, DespesaDaCategoria[]>();
+        const daCategoria =
+          arvore.get(id) ?? new Map<string, DespesaDaCategoria[]>();
 
-        const centrosDaCategoria: SubcategoriaDeDespesa[] = [...daCategoria.entries()]
+        const centrosDaCategoria: SubcategoriaDeDespesa[] = [
+          ...daCategoria.entries(),
+        ]
           .map(([centroId, lancamentos]) => ({
             id: centroId || null,
             nome: centroId
@@ -1686,21 +1806,21 @@ export async function loadClassificacaoDoDia(
     pedidosLidos,
     partes,
   ] = await Promise.all([
-      carregar(janela, accountIds),
-      listCategorias(conexao),
-      listCentrosDeCusto(conexao),
-      listTransactionLabels(conexao),
-      // A tabela pode nao existir ainda (migracao 009 pendente). A tela do dia
-      // nao pode cair por causa de um nome de produto: sem ela, os cartoes
-      // ficam sem o produto e todo o resto continua funcionando.
-      listTransactionProducts(conexao).catch(() => []),
-      // Idem para a 014: sem a tabela, some a regra de cartao e o resto da
-      // tela continua de pe.
-      listRegrasDeCartao(conexao).catch(() => []),
-      listRotulosDeCompra(conexao).catch(() => []),
-      pedidosNaoConferidos(conexao),
-      listPartesDaDespesa(conexao).catch(() => []),
-    ]);
+    carregar(janela, accountIds),
+    listCategorias(conexao),
+    listCentrosDeCusto(conexao),
+    listTransactionLabels(conexao),
+    // A tabela pode nao existir ainda (migracao 009 pendente). A tela do dia
+    // nao pode cair por causa de um nome de produto: sem ela, os cartoes
+    // ficam sem o produto e todo o resto continua funcionando.
+    listTransactionProducts(conexao).catch(() => []),
+    // Idem para a 014: sem a tabela, some a regra de cartao e o resto da
+    // tela continua de pe.
+    listRegrasDeCartao(conexao).catch(() => []),
+    listRotulosDeCompra(conexao).catch(() => []),
+    pedidosNaoConferidos(conexao),
+    listPartesDaDespesa(conexao).catch(() => []),
+  ]);
 
   const conciliado = conciliar(transacoes, decisoes);
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
@@ -1726,14 +1846,17 @@ export async function loadClassificacaoDoDia(
   }
 
   const nomeDaConta: Record<string, string> = {};
-  for (const conta of contas) nomeDaConta[conta.id] = conta.marketingName || conta.name;
+  for (const conta of contas)
+    nomeDaConta[conta.id] = conta.marketingName || conta.name;
 
   const centroPorId = new Map(centros.map((c) => [c.id, c]));
   const categoriaPorRotulo = new Map(
     categorias.map((c) => [normalizeName(c.name), c.id] as const),
   );
   const centroPorRotulo = new Map(
-    centros.map((c) => [`${c.categoryId}|${normalizeName(c.name)}`, c.id] as const),
+    centros.map(
+      (c) => [`${c.categoryId}|${normalizeName(c.name)}`, c.id] as const,
+    ),
   );
 
   // A chave e a mesma que a fita de situacao usa (`chaveDeRegra`, no topo do
@@ -1762,7 +1885,9 @@ export async function loadClassificacaoDoDia(
     const cadastroDaParte = chave ? cadastro[chave] : undefined;
     const daParte = cadastroDaParte?.category
       ? {
-          categoryId: categoriaPorRotulo.get(normalizeName(cadastroDaParte.category)) ?? null,
+          categoryId:
+            categoriaPorRotulo.get(normalizeName(cadastroDaParte.category)) ??
+            null,
           costCenterId: null,
         }
       : null;
@@ -1793,7 +1918,9 @@ export async function loadClassificacaoDoDia(
       return { categoriaId, centroId, comentario, herdada: true };
     }
 
-    const centro = decidida.costCenterId ? centroPorId.get(decidida.costCenterId) : undefined;
+    const centro = decidida.costCenterId
+      ? centroPorId.get(decidida.costCenterId)
+      : undefined;
     return {
       categoriaId: centro?.categoryId ?? decidida.categoryId,
       centroId: decidida.costCenterId,
@@ -1809,7 +1936,9 @@ export async function loadClassificacaoDoDia(
   // guardado na contraparte, que e quem identifica e concilia.
   const nomeDaParte = (t: Transaction): string | null => {
     const chave = chaveIdentificada(t.counterparty?.key);
-    return (chave ? cadastro[chave]?.alias : null) || t.counterparty?.name || null;
+    return (
+      (chave ? cadastro[chave]?.alias : null) || t.counterparty?.name || null
+    );
   };
 
   /** O que se sabe do lancamento, sem repetir o que o cartao ja mostra. */
@@ -1825,7 +1954,9 @@ export async function loadClassificacaoDoDia(
     return nome ? (categoriaPorRotulo.get(normalizeName(nome)) ?? null) : null;
   };
 
-  const nomeDaCategoriaPorId = new Map(categorias.map((c) => [c.id, c.name] as const));
+  const nomeDaCategoriaPorId = new Map(
+    categorias.map((c) => [c.id, c.name] as const),
+  );
 
   const lancamentos: LancamentoParaClassificar[] = doDia.map((t) => {
     const classificavel = isUserInitiatedExpense(t);
@@ -1835,7 +1966,9 @@ export async function loadClassificacaoDoDia(
     const divisao = (rateios.get(t.id) ?? []).map((parte) => ({
       valor: parte.amount,
       categoriaId: parte.categoryId,
-      categoria: parte.categoryId ? (nomeDaCategoriaPorId.get(parte.categoryId) ?? null) : null,
+      categoria: parte.categoryId
+        ? (nomeDaCategoriaPorId.get(parte.categoryId) ?? null)
+        : null,
       devedor: parte.owedBy,
     }));
 
@@ -1875,7 +2008,10 @@ export async function loadClassificacaoDoDia(
   // Totais dos blocos: o que ja esta classificado naquela categoria, no dia e
   // no mes. Usa a mesma resolucao dos cartoes, entao os numeros batem com o que
   // a tela mostra.
-  const totais = new Map<string, { dia: number; mes: number; contagem: number }>();
+  const totais = new Map<
+    string,
+    { dia: number; mes: number; contagem: number }
+  >();
   for (const t of conciliado.transacoes) {
     if (!isUserInitiatedExpense(t)) continue;
 
@@ -1885,7 +2021,10 @@ export async function loadClassificacaoDoDia(
     const divisao = rateios.get(t.id);
     const pedacos =
       divisao && divisao.length > 0
-        ? divisao.map((parte) => ({ categoriaId: parte.categoryId, valor: parte.amount }))
+        ? divisao.map((parte) => ({
+            categoriaId: parte.categoryId,
+            valor: parte.amount,
+          }))
         : [{ categoriaId: resolver(t).categoriaId, valor: -t.amount }];
 
     for (const { categoriaId, valor } of pedacos) {
@@ -2013,10 +2152,15 @@ export async function loadCadastroDeContas(
     listTransactions(conexao, { from: desde, to: hoje }),
   ]);
 
-  const regraPorChave = new Map(regras.map((r) => [`${r.accountId}|${r.cardNumber}`, r] as const));
+  const regraPorChave = new Map(
+    regras.map((r) => [`${r.accountId}|${r.cardNumber}`, r] as const),
+  );
 
   /** conta -> cartao -> o que se sabe dele pelos lancamentos. */
-  const vistos = new Map<string, Map<string, { n: number; gasto: number; ultimo: string }>>();
+  const vistos = new Map<
+    string,
+    Map<string, { n: number; gasto: number; ultimo: string }>
+  >();
 
   for (const linha of transacoes) {
     const numero = dadosDoCartao(linha.details ?? undefined).numero;
@@ -2040,7 +2184,11 @@ export async function loadCadastroDeContas(
     desde,
     migracaoPendente,
     categorias: categorias.map((c) => ({ id: c.id, name: c.name, hue: c.hue })),
-    centros: centros.map((c) => ({ id: c.id, categoryId: c.categoryId, name: c.name })),
+    centros: centros.map((c) => ({
+      id: c.id,
+      categoryId: c.categoryId,
+      name: c.name,
+    })),
     contas: contas
       .map((conta) => {
         const daConta = vistos.get(conta.id) ?? new Map();
@@ -2101,7 +2249,9 @@ export interface BuscaDeContrapartes {
   termo: string;
   resultados: ContraparteEncontrada[];
   /** A contraparte aberta, com o historico inteiro dela. */
-  escolhida: (ContraparteEncontrada & { lancamentos: LancamentoDaContraparte[] }) | null;
+  escolhida:
+    | (ContraparteEncontrada & { lancamentos: LancamentoDaContraparte[] })
+    | null;
   /** Quantas contrapartes casaram alem das que couberam em `resultados`. */
   alemDoLimite: number;
 }
@@ -2146,9 +2296,14 @@ export async function loadBuscaDeContrapartes(
   const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
 
   const nomeDaConta = new Map(
-    contas.map((c) => [c.id, `${c.connectorName}${c.name ? ` · ${c.name}` : ""}`] as const),
+    contas.map(
+      (c) =>
+        [c.id, `${c.connectorName}${c.name ? ` · ${c.name}` : ""}`] as const,
+    ),
   );
-  const nomeDaCategoria = new Map(categorias.map((c) => [c.id, c.name] as const));
+  const nomeDaCategoria = new Map(
+    categorias.map((c) => [c.id, c.name] as const),
+  );
 
   const agregadas = aggregateCounterparties(
     conciliado.transacoes.filter((t) => !t.counterparty?.self),
@@ -2171,13 +2326,17 @@ export async function loadBuscaDeContrapartes(
     };
   };
 
-  const casaram = limpo ? agregadas.filter((c) => contraparteCasa(c, limpo)) : [];
+  const casaram = limpo
+    ? agregadas.filter((c) => contraparteCasa(c, limpo))
+    : [];
 
   // Do mais movimentado para o menos: quem procura por "mercado" quer primeiro
   // aquele em que gasta, e nao o que apareceu uma vez.
   casaram.sort((a, b) => b.count - a.count);
 
-  const alvo = escolhidaKey ? agregadas.find((c) => c.key === escolhidaKey) : undefined;
+  const alvo = escolhidaKey
+    ? agregadas.find((c) => c.key === escolhidaKey)
+    : undefined;
 
   return {
     termo: limpo,
@@ -2195,7 +2354,9 @@ export async function loadBuscaDeContrapartes(
               descricao: t.description,
               valor: t.amount,
               conta: nomeDaConta.get(t.accountId ?? "") ?? "",
-              categoria: t.category ? (nomeDaCategoria.get(t.category) ?? t.category) : null,
+              categoria: t.category
+                ? (nomeDaCategoria.get(t.category) ?? t.category)
+                : null,
               parcela: rotuloDaParcela(dadosDoCartao(t.details)),
             })),
         }
@@ -2203,23 +2364,19 @@ export async function loadBuscaDeContrapartes(
   };
 }
 
-export type { GrupoDaCarteira, PapelAgrupado, PapelNaCarteira };
+export type { PapelAgrupado, PapelNaCarteira };
 
 export interface Carteira {
+  /** Agrupados por instrumento. A tela so olha se esta vazio. */
   papeis: PapelAgrupado[];
   /**
    * A lista plana, uma linha por posicao e custodia.
    *
-   * Vai junto para a tabela poder reagrupar no clique, sem ida ao servidor:
-   * "por instrumento" e "por classe" sao duas leituras do mesmo dado, e o dado
-   * ja veio inteiro.
+   * E o que a tabela recebe: ela agrupa por classe, instrumento e custodia no
+   * cliente, e soma cada nivel a partir daqui. Os totais que este objeto
+   * carregava saiam prontos do servidor e ninguem mais os lia.
    */
   posicoes: PapelNaCarteira[];
-  porClasse: GrupoDaCarteira[];
-  porInstituicao: GrupoDaCarteira[];
-  total: number;
-  /** Soma dos lucros informados. `null` quando nenhum papel informa. */
-  lucro: number | null;
   /** Quando a posicao mais antiga foi vista pela ultima vez. */
   vistoEm: Date | null;
 }
@@ -2245,12 +2402,14 @@ export async function loadCarteira(): Promise<Carteira> {
   // sao papeis diferentes — entao quem uniu foi o usuario, e aqui so se aplica
   // a decisao dele.
   const porFingerprint = new Map(apelidos.map((a) => [a.fingerprint, a.alias]));
-  const apelidar = (nome: string) => porFingerprint.get(instrumentFingerprint(nome)) ?? null;
+  const apelidar = (nome: string) =>
+    porFingerprint.get(instrumentFingerprint(nome)) ?? null;
 
   // A cotacao e procurada pelo nome JA apelidado: e uma marcacao por
   // instrumento como a tela o mostra, e nao uma por grafia de custodia.
   const porCotacao = new Map(cotacoes.map((c) => [c.fingerprint, c]));
-  const marcacao = (nome: string) => porCotacao.get(instrumentFingerprint(nome)) ?? null;
+  const marcacao = (nome: string) =>
+    porCotacao.get(instrumentFingerprint(nome)) ?? null;
 
   const posicoesLidas: PapelNaCarteira[] = posicoes.map((posicao) => {
     // Sem nome, o tipo ja diz mais que um id opaco.
@@ -2291,8 +2450,10 @@ export async function loadCarteira(): Promise<Carteira> {
     id: `manual:${ativo.id}`,
     nome: apelidar(ativo.name) ?? ativo.name,
     apelidado: apelidar(ativo.name) !== null,
-    taxaMarcada: marcacao(apelidar(ativo.name) ?? ativo.name)?.rateLabel ?? null,
-    taxaMarcadaEm: marcacao(apelidar(ativo.name) ?? ativo.name)?.quotedAt ?? null,
+    taxaMarcada:
+      marcacao(apelidar(ativo.name) ?? ativo.name)?.rateLabel ?? null,
+    taxaMarcadaEm:
+      marcacao(apelidar(ativo.name) ?? ativo.name)?.quotedAt ?? null,
     instituicao: ativo.institution || "fora do Open Finance",
     tipo: ativo.type,
     subtipo: ativo.subtype,
@@ -2310,25 +2471,9 @@ export async function loadCarteira(): Promise<Carteira> {
   const porCustodia = semZerados([...posicoesLidas, ...manuais]);
   const papeis = agruparPapeis(porCustodia);
 
-  const comLucro = papeis.filter((papel) => papel.lucro !== null);
-
   return {
     papeis,
     posicoes: porCustodia,
-    porClasse: agrupar(papeis, (papel) =>
-      classeDoPapel(papel.tipo, papel.subtipo),
-    ),
-    // Por instituicao sai da lista ANTES do agrupamento: depois dele um papel
-    // custodiado em dois lugares vira uma linha so, e somar essa linha inteira
-    // para uma das duas daria a ela o dinheiro que esta na outra.
-    porInstituicao: agrupar(porCustodia, (papel) => papel.instituicao),
-    total: papeis.reduce((soma, papel) => soma + papel.saldo, 0),
-    // `null` quando NENHUM papel informa lucro, e nao zero: zero diria que a
-    // carteira nao rendeu nada, que e outra afirmacao.
-    lucro:
-      comLucro.length > 0
-        ? comLucro.reduce((s, p) => s + (p.lucro ?? 0), 0)
-        : null,
     vistoEm: posicoes.reduce<Date | null>(
       (maisAntigo, posicao) =>
         !maisAntigo || posicao.seenAt < maisAntigo
