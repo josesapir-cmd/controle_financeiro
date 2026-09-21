@@ -66,6 +66,19 @@ export function formatBRL(value: number): string {
   return brl.format(Object.is(value, -0) ? 0 : value);
 }
 
+/**
+ * Porcentagem em pt-BR: virgula decimal, como o resto dos numeros da tela.
+ *
+ * `toFixed` devolve ponto, e um "55.7%" ao lado de um "R$ 1.304.557,92" nao le
+ * como o mesmo idioma — ainda mais com o "100,0%" do total logo abaixo.
+ */
+export function formatPercent(value: number, casas = 1): string {
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: casas,
+    maximumFractionDigits: casas,
+  }).format(value);
+}
+
 /** Mostra apenas os ultimos digitos. Numero de conta e dado sensivel. */
 export function maskAccountNumber(value: string | undefined | null): string {
   if (!value) return "";

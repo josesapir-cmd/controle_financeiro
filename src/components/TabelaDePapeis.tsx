@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { dataCompleta } from "@/lib/finance/dates";
-import { formatBRL } from "@/lib/finance/money";
+import { formatBRL, formatPercent } from "@/lib/finance/money";
 import { agruparPorClasse, type PapelNaCarteira } from "@/lib/finance/carteira";
 
 /**
@@ -100,7 +100,24 @@ function Taxa({
 
   // Renda fixa tem taxa contratada; fundo nao. O traco diz "nao se aplica",
   // e nao "zero".
-  return <>{valor !== null ? `${valor.toFixed(2)}%` : "—"}</>;
+  return <>{valor !== null ? `${formatPercent(valor, 2)}%` : "—"}</>;
+}
+
+/**
+ * Quanto esta linha pesa no patrimonio.
+ *
+ * Sempre sobre o total da carteira, nos tres niveis — e nao sobre a linha de
+ * cima. "Este CDB e 6% do que tenho" responde a pergunta que se faz olhando
+ * patrimonio; "e 64% dos meus CDBs" responde outra, e misturar as duas na mesma
+ * coluna faria o numero mudar de significado conforme o recuo.
+ */
+function Fatia({ valor, total }: { valor: number; total: number }) {
+  if (total === 0) return <>—</>;
+  const fatia = (valor / total) * 100;
+  // Abaixo de 0,05% arredondaria para 0,0%, que se le como "nada".
+  return (
+    <>{fatia > 0 && fatia < 0.05 ? "<0,1%" : `${formatPercent(fatia)}%`}</>
+  );
 }
 
 function Lucro({ valor }: { valor: number | null }) {
@@ -154,6 +171,10 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
               </th>
               <th scope="col" className="gr-num">
                 Valor
+              </th>
+              <th scope="col" className="gr-num">
+                <span className="gr-so-largo">Patrimonio</span>
+                <span className="gr-so-estreito">%</span>
               </th>
             </tr>
           </thead>
@@ -234,6 +255,9 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
                     <Lucro valor={classe.lucro} />
                   </td>
                   <td className="gr-num">{formatBRL(classe.saldo)}</td>
+                  <td className="gr-num">
+                    <Fatia valor={classe.saldo} total={total} />
+                  </td>
                 </tr>
 
                 {abreClasse && classeAberta
@@ -300,6 +324,9 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
                             <Lucro valor={papel.lucro} />
                           </td>
                           <td className="gr-num">{formatBRL(papel.saldo)}</td>
+                          <td className="gr-num">
+                            <Fatia valor={papel.saldo} total={total} />
+                          </td>
                         </tr>,
 
                         ...(varias && papelAberto
@@ -329,6 +356,9 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
                                 <td className="gr-num">
                                   {formatBRL(custodia.saldo)}
                                 </td>
+                                <td className="gr-num">
+                                  <Fatia valor={custodia.saldo} total={total} />
+                                </td>
                               </tr>
                             ))
                           : []),
@@ -350,6 +380,9 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
                 <Lucro valor={lucro} />
               </td>
               <td className="gr-num">{formatBRL(total)}</td>
+              <td className="gr-num">
+                {total > 0 ? `${formatPercent(100)}%` : "—"}
+              </td>
             </tr>
           </tfoot>
         </table>
