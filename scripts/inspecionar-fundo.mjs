@@ -16,6 +16,12 @@
  * lista de todos os campos. Nome do papel sai junto porque sem ele nao da para
  * conferir contra o aplicativo da corretora — e o dado ja esta na sua tela.
  *
+ * As conexoes saem do BANCO, e nao de `GET /items`. A listagem responde 401 com
+ * a mesma chave que `/items/<id>`, `/accounts?itemId=` e `/investments?itemId=`
+ * aceitam sem reclamar — a primeira versao deste script usou a listagem e nao
+ * passou da porta. Nao sei por que a rota difere e nao preciso saber: o
+ * caminho por id ja esta provado pelo `probe-produtos`.
+ *
  * Uso:
  *   node scripts/inspecionar-fundo.mjs                 # todas as conexoes
  *   node scripts/inspecionar-fundo.mjs btg             # so as que casam
@@ -24,6 +30,8 @@
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { abrirBanco } from "./conectar.mjs";
+import { morrerComExplicacao } from "./erro-de-banco.mjs";
 
 async function lerEnv() {
   for (const arquivo of [".env.local", ".env"]) {
@@ -85,33 +93,45 @@ if (!auth.ok) {
 const { apiKey } = await auth.json();
 const cabecalho = { "X-API-KEY": apiKey };
 
+/** O que a Pluggy respondeu, com o motivo dela junto quando ela da um. */
 async function pedir(caminho) {
   const resposta = await fetch(`${API}${caminho}`, { headers: cabecalho });
-  if (!resposta.ok) return { erro: `HTTP ${resposta.status}` };
+  if (!resposta.ok) {
+    let detalhe = "";
+    try {
+      const corpo = await resposta.json();
+      detalhe = corpo?.message || corpo?.code || "";
+    } catch {}
+    return { erro: `HTTP ${resposta.status}${detalhe ? ` — ${detalhe}` : ""}` };
+  }
   return { dados: await resposta.json() };
 }
 
-const { dados: itens, erro } = await pedir("/items");
-if (erro) {
-  console.error(`/items respondeu ${erro}.`);
-  process.exit(1);
-}
+const banco = await abrirBanco().catch(morrerComExplicacao);
 
-const lista = (itens?.results ?? []).filter(
-  (i) => !filtro || simples(i.connector?.name ?? "").includes(simples(filtro)),
+const conexoes = await banco
+  .query("SELECT item_id, connector_name FROM connections ORDER BY connector_name")
+  .catch(morrerComExplicacao);
+
+const lista = conexoes.filter(
+  (c) => !filtro || simples(c.connector_name ?? "").includes(simples(filtro)),
 );
 
 if (lista.length === 0) {
-  console.log(filtro ? `Nenhuma conexao casa com "${filtro}".` : "Nenhuma conexao.");
+  console.log(
+    filtro
+      ? `Nenhuma conexao casa com "${filtro}".`
+      : "Nenhuma conexao no banco. Sincronize antes em Conexoes.",
+  );
   process.exit(0);
 }
 
 let achou = 0;
 
-for (const item of lista) {
-  const { dados, erro: e } = await pedir(`/investments?itemId=${item.id}`);
+for (const { item_id, connector_name } of lista) {
+  const { dados, erro: e } = await pedir(`/investments?itemId=${item_id}`);
   if (e) {
-    console.log(`\n━━ ${item.connector?.name}: ${e}`);
+    console.log(`\n━━ ${connector_name}: ${e}`);
     continue;
   }
 
@@ -121,7 +141,7 @@ for (const item of lista) {
 
   if (papeis.length === 0) continue;
 
-  console.log(`\n━━ ${item.connector?.name} — ${papeis.length} posicao(oes)\n`);
+  console.log(`\n━━ ${connector_name} — ${papeis.length} posicao(oes)\n`);
 
   for (const papel of papeis) {
     achou += 1;
@@ -157,3 +177,5 @@ if (achou === 0) {
       : "\nNenhuma posicao de investimento nas conexoes consultadas.",
   );
 }
+
+await banco.fim?.();
