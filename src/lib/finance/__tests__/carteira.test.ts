@@ -4,7 +4,6 @@ import {
   agruparPapeis,
   classeDoPapel,
   agruparPorClasse,
-  comValor,
   semZerados,
   type PapelNaCarteira,
 } from "../carteira";
@@ -761,84 +760,96 @@ describe("semZerados", () => {
   });
 });
 
-describe("comValor", () => {
-  const ntnb = papel({
-    id: "a",
-    nome: "NTN-B1",
-    instituicao: "BTG",
-    subtipo: "TREASURY",
-    saldo: 108844.23,
-    liquido: 107296.2,
-    imposto: 1548.03,
-    lucro: 8845.89,
-  });
-
-  it("no bruto devolve a lista intacta", () => {
-    expect(comValor([ntnb], "bruto")[0]).toBe(ntnb);
-  });
-
-  it("no liquido troca o saldo e desconta o imposto do lucro", () => {
-    const [papelLiquido] = comValor([ntnb], "liquido");
-
-    expect(papelLiquido.saldo).toBe(107296.2);
-    expect(papelLiquido.lucro).toBeCloseTo(8845.89 - 1548.03, 2);
-  });
-
-  it("papel sem liquido informado mantem o bruto", () => {
-    // Ativo manual e fundo que a instituicao nao detalha. Zerar a linha por
-    // falta de informacao mentiria mais que repetir o valor que se tem.
-    const manual = papel({
-      id: "m",
-      nome: "Cripto",
-      instituicao: "carteira",
-      saldo: 300000,
-    });
-
-    expect(comValor([manual], "liquido")[0].saldo).toBe(300000);
-  });
-
-  it("nao mexe no lucro quando o imposto nao veio", () => {
-    const semImposto = papel({
-      id: "f",
-      nome: "Fundo",
-      instituicao: "BTG",
-      saldo: 1000,
-      liquido: 900,
-      lucro: 100,
-    });
-    const [convertido] = comValor([semImposto], "liquido");
-
-    expect(convertido.saldo).toBe(900);
-    expect(convertido.lucro).toBe(100);
-  });
-
-  it("o total do liquido e menor, e a diferenca e o imposto", () => {
-    const papeis = [
-      ntnb,
+describe("o liquido somado ao lado do bruto", () => {
+  it("soma o liquido nos tres niveis", () => {
+    // Numeros reais de duas NTN-B no BTG e uma na XP.
+    const classes = agruparPorClasse([
+      papel({
+        id: "a",
+        nome: "NTN-B1",
+        instituicao: "BTG",
+        subtipo: "TREASURY",
+        saldo: 108844.23,
+        liquido: 107296.2,
+      }),
       papel({
         id: "b",
-        nome: "CDB",
+        nome: "NTN-B1",
         instituicao: "BTG",
-        saldo: 3355100.91,
-        liquido: 3351855,
-        imposto: 3245.91,
+        subtipo: "TREASURY",
+        saldo: 553950.02,
+        liquido: 544508.66,
       }),
-    ];
+      papel({
+        id: "c",
+        nome: "NTN-B1",
+        instituicao: "XP",
+        subtipo: "TREASURY",
+        saldo: 403099.01,
+        liquido: 399471.15,
+      }),
+    ]);
 
-    const bruto = comValor(papeis, "bruto").reduce((s, p) => s + p.saldo, 0);
-    const liquido = comValor(papeis, "liquido").reduce(
-      (s, p) => s + p.saldo,
-      0,
-    );
-    const imposto = papeis.reduce((s, p) => s + (p.imposto ?? 0), 0);
+    expect(classes[0].saldo).toBeCloseTo(1065893.26, 2);
+    expect(classes[0].liquido).toBeCloseTo(1051276.01, 2);
 
-    expect(bruto - liquido).toBeCloseTo(imposto, 2);
+    const [instrumento] = classes[0].instrumentos;
+    expect(instrumento.liquido).toBeCloseTo(1051276.01, 2);
+
+    const btg = instrumento.custodias.find((c) => c.instituicao === "BTG")!;
+    expect(btg.liquido).toBeCloseTo(107296.2 + 544508.66, 2);
   });
 
-  it("nao altera a lista original", () => {
-    const papeis = [ntnb];
-    comValor(papeis, "liquido");
+  it("papel sem liquido informado entra com o bruto", () => {
+    // Ativo manual e fundo que a instituicao nao detalha. Subestimar o resgate
+    // por falta de informacao seria inventar um imposto que ninguem cobrou.
+    const classes = agruparPorClasse([
+      papel({
+        id: "a",
+        nome: "Cripto",
+        instituicao: "carteira",
+        tipo: "CRYPTO",
+        subtipo: null,
+        saldo: 300000,
+      }),
+    ]);
 
-    expect(papeis[0].saldo).toBe(108844.23);
+    expect(classes[0].liquido).toBe(300000);
+    expect(classes[0].instrumentos[0].liquido).toBe(300000);
+    expect(classes[0].instrumentos[0].custodias[0].liquido).toBe(300000);
+  });
+
+  it("o liquido nunca passa do bruto", () => {
+    const classes = agruparPorClasse([
+      papel({
+        id: "a",
+        nome: "CDB",
+        instituicao: "BTG",
+        subtipo: "CDB",
+        saldo: 3355100.91,
+        liquido: 3351855,
+      }),
+      papel({
+        id: "b",
+        nome: "Fundo",
+        instituicao: "BTG",
+        tipo: "MUTUAL_FUND",
+        subtipo: null,
+        saldo: 14737212.11,
+        liquido: 13795630.29,
+      }),
+      papel({
+        id: "c",
+        nome: "Manual",
+        instituicao: "casa",
+        tipo: "CRYPTO",
+        subtipo: null,
+        saldo: 300000,
+      }),
+    ]);
+
+    for (const classe of classes) {
+      expect(classe.liquido).toBeLessThanOrEqual(classe.saldo);
+    }
   });
 });

@@ -3,12 +3,7 @@
 import { useState } from "react";
 import { dataCompleta } from "@/lib/finance/dates";
 import { formatBRL, formatPercent } from "@/lib/finance/money";
-import {
-  agruparPorClasse,
-  comValor,
-  type ModoDeValor,
-  type PapelNaCarteira,
-} from "@/lib/finance/carteira";
+import { agruparPorClasse, type PapelNaCarteira } from "@/lib/finance/carteira";
 
 /**
  * A carteira inteira numa tabela so, em tres niveis.
@@ -76,36 +71,49 @@ function MarcaManual({ avaliadoEm }: { avaliadoEm?: string | null }) {
  * A data vem junto, apagada. Taxa marcada envelhece em dias, e uma de tres
  * meses atras ao lado de um saldo de hoje e pior que traco nenhum.
  */
+/**
+ * A taxa colada no nome: "Renda+ 2065 @ 7,02%".
+ *
+ * Ela deixou de ser coluna porque so renda fixa tem taxa — uma coluna inteira
+ * de tracos para os fundos custava mais largura do que informava. No nome ela
+ * aparece exatamente onde existe.
+ *
+ * A marcada a mao vence a contratada: e a que explica o valor do lado, que
+ * tambem e de hoje. Fundo nao tem nenhuma das duas e fica so com o nome.
+ */
 function Taxa({
   valor,
   marcada,
   marcadaEm,
 }: {
-  valor: number | null;
+  valor?: number | null;
   marcada?: string | null;
   marcadaEm?: string | null;
 }) {
   if (marcada) {
     return (
       <span
-        className="gr-marcada"
+        className="gr-taxa"
         title={
           marcadaEm
             ? `Taxa marcada a mao, lida em ${dataCompleta(marcadaEm)}`
             : "Taxa marcada a mao"
         }
       >
+        {" @ "}
         {marcada}
-        {marcadaEm ? (
-          <span className="gr-marcada-em">{dataCompleta(marcadaEm)}</span>
-        ) : null}
       </span>
     );
   }
 
-  // Renda fixa tem taxa contratada; fundo nao. O traco diz "nao se aplica",
-  // e nao "zero".
-  return <>{valor !== null ? `${formatPercent(valor, 2)}%` : "—"}</>;
+  if (valor === null || valor === undefined) return null;
+
+  return (
+    <span className="gr-taxa" title="Taxa contratada na compra">
+      {" @ "}
+      {formatPercent(valor, 2)}%
+    </span>
+  );
 }
 
 /**
@@ -125,28 +133,11 @@ function Fatia({ valor, total }: { valor: number; total: number }) {
   );
 }
 
-function Lucro({ valor }: { valor: number | null }) {
-  if (valor === null) return <>—</>;
-  return (
-    <span className={valor < 0 ? "negative" : "positive"}>
-      {formatBRL(valor)}
-    </span>
-  );
-}
-
 export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
   const [abertos, setAbertos] = useState<ReadonlySet<string>>(new Set());
-  const [modo, setModo] = useState<ModoDeValor>("bruto");
-
-  // A troca acontece ANTES do agrupamento: soma, media de taxa, participacao e
-  // total saem todos do mesmo numero, e nenhum deles precisa saber que existe
-  // um modo.
-  const classes = agruparPorClasse(comValor(posicoes, modo));
+  const classes = agruparPorClasse(posicoes);
   const total = classes.reduce((s, c) => s + c.saldo, 0);
-  const comLucro = classes.filter((c) => c.lucro !== null);
-  const lucro = comLucro.length
-    ? comLucro.reduce((s, c) => s + (c.lucro ?? 0), 0)
-    : null;
+  const totalLiquido = classes.reduce((s, c) => s + c.liquido, 0);
 
   function alternar(chave: string) {
     setAbertos((atuais) => {
@@ -161,60 +152,41 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
   return (
     <figure className="gr">
       <figcaption className="gr-titulo">
-        <span>Carteira · por classe, abrindo em instrumento e custodia</span>
-
-        {/* Os dois numeros sao verdadeiros e respondem perguntas diferentes:
-            quanto vale, e quanto sobraria resgatando hoje. */}
-        <span className="gr-modo" role="group" aria-label="Qual valor somar">
-          {(["bruto", "liquido"] as const).map((opcao) => (
-            <button
-              key={opcao}
-              type="button"
-              className={modo === opcao ? "ativo" : undefined}
-              aria-pressed={modo === opcao}
-              onClick={() => setModo(opcao)}
-              title={
-                opcao === "bruto"
-                  ? "Valor de mercado, antes do imposto"
-                  : "O que sobraria resgatando hoje, ja descontado o imposto"
-              }
-            >
-              {opcao === "bruto" ? "Bruto" : "Liquido"}
-            </button>
-          ))}
-        </span>
+        Carteira · por classe, abrindo em instrumento e custodia
       </figcaption>
 
       <div className="gr-rolagem">
         <table className="gr-tabela gr-arvore">
           <thead>
             <tr>
-              <th scope="col">Papel</th>
-              <th scope="col" className="gr-so-largo">
-                Vencimento
-              </th>
-              <th scope="col" className="gr-num gr-so-largo">
-                Taxa
-              </th>
-              <th scope="col" className="gr-num gr-so-largo">
-                Lucro
+              <th scope="col">Instrumento</th>
+              <th scope="col" className="gr-num">
+                Bruto
               </th>
               <th scope="col" className="gr-num">
-                Valor
+                %
               </th>
               <th scope="col" className="gr-num">
-                <span className="gr-so-largo">Patrimonio</span>
-                <span className="gr-so-estreito">%</span>
+                Liquido
+              </th>
+              <th scope="col" className="gr-num">
+                %
               </th>
             </tr>
           </thead>
 
           {classes.map((classe) => {
-            // Uma classe com um instrumento so nao tem o que revelar: o nivel
-            // de baixo repetiria a linha de cima com outro recuo.
-            const abreClasse = classe.instrumentos.length > 1;
+            // Uma classe com um instrumento so normalmente nao tem o que
+            // revelar: o nivel de baixo repetiria a linha de cima com outro
+            // recuo. Mas se esse instrumento esta em mais de uma custodia, o
+            // detalhe existe — e sem botao aqui ele ficava inalcancavel,
+            // porque o nivel que o mostraria nunca era desenhado.
+            const unico =
+              classe.instrumentos.length === 1 ? classe.instrumentos[0] : null;
+            const abreClasse =
+              classe.instrumentos.length > 1 ||
+              (unico?.custodias.length ?? 0) > 1;
             const classeAberta = abertos.has(classe.nome);
-            const unico = abreClasse ? null : classe.instrumentos[0];
 
             return (
               <tbody
@@ -232,9 +204,19 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
                       >
                         <Seta aberto={classeAberta} />
                         <span className="gr-rotulo">
-                          {classe.nome}
+                          {/* Com um instrumento so, o nome dele e o da linha:
+                              "FIDC" no lugar de "Green FIDC Solar GD" trocaria
+                              o nome do papel por um rotulo. */}
+                          {unico?.nome ?? classe.nome}
+                          <Taxa
+                            valor={unico?.taxa ?? classe.taxa}
+                            marcada={unico?.taxaMarcada}
+                            marcadaEm={unico?.taxaMarcadaEm}
+                          />
                           <span className="gr-badge">
-                            {classe.instrumentos.length}
+                            {unico
+                              ? unico.custodias.length
+                              : classe.instrumentos.length}
                           </span>
                         </span>
                       </button>
@@ -248,6 +230,11 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
                           <MarcaManual avaliadoEm={unico.avaliadoEm} />
                         ) : null}
                         {unico?.nome ?? classe.nome}
+                        <Taxa
+                          valor={unico?.taxa}
+                          marcada={unico?.taxaMarcada}
+                          marcadaEm={unico?.taxaMarcadaEm}
+                        />
                         <span className="account-meta">
                           {" "}
                           · {unico?.instituicao}
@@ -263,34 +250,50 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
                       </>
                     )}
                   </th>
-                  <td className="gr-so-largo">
-                    <span className="gr-data">
-                      {classe.vence
-                        ? dataCompleta(classe.vence)
-                        : unico?.manual && unico.avaliadoEm
-                          ? `avaliado em ${dataCompleta(unico.avaliadoEm)}`
-                          : "—"}
-                    </span>
-                  </td>
-                  <td className="gr-num gr-so-largo">
-                    <Taxa
-                      valor={classe.taxa}
-                      marcada={
-                        abreClasse ? null : classe.instrumentos[0]?.taxaMarcada
-                      }
-                      marcadaEm={classe.instrumentos[0]?.taxaMarcadaEm}
-                    />
-                  </td>
-                  <td className="gr-num gr-so-largo">
-                    <Lucro valor={classe.lucro} />
-                  </td>
                   <td className="gr-num">{formatBRL(classe.saldo)}</td>
                   <td className="gr-num">
                     <Fatia valor={classe.saldo} total={total} />
                   </td>
+                  <td className="gr-num">{formatBRL(classe.liquido)}</td>
+                  <td className="gr-num">
+                    <Fatia valor={classe.liquido} total={totalLiquido} />
+                  </td>
                 </tr>
 
-                {abreClasse && classeAberta
+                {/* Instrumento unico: o nivel do meio seria a linha de cima
+                    repetida, entao a classe abre direto nas custodias. */}
+                {classeAberta && unico
+                  ? unico.custodias.map((custodia) => (
+                      <tr
+                        key={`${classe.nome}/${custodia.instituicao}`}
+                        className="gr-nivel-2"
+                      >
+                        <th scope="row">
+                          {custodia.instituicao}
+                          {custodia.posicoes > 1 ? (
+                            <span className="gr-badge">
+                              {custodia.posicoes}
+                            </span>
+                          ) : null}
+                        </th>
+                        <td className="gr-num">{formatBRL(custodia.saldo)}</td>
+                        <td className="gr-num">
+                          <Fatia valor={custodia.saldo} total={total} />
+                        </td>
+                        <td className="gr-num">
+                          {formatBRL(custodia.liquido)}
+                        </td>
+                        <td className="gr-num">
+                          <Fatia
+                            valor={custodia.liquido}
+                            total={totalLiquido}
+                          />
+                        </td>
+                      </tr>
+                    ))
+                  : null}
+
+                {abreClasse && classeAberta && !unico
                   ? classe.instrumentos.flatMap((papel) => {
                       const varias = papel.custodias.length > 1;
                       const chave = `${classe.nome}/${papel.id}`;
@@ -302,6 +305,11 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
                             <MarcaManual avaliadoEm={papel.avaliadoEm} />
                           ) : null}
                           {papel.nome}
+                          <Taxa
+                            valor={papel.taxa}
+                            marcada={papel.taxaMarcada}
+                            marcadaEm={papel.taxaMarcadaEm}
+                          />
                           <span className="account-meta">
                             {" "}
                             · {papel.instituicao}
@@ -334,28 +342,18 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
                               rotulo
                             )}
                           </th>
-                          <td className="gr-so-largo">
-                            <span className="gr-data">
-                              {papel.vence
-                                ? dataCompleta(papel.vence)
-                                : papel.manual && papel.avaliadoEm
-                                  ? `avaliado em ${dataCompleta(papel.avaliadoEm)}`
-                                  : "—"}
-                            </span>
-                          </td>
-                          <td className="gr-num gr-so-largo">
-                            <Taxa
-                              valor={papel.taxa}
-                              marcada={papel.taxaMarcada}
-                              marcadaEm={papel.taxaMarcadaEm}
-                            />
-                          </td>
-                          <td className="gr-num gr-so-largo">
-                            <Lucro valor={papel.lucro} />
-                          </td>
                           <td className="gr-num">{formatBRL(papel.saldo)}</td>
                           <td className="gr-num">
                             <Fatia valor={papel.saldo} total={total} />
+                          </td>
+                          <td className="gr-num">
+                            {formatBRL(papel.liquido ?? papel.saldo)}
+                          </td>
+                          <td className="gr-num">
+                            <Fatia
+                              valor={papel.liquido ?? papel.saldo}
+                              total={totalLiquido}
+                            />
                           </td>
                         </tr>,
 
@@ -373,21 +371,20 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
                                     </span>
                                   ) : null}
                                 </th>
-                                <td className="gr-so-largo" />
-                                <td className="gr-num gr-so-largo">
-                                  {papel.taxaMarcada &&
-                                  custodia.taxa === null ? null : (
-                                    <Taxa valor={custodia.taxa} />
-                                  )}
-                                </td>
-                                <td className="gr-num gr-so-largo">
-                                  <Lucro valor={custodia.lucro} />
-                                </td>
                                 <td className="gr-num">
                                   {formatBRL(custodia.saldo)}
                                 </td>
                                 <td className="gr-num">
                                   <Fatia valor={custodia.saldo} total={total} />
+                                </td>
+                                <td className="gr-num">
+                                  {formatBRL(custodia.liquido)}
+                                </td>
+                                <td className="gr-num">
+                                  <Fatia
+                                    valor={custodia.liquido}
+                                    total={totalLiquido}
+                                  />
                                 </td>
                               </tr>
                             ))
@@ -404,14 +401,13 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
           <tfoot>
             <tr className="gr-total">
               <th scope="row">Total</th>
-              <td className="gr-so-largo" />
-              <td className="gr-num gr-so-largo" />
-              <td className="gr-num gr-so-largo">
-                <Lucro valor={lucro} />
-              </td>
               <td className="gr-num">{formatBRL(total)}</td>
               <td className="gr-num">
                 {total > 0 ? `${formatPercent(100)}%` : "—"}
+              </td>
+              <td className="gr-num">{formatBRL(totalLiquido)}</td>
+              <td className="gr-num">
+                {totalLiquido > 0 ? `${formatPercent(100)}%` : "—"}
               </td>
             </tr>
           </tfoot>

@@ -124,6 +124,8 @@ export function agrupar(
 export interface CustodiaDoPapel {
   instituicao: string;
   saldo: number;
+  /** Somado como o saldo. Papel sem liquido informado entra com o bruto. */
+  liquido: number;
   lucro: number | null;
   taxa: number | null;
   posicoes: number;
@@ -199,11 +201,13 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
     if (!atual) {
       mapa.set(chave, {
         ...papel,
+        liquido: papel.liquido ?? papel.saldo,
         posicoes: 1,
         custodias: [
           {
             instituicao: papel.instituicao,
             saldo: papel.saldo,
+            liquido: papel.liquido ?? papel.saldo,
             lucro: papel.lucro,
             taxa: papel.taxa,
             posicoes: 1,
@@ -213,6 +217,9 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
     } else {
       atual.posicoes += 1;
       atual.saldo += papel.saldo;
+      // Sem liquido informado entra o bruto: subestimar o resgate de um papel
+      // porque a instituicao nao detalhou seria inventar um imposto.
+      atual.liquido = (atual.liquido ?? 0) + (papel.liquido ?? papel.saldo);
       atual.aportado = somar(atual.aportado, papel.aportado);
       atual.lucro = somar(atual.lucro, papel.lucro);
       // Basta um membro digitado a mao para o grupo inteiro precisar do aviso:
@@ -241,11 +248,13 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
       if (custodia) {
         custodia.posicoes += 1;
         custodia.saldo += papel.saldo;
+        custodia.liquido += papel.liquido ?? papel.saldo;
         custodia.lucro = somar(custodia.lucro, papel.lucro);
       } else {
         atual.custodias.push({
           instituicao: papel.instituicao,
           saldo: papel.saldo,
+          liquido: papel.liquido ?? papel.saldo,
           lucro: papel.lucro,
           taxa: papel.taxa,
           posicoes: 1,
@@ -304,6 +313,8 @@ export function semZerados(papeis: PapelNaCarteira[]): PapelNaCarteira[] {
 export interface ClasseDaCarteira {
   nome: string;
   saldo: number;
+  /** Somado como o saldo, com o bruto no lugar do que nao foi informado. */
+  liquido: number;
   aportado: number | null;
   lucro: number | null;
   /** Media ponderada pelo saldo das posicoes que informam taxa. */
@@ -348,6 +359,7 @@ export function agruparPorClasse(
     classes.push({
       nome,
       saldo: daClasse.reduce((s, p) => s + p.saldo, 0),
+      liquido: daClasse.reduce((s, p) => s + (p.liquido ?? p.saldo), 0),
       aportado: daClasse.reduce<number | null>(
         (s, p) => somar(s, p.aportado),
         null,
@@ -371,43 +383,4 @@ export function agruparPorClasse(
   }
 
   return classes.sort((a, b) => b.saldo - a.saldo);
-}
-
-/**
- * Qual dos dois valores a tela esta somando.
- *
- * Nao e uma decisao sobre a carteira, e um jeito de olhar para ela — entao e
- * botao, e nao coisa guardada. Bruto e o valor de mercado; liquido e o que
- * sobraria resgatando hoje, ja descontado o imposto.
- */
-export type ModoDeValor = "bruto" | "liquido";
-
-/**
- * Troca o saldo pelo liquido, quando ele existe.
- *
- * Feito ANTES de agrupar, e nao depois: assim soma, media de taxa,
- * participacao e total saem todos do mesmo numero, sem nenhum deles precisar
- * saber que existe um modo.
- *
- * Papel sem liquido informado — ativo manual, fundo que a instituicao nao
- * detalha — mantem o bruto. Zerar a linha por falta de informacao mentiria
- * mais que repetir o valor que se tem.
- */
-export function comValor(papeis: PapelNaCarteira[], modo: ModoDeValor): PapelNaCarteira[] {
-  if (modo === "bruto") return papeis;
-
-  return papeis.map((papel) =>
-    papel.liquido === null || papel.liquido === undefined
-      ? papel
-      : {
-          ...papel,
-          saldo: papel.liquido,
-          // O lucro acompanha: um liquido ao lado de um lucro bruto seria meio
-          // liquido, e a diferenca entre os dois e justamente o imposto.
-          lucro:
-            papel.lucro !== null && papel.lucro !== undefined && papel.imposto != null
-              ? papel.lucro - papel.imposto
-              : papel.lucro,
-        },
-  );
 }
