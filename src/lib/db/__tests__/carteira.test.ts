@@ -365,7 +365,9 @@ describe("apelido de instrumento", () => {
 
     const apelidos = await listApelidosDeInstrumento(db);
     expect(apelidos).toHaveLength(4);
-    expect(new Set(apelidos.map((a) => a.alias))).toEqual(new Set(["Renda+ 2065"]));
+    expect(new Set(apelidos.map((a) => a.alias))).toEqual(
+      new Set(["Renda+ 2065"]),
+    );
     // Os quatro caem no mesmo fingerprint de apelido, que e o que os une.
     const [linha] = await db.query<{ n: string }>(
       "SELECT count(DISTINCT alias_fingerprint)::text AS n FROM instrument_aliases",
@@ -393,7 +395,11 @@ describe("apelido de instrumento", () => {
 
   it("declarar de novo troca o apelido em vez de duplicar", async () => {
     await salvarApelidoDeInstrumento(db, "NTN-B1", "Renda+ 2065");
-    await salvarApelidoDeInstrumento(db, "NTN-B1", "Renda+ 2065 (aposentadoria)");
+    await salvarApelidoDeInstrumento(
+      db,
+      "NTN-B1",
+      "Renda+ 2065 (aposentadoria)",
+    );
 
     const apelidos = await listApelidosDeInstrumento(db);
     expect(apelidos).toHaveLength(1);
@@ -401,7 +407,9 @@ describe("apelido de instrumento", () => {
   });
 
   it("o fingerprint ignora caixa e espaco nas pontas", async () => {
-    expect(instrumentFingerprint("  NTN-B1  ")).toBe(instrumentFingerprint("ntn-b1"));
+    expect(instrumentFingerprint("  NTN-B1  ")).toBe(
+      instrumentFingerprint("ntn-b1"),
+    );
   });
 
   it("separar devolve o papel para si mesmo", async () => {
@@ -436,7 +444,10 @@ describe("taxa marcada", () => {
   });
 
   it("encontra a cotacao pelo nome, ignorando caixa e espaco", async () => {
-    await salvarCotacao(db, "Renda+ 2065", { rateLabel: "IPCA + 7,02%", quotedAt: "2026-09-16" });
+    await salvarCotacao(db, "Renda+ 2065", {
+      rateLabel: "IPCA + 7,02%",
+      quotedAt: "2026-09-16",
+    });
 
     const [cotacao] = await listCotacoes(db);
     expect(cotacao.fingerprint).toBe(instrumentFingerprint("  renda+ 2065 "));
@@ -445,8 +456,14 @@ describe("taxa marcada", () => {
   it("marcar de novo atualiza, em vez de guardar duas taxas do mesmo papel", async () => {
     // Duas marcacoes nao sao historico: sao uma certa e uma velha, e a tela
     // mostraria a errada metade das vezes.
-    await salvarCotacao(db, "Renda+ 2065", { rateLabel: "IPCA + 7,02%", quotedAt: "2026-09-16" });
-    await salvarCotacao(db, "Renda+ 2065", { rateLabel: "IPCA + 7,14%", quotedAt: "2026-09-17" });
+    await salvarCotacao(db, "Renda+ 2065", {
+      rateLabel: "IPCA + 7,02%",
+      quotedAt: "2026-09-16",
+    });
+    await salvarCotacao(db, "Renda+ 2065", {
+      rateLabel: "IPCA + 7,14%",
+      quotedAt: "2026-09-17",
+    });
 
     const cotacoes = await listCotacoes(db);
     expect(cotacoes).toHaveLength(1);
@@ -455,23 +472,154 @@ describe("taxa marcada", () => {
   });
 
   it("aceita cotacao sem preco unitario", async () => {
-    await salvarCotacao(db, "CDB", { rateLabel: "110% do CDI", quotedAt: "2026-09-16" });
+    await salvarCotacao(db, "CDB", {
+      rateLabel: "110% do CDI",
+      quotedAt: "2026-09-16",
+    });
 
     const [cotacao] = await listCotacoes(db);
     expect(cotacao.unitPrice).toBeNull();
   });
 
   it("nao grava sem taxa nem sem data", async () => {
-    await salvarCotacao(db, "Renda+ 2065", { rateLabel: "  ", quotedAt: "2026-09-16" });
-    await salvarCotacao(db, "Renda+ 2065", { rateLabel: "IPCA + 7,02%", quotedAt: "" });
+    await salvarCotacao(db, "Renda+ 2065", {
+      rateLabel: "  ",
+      quotedAt: "2026-09-16",
+    });
+    await salvarCotacao(db, "Renda+ 2065", {
+      rateLabel: "IPCA + 7,02%",
+      quotedAt: "",
+    });
 
     expect(await listCotacoes(db)).toHaveLength(0);
   });
 
   it("desmarcar devolve a linha para a taxa da corretora", async () => {
-    await salvarCotacao(db, "Renda+ 2065", { rateLabel: "IPCA + 7,02%", quotedAt: "2026-09-16" });
+    await salvarCotacao(db, "Renda+ 2065", {
+      rateLabel: "IPCA + 7,02%",
+      quotedAt: "2026-09-16",
+    });
     await apagarCotacao(db, "Renda+ 2065");
 
     expect(await listCotacoes(db)).toHaveLength(0);
+  });
+});
+
+describe("bruto, liquido e o que a Pluggy manda junto", () => {
+  it("guarda bruto e liquido separados, e a tela soma o bruto", async () => {
+    // Numeros reais de uma NTN-B1 no BTG: a conta da Pluggy fecha ao centavo.
+    await substituirPosicoes(db, BTG, [
+      {
+        id: "ntnb",
+        itemId: BTG,
+        institution: "BTG Pactual",
+        type: "FIXED_INCOME",
+        subtype: "TREASURY",
+        balance: 107296.2,
+        gross: 108844.23,
+        taxes: 1548.03,
+        quantity: 575.53,
+        unitPrice: 189.119994,
+        amount: 99998.3375,
+        profit: 8845.8925,
+        annualRate: 7.02,
+        indexPercent: 100,
+      },
+    ]);
+
+    const [posicao] = await listPosicoes(db);
+    expect(posicao.gross).toBe(108844.23);
+    expect(posicao.balance).toBe(107296.2);
+    expect(posicao.taxes).toBe(1548.03);
+    // A regra que da sentido aos dois nomes enganosos.
+    expect(posicao.gross! - posicao.taxes!).toBeCloseTo(posicao.balance, 2);
+    // E o bruto e a quantidade vezes o preco unitario.
+    expect(posicao.quantity! * posicao.unitPrice!).toBeCloseTo(
+      posicao.gross!,
+      2,
+    );
+  });
+
+  it("a taxa contratada vence a generica, que vem nula em renda fixa", async () => {
+    await substituirPosicoes(db, BTG, [
+      {
+        id: "a",
+        itemId: BTG,
+        institution: "BTG",
+        type: "FIXED_INCOME",
+        balance: 100,
+        annualRate: 7.02,
+      },
+    ]);
+
+    // O repositorio grava `annualRate` na coluna da contratada e a le de volta
+    // dali: era a leitura de `annual_rate` que deixava o Tesouro sem taxa.
+    const [posicao] = await listPosicoes(db);
+    expect(posicao.annualRate).toBe(7.02);
+  });
+
+  it("ordena pelo bruto, e nao pelo liquido", async () => {
+    await substituirPosicoes(db, BTG, [
+      {
+        id: "menor-liquido",
+        itemId: BTG,
+        institution: "BTG",
+        type: "FIXED_INCOME",
+        balance: 90,
+        gross: 200,
+      },
+      {
+        id: "maior-liquido",
+        itemId: BTG,
+        institution: "BTG",
+        type: "FIXED_INCOME",
+        balance: 100,
+        gross: 110,
+      },
+    ]);
+
+    expect((await listPosicoes(db)).map((p) => p.id)).toEqual([
+      "menor-liquido",
+      "maior-liquido",
+    ]);
+  });
+
+  it("sem bruto informado, o liquido ainda ordena", async () => {
+    await substituirPosicoes(db, BTG, [
+      {
+        id: "a",
+        itemId: BTG,
+        institution: "BTG",
+        type: "FIXED_INCOME",
+        balance: 50,
+      },
+      {
+        id: "b",
+        itemId: BTG,
+        institution: "BTG",
+        type: "FIXED_INCOME",
+        balance: 500,
+      },
+    ]);
+
+    expect((await listPosicoes(db)).map((p) => p.id)).toEqual(["b", "a"]);
+  });
+
+  it("zero em imposto nao vira nulo por engano", async () => {
+    // O Tesouro manda taxes2 = 0; somar 0 + 0 e um numero, nao uma ausencia.
+    await substituirPosicoes(db, BTG, [
+      {
+        id: "a",
+        itemId: BTG,
+        institution: "BTG",
+        type: "FIXED_INCOME",
+        balance: 100,
+        gross: 100,
+        taxes: 0,
+      },
+    ]);
+
+    const [posicao] = await listPosicoes(db);
+    expect(posicao.taxes).toBe(0);
   });
 });

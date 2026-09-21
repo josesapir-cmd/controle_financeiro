@@ -1704,7 +1704,14 @@ export interface PosicaoRow {
   subtype: string | null;
   name: string | null;
   issuer: string | null;
+  /** LIQUIDO de imposto, como a Pluggy manda em `balance`. */
   balance: number;
+  /** BRUTO de mercado, igual a `quantity * unitPrice`. E o que a tela soma. */
+  gross: number | null;
+  taxes: number | null;
+  quantity: number | null;
+  unitPrice: number | null;
+  indexPercent: number | null;
   amount: number | null;
   profit: number | null;
   annualRate: number | null;
@@ -1723,6 +1730,11 @@ export interface PosicaoInput {
   name?: string | null;
   issuer?: string | null;
   balance?: number | null;
+  gross?: number | null;
+  taxes?: number | null;
+  quantity?: number | null;
+  unitPrice?: number | null;
+  indexPercent?: number | null;
   amount?: number | null;
   profit?: number | null;
   annualRate?: number | null;
@@ -1731,12 +1743,18 @@ export interface PosicaoInput {
   status?: string | null;
 }
 
+/** Numero que pode nao ter vindo — e nao vir e diferente de ser zero. */
+function opcional(valor: unknown): number | null {
+  return valor === null || valor === undefined ? null : numero(valor);
+}
+
 export async function listPosicoes(db: Db): Promise<PosicaoRow[]> {
   const linhas = await db.query<Record<string, unknown>>(
     `SELECT id, item_id, institution, type, subtype, name_enc, issuer_enc, balance, amount,
-            profit, annual_rate, due_date, currency, status, seen_at
+            profit, annual_rate, due_date, currency, status, seen_at,
+            gross_amount, taxes, quantity, unit_price, fixed_annual_rate, index_percent
        FROM investments
-      ORDER BY balance DESC NULLS LAST`,
+      ORDER BY COALESCE(gross_amount, balance) DESC NULLS LAST`,
   );
 
   return linhas.map((linha) => ({
@@ -1748,6 +1766,11 @@ export async function listPosicoes(db: Db): Promise<PosicaoRow[]> {
     name: decryptOptional(linha.name_enc as string | null),
     issuer: decryptOptional(linha.issuer_enc as string | null),
     balance: numero(linha.balance),
+    gross: opcional(linha.gross_amount),
+    taxes: opcional(linha.taxes),
+    quantity: opcional(linha.quantity),
+    unitPrice: opcional(linha.unit_price),
+    indexPercent: opcional(linha.index_percent),
     amount:
       linha.amount === null || linha.amount === undefined
         ? null
@@ -1756,10 +1779,9 @@ export async function listPosicoes(db: Db): Promise<PosicaoRow[]> {
       linha.profit === null || linha.profit === undefined
         ? null
         : numero(linha.profit),
-    annualRate:
-      linha.annual_rate === null || linha.annual_rate === undefined
-        ? null
-        : numero(linha.annual_rate),
+    // A contratada primeiro: ela e a taxa do papel. `annual_rate` vem nulo em
+    // renda fixa, que e por que a coluna mostrava traco justamente no Tesouro.
+    annualRate: opcional(linha.fixed_annual_rate) ?? opcional(linha.annual_rate),
     dueDate: dia(linha.due_date),
     currency: String(linha.currency ?? "BRL"),
     status: linha.status ? String(linha.status) : null,
@@ -1792,8 +1814,10 @@ export async function substituirPosicoes(
     await db.query(
       `INSERT INTO investments
          (id, item_id, institution, type, subtype, name_enc, issuer_enc, balance, amount,
-          profit, annual_rate, due_date, currency, status, seen_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now(), now())
+          profit, annual_rate, due_date, currency, status, seen_at, updated_at,
+          gross_amount, taxes, quantity, unit_price, fixed_annual_rate, index_percent)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now(), now(),
+               $15, $16, $17, $18, $19, $20)
        ON CONFLICT (id) DO UPDATE
          SET item_id = EXCLUDED.item_id,
              institution = EXCLUDED.institution,
@@ -1808,6 +1832,12 @@ export async function substituirPosicoes(
              due_date = EXCLUDED.due_date,
              currency = EXCLUDED.currency,
              status = EXCLUDED.status,
+             gross_amount = EXCLUDED.gross_amount,
+             taxes = EXCLUDED.taxes,
+             quantity = EXCLUDED.quantity,
+             unit_price = EXCLUDED.unit_price,
+             fixed_annual_rate = EXCLUDED.fixed_annual_rate,
+             index_percent = EXCLUDED.index_percent,
              seen_at = now(),
              updated_at = now()`,
       [
@@ -1825,6 +1855,12 @@ export async function substituirPosicoes(
         posicao.dueDate ?? null,
         posicao.currency ?? "BRL",
         posicao.status ?? null,
+        posicao.gross ?? null,
+        posicao.taxes ?? null,
+        posicao.quantity ?? null,
+        posicao.unitPrice ?? null,
+        posicao.annualRate ?? null,
+        posicao.indexPercent ?? null,
       ],
     );
   }

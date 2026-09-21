@@ -2265,7 +2265,10 @@ export async function loadCarteira(): Promise<Carteira> {
       instituicao: posicao.institution,
       tipo: posicao.type,
       subtipo: posicao.subtype,
-      saldo: posicao.balance,
+      // O BRUTO e o que a tela soma. `balance` da Pluggy ja vem com o imposto
+      // descontado, e um patrimonio liquido de IR que ninguem pagou ainda
+      // subestima o que se tem — cai para o liquido so quando o bruto falta.
+      saldo: posicao.gross ?? posicao.balance,
       aportado: posicao.amount,
       lucro: posicao.profit,
       taxa: posicao.annualRate,

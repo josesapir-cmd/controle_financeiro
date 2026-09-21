@@ -162,10 +162,25 @@ export async function syncConnection(
           subtype: posicao.subtype ?? null,
           name: posicao.name ?? null,
           issuer: posicao.issuer ?? null,
+          // `balance` e LIQUIDO e `amount` e BRUTO — os nomes enganam nos dois.
+          // A conta fecha ao centavo: balance = amount - taxes - taxes2.
           balance: posicao.balance ?? null,
-          amount: posicao.amount ?? null,
-          profit: posicao.amountProfit ?? null,
-          annualRate: posicao.annualRate ?? null,
+          gross: posicao.amount ?? null,
+          taxes: (posicao.taxes ?? 0) + (posicao.taxes2 ?? 0) || null,
+          quantity: posicao.quantity ?? null,
+          unitPrice: posicao.value ?? null,
+          indexPercent: posicao.rate ?? null,
+          // O aportado e `amountOriginal`; `amount` e o de hoje.
+          amount: posicao.amountOriginal ?? null,
+          // `amountProfit` vem nulo em toda posicao observada. O lucro sai da
+          // diferenca, que e a mesma conta que a corretora faz na tela dela.
+          profit:
+            posicao.amountProfit ??
+            (posicao.amount != null && posicao.amountOriginal != null
+              ? posicao.amount - posicao.amountOriginal
+              : null),
+          // A contratada antes da generica: `annualRate` vem nulo em renda fixa.
+          annualRate: posicao.fixedAnnualRate ?? posicao.annualRate ?? null,
           dueDate: posicao.dueDate ? String(posicao.dueDate).slice(0, 10) : null,
           currency: posicao.currencyCode ?? null,
           status: posicao.status ?? null,

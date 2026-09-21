@@ -146,12 +146,39 @@ export interface Investment {
   subtype?: string | null;
   name?: string | null;
   issuer?: string | null;
-  /** Valor de mercado hoje. E o que a tela soma. */
+  /**
+   * LIQUIDO de imposto. Confere ao centavo: `amount - taxes - taxes2`.
+   *
+   * O nome engana — nao e o saldo da posicao, e o que sobraria resgatando.
+   */
   balance?: number | null;
-  /** Quanto foi aportado. */
+  /**
+   * Valor de mercado BRUTO. Confere com `quantity * value`, ao centavo.
+   *
+   * O nome tambem engana: parece o aportado, e e o de hoje. O aportado e
+   * `amountOriginal`.
+   */
   amount?: number | null;
-  /** Quanto do saldo e lucro. */
+  /** O que foi aportado na compra. */
+  amountOriginal?: number | null;
+  /** Vem nulo em toda posicao observada; o lucro sai de amount - amountOriginal. */
   amountProfit?: number | null;
+  /** Imposto retido e o que mais a instituicao descontar. */
+  taxes?: number | null;
+  taxes2?: number | null;
+  /** Quantos titulos ou cotas. */
+  quantity?: number | null;
+  /** Preco unitario. E a marcacao de hoje, sem ninguem digitar nada. */
+  value?: number | null;
+  /**
+   * A taxa CONTRATADA no lote — o que se recebe levando ao vencimento.
+   *
+   * E ela que a coluna Taxa quer. `annualRate` vem nulo em renda fixa, que e
+   * por que a coluna mostrava traco justamente no Tesouro.
+   */
+  fixedAnnualRate?: number | null;
+  /** Percentual do indexador: 100 no Tesouro, 102 num CDB, 70 num CRI. */
+  rate?: number | null;
   annualRate?: number | null;
   dueDate?: string | null;
   currencyCode?: string | null;
