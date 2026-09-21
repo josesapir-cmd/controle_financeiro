@@ -87,6 +87,9 @@ const NOME_DO_TIPO: Record<string, string> = {
   CRYPTO: "Cripto",
   REAL_ESTATE: "Imovel",
   EQUITY_STAKE: "Participacao",
+  // Imposto ja retido na fonte. Nao rende e nao e resgatavel, mas abate o que
+  // se vai dever: deixar fora da carteira e pagar duas vezes no pensamento.
+  TAX_CREDIT: "Credito tributario",
 };
 
 /** O rotulo mais especifico que existir: subtipo antes de tipo. */
@@ -283,6 +286,64 @@ function somar(a: number | null, b: number | null): number | null {
  */
 export function semZerados(papeis: PapelNaCarteira[]): PapelNaCarteira[] {
   return papeis.filter((papel) => Math.abs(papel.saldo) >= 0.005);
+}
+
+/** O minimo que o credito de imposto precisa saber sobre um recebimento. */
+export interface RetencaoNaFonte {
+  fonte: string;
+  /** Nulo enquanto nao houve pagamento — sem pagamento nao houve retencao. */
+  pagoEm: string | null;
+  retido: number;
+}
+
+/**
+ * O imposto ja retido na fonte, como uma linha da carteira.
+ *
+ * Retencao nao e dinheiro perdido: e imposto pago adiantado, que abate o
+ * devido no ajuste. Enquanto nao aparece em lugar nenhum, o patrimonio fica
+ * menor do que e e a pessoa provisiona duas vezes o mesmo imposto.
+ *
+ * Somado, e nao uma linha por trimestre: sao pagamentos do mesmo credito
+ * contra o mesmo ajuste, e treze linhas iguais diriam menos que uma.
+ *
+ * Derivado, e nao digitado. Um numero destes so cresce — a cada trimestre novo
+ * o valor cadastrado a mao ficaria velho sem nenhum aviso na tela.
+ */
+export function creditoDeImpostoRetido(
+  recebimentos: RetencaoNaFonte[],
+): PapelNaCarteira | null {
+  // Sem data de pagamento nao houve retencao: o trimestre foi apurado e nada
+  // saiu. Contar essas linhas inventaria credito que nao existe.
+  const pagos = recebimentos.filter((r) => r.pagoEm !== null && r.retido > 0);
+  if (pagos.length === 0) return null;
+
+  const total = pagos.reduce((soma, r) => soma + r.retido, 0);
+  if (total < 0.005) return null;
+
+  // Uma fonte so na maioria das vezes; com mais de uma o rotulo nao tenta
+  // listar todas, porque o que a linha responde e "quanto ja foi retido".
+  const fontes = [...new Set(pagos.map((r) => r.fonte))];
+  const ultimo = pagos.reduce(
+    (maisNovo, r) => (r.pagoEm! > maisNovo ? r.pagoEm! : maisNovo),
+    pagos[0].pagoEm!,
+  );
+
+  return {
+    id: "retencao:na-fonte",
+    nome: "IR retido na fonte",
+    instituicao: fontes.length === 1 ? fontes[0] : `${fontes.length} fontes`,
+    tipo: "TAX_CREDIT",
+    subtipo: null,
+    saldo: total,
+    aportado: null,
+    lucro: null,
+    taxa: null,
+    vence: null,
+    manual: true,
+    // A data do ultimo recebimento, nao a de hoje: e ate ela que o numero
+    // esta completo, e e isso que a tela precisa poder dizer.
+    avaliadoEm: ultimo,
+  };
 }
 
 /** Uma classe de papel, com os instrumentos dela por dentro. */

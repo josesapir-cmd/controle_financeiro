@@ -13,6 +13,7 @@ import {
   listAtivosManuais,
   listCotacoes,
   listPosicoes,
+  listReceitasDeSocio,
   listRegrasDeCartao,
   listRotulosDeCompra,
   purchaseFingerprint,
@@ -87,6 +88,7 @@ import { montarCarteira, type CarteiraDeCompromissos } from "./compromissos";
 import {
   agruparPapeis,
   classeDoPapel,
+  creditoDeImpostoRetido,
   semZerados,
   type PapelAgrupado,
   type PapelNaCarteira,
@@ -2390,11 +2392,12 @@ export interface Carteira {
  * ainda nao aportado.
  */
 export async function loadCarteira(): Promise<Carteira> {
-  const [posicoes, ativos, apelidos, cotacoes] = await Promise.all([
+  const [posicoes, ativos, apelidos, cotacoes, receitas] = await Promise.all([
     listPosicoes(db()).catch(() => []),
     listAtivosManuais(db()).catch(() => []),
     listApelidosDeInstrumento(db()).catch(() => []),
     listCotacoes(db()).catch(() => []),
+    listReceitasDeSocio(db()).catch(() => []),
   ]);
 
   // A mesma NTN-B chega com quatro nomes, um por custodia. Nenhuma regra de
@@ -2466,9 +2469,24 @@ export async function loadCarteira(): Promise<Carteira> {
     avaliadoEm: ativo.valuedAt,
   }));
 
+  // O imposto ja retido na fonte tambem e patrimonio: abate o que se vai dever
+  // no ajuste. Derivado das receitas cadastradas, e nao digitado — a cada
+  // trimestre novo um numero a mao ficaria velho sem aviso nenhum na tela.
+  const retencao = creditoDeImpostoRetido(
+    receitas.map((r) => ({
+      fonte: r.source,
+      pagoEm: r.paidOn,
+      retido: r.withheldTax,
+    })),
+  );
+
   // Agrupa antes de somar qualquer coisa: a corretora manda uma posicao por
   // lote comprado, e o resumo tem que contar instrumentos, nao ordens de compra.
-  const porCustodia = semZerados([...posicoesLidas, ...manuais]);
+  const porCustodia = semZerados([
+    ...posicoesLidas,
+    ...manuais,
+    ...(retencao ? [retencao] : []),
+  ]);
   const papeis = agruparPapeis(porCustodia);
 
   return {

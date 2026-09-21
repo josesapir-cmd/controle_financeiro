@@ -3,6 +3,7 @@ import {
   agruparPapeis,
   classeDoPapel,
   agruparPorClasse,
+  creditoDeImpostoRetido,
   semZerados,
   type PapelNaCarteira,
 } from "../carteira";
@@ -807,5 +808,75 @@ describe("o liquido somado ao lado do bruto", () => {
     for (const classe of classes) {
       expect(classe.liquido).toBeLessThanOrEqual(classe.saldo);
     }
+  });
+});
+
+/**
+ * O imposto ja retido na fonte, como linha da carteira.
+ *
+ * Retencao e imposto pago adiantado, nao dinheiro perdido. Os erros que
+ * importam aqui sao os dois lados do mesmo engano: somar trimestre que nunca
+ * foi pago (inventa credito) e nao somar nada (esconde patrimonio).
+ */
+describe("creditoDeImpostoRetido", () => {
+  it("soma so o que foi pago, numa linha unica", () => {
+    const linha = creditoDeImpostoRetido([
+      { fonte: "Atmos", pagoEm: "2026-04-13", retido: 73626.62 },
+      { fonte: "Atmos", pagoEm: "2026-07-15", retido: 34432.81 },
+    ]);
+
+    expect(linha).not.toBeNull();
+    expect(linha!.saldo).toBeCloseTo(108059.43, 2);
+    expect(linha!.tipo).toBe("TAX_CREDIT");
+    expect(linha!.manual).toBe(true);
+    expect(linha!.instituicao).toBe("Atmos");
+  });
+
+  it("carrega a data do ultimo recebimento, nao a do primeiro", () => {
+    const linha = creditoDeImpostoRetido([
+      { fonte: "Atmos", pagoEm: "2026-07-15", retido: 34432.81 },
+      { fonte: "Atmos", pagoEm: "2026-04-13", retido: 73626.62 },
+    ]);
+
+    expect(linha!.avaliadoEm).toBe("2026-07-15");
+  });
+
+  it("ignora trimestre apurado sem pagamento", () => {
+    const linha = creditoDeImpostoRetido([
+      { fonte: "Atmos", pagoEm: null, retido: 50000 },
+      { fonte: "Atmos", pagoEm: "2026-04-13", retido: 73626.62 },
+    ]);
+
+    expect(linha!.saldo).toBeCloseTo(73626.62, 2);
+  });
+
+  it("some quando nada foi retido", () => {
+    expect(
+      creditoDeImpostoRetido([
+        { fonte: "Atmos", pagoEm: "2025-10-13", retido: 0 },
+      ]),
+    ).toBeNull();
+    expect(creditoDeImpostoRetido([])).toBeNull();
+  });
+
+  it("nao tenta listar todas as fontes quando ha mais de uma", () => {
+    const linha = creditoDeImpostoRetido([
+      { fonte: "Atmos", pagoEm: "2026-04-13", retido: 1000 },
+      { fonte: "Outra", pagoEm: "2026-05-13", retido: 500 },
+    ]);
+
+    expect(linha!.instituicao).toBe("2 fontes");
+    expect(linha!.saldo).toBeCloseTo(1500, 2);
+  });
+
+  it("entra na carteira como qualquer outro papel", () => {
+    const linha = creditoDeImpostoRetido([
+      { fonte: "Atmos", pagoEm: "2026-04-13", retido: 73626.62 },
+    ])!;
+
+    const classes = agruparPorClasse(semZerados([linha]));
+    expect(classes).toHaveLength(1);
+    expect(classes[0].nome).toBe("Credito tributario");
+    expect(classes[0].saldo).toBeCloseTo(73626.62, 2);
   });
 });

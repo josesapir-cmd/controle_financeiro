@@ -2144,3 +2144,135 @@ export async function apagarCotacao(db: Db, nome: string): Promise<void> {
     instrumentFingerprint(nome),
   ]);
 }
+
+/* ==========================================================================
+   Receita de socio — a remuneracao que o extrato nao explica
+   ========================================================================== */
+
+export interface ReceitaDeSocioRow {
+  id: string;
+  source: string;
+  /** Como o aviso chama o periodo: "3T2025". */
+  periodLabel: string;
+  periodStart: string;
+  /** Nulo quando o trimestre foi apurado e nada caiu na conta. */
+  paidOn: string | null;
+  sharePct: number | null;
+  distributable: number | null;
+  gross: number;
+  /** Negativos: sao o que sai do bruto. */
+  healthPlan: number;
+  settlements: number;
+  /** Positivo: e credito contra imposto devido, nao despesa. */
+  withheldTax: number;
+  net: number;
+  note: string | null;
+}
+
+export interface ReceitaDeSocioInput {
+  source: string;
+  periodLabel: string;
+  periodStart: string;
+  paidOn?: string | null;
+  sharePct?: number | null;
+  distributable?: number | null;
+  gross: number;
+  healthPlan?: number | null;
+  settlements?: number | null;
+  withheldTax?: number | null;
+  net: number;
+  note?: string | null;
+}
+
+export function partnerSourceFingerprint(nome: string): string {
+  return fingerprint("receita-de-socio", nome.trim());
+}
+
+/** Mais recente primeiro, por competencia — e por ela que se le um historico. */
+export async function listReceitasDeSocio(db: Db): Promise<ReceitaDeSocioRow[]> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, source_enc, period_label, period_start, paid_on, share_pct,
+            distributable, gross, health_plan, settlements, withheld_tax, net,
+            note_enc
+       FROM partner_income
+      ORDER BY period_start DESC`,
+  );
+
+  return linhas.map((linha) => ({
+    id: String(linha.id),
+    source: decryptOptional(linha.source_enc as string | null) ?? "(sem fonte)",
+    periodLabel: String(linha.period_label),
+    periodStart: dia(linha.period_start) ?? "",
+    paidOn: dia(linha.paid_on),
+    sharePct:
+      linha.share_pct === null || linha.share_pct === undefined
+        ? null
+        : numero(linha.share_pct),
+    distributable:
+      linha.distributable === null || linha.distributable === undefined
+        ? null
+        : numero(linha.distributable),
+    gross: numero(linha.gross),
+    healthPlan: numero(linha.health_plan),
+    settlements: numero(linha.settlements),
+    withheldTax: numero(linha.withheld_tax),
+    net: numero(linha.net),
+    note: decryptOptional(linha.note_enc as string | null),
+  }));
+}
+
+/**
+ * Grava um periodo, sobrescrevendo o que ja existia para a mesma fonte.
+ *
+ * Idempotente de proposito: a planilha de onde isso vem e reimportada inteira
+ * quando um trimestre novo chega, e um import que duplicasse o historico so
+ * seria percebido depois de o total estar errado.
+ */
+export async function salvarReceitaDeSocio(
+  db: Db,
+  dados: ReceitaDeSocioInput,
+): Promise<void> {
+  const fonte = dados.source.trim();
+  const periodo = dados.periodLabel.trim();
+  if (!fonte || !periodo || !dados.periodStart) return;
+
+  await db.query(
+    `INSERT INTO partner_income
+       (source_enc, source_fingerprint, period_label, period_start, paid_on,
+        share_pct, distributable, gross, health_plan, settlements,
+        withheld_tax, net, note_enc)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     ON CONFLICT (source_fingerprint, period_label) DO UPDATE
+       SET source_enc = EXCLUDED.source_enc,
+           period_start = EXCLUDED.period_start,
+           paid_on = EXCLUDED.paid_on,
+           share_pct = EXCLUDED.share_pct,
+           distributable = EXCLUDED.distributable,
+           gross = EXCLUDED.gross,
+           health_plan = EXCLUDED.health_plan,
+           settlements = EXCLUDED.settlements,
+           withheld_tax = EXCLUDED.withheld_tax,
+           net = EXCLUDED.net,
+           note_enc = EXCLUDED.note_enc,
+           updated_at = now()`,
+    [
+      encrypt(fonte),
+      partnerSourceFingerprint(fonte),
+      periodo,
+      dados.periodStart,
+      dados.paidOn ?? null,
+      dados.sharePct ?? null,
+      dados.distributable ?? null,
+      dados.gross,
+      dados.healthPlan ?? 0,
+      dados.settlements ?? 0,
+      dados.withheldTax ?? 0,
+      dados.net,
+      encryptOptional(dados.note?.trim() || null),
+    ],
+  );
+}
+
+export async function apagarReceitaDeSocio(db: Db, id: string): Promise<void> {
+  await db.query("DELETE FROM partner_income WHERE id = $1", [id]);
+}

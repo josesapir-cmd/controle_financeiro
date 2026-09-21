@@ -55,6 +55,7 @@ describe("migracoes", () => {
       "instrument_quotes",
       "investments",
       "manual_investments",
+      "partner_income",
       "schema_migrations",
       "sessions",
       "shared_imports",

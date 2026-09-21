@@ -16,3 +16,7 @@ next-env.d.ts
 
 # Backups de classificacao: dado financeiro, fica so na maquina
 /backups/
+
+# Remuneracao pessoal: o CSV que alimenta `scripts/receita.mjs` nunca entra no
+# repositorio, nem por engano de `git add -A`.
+/receitas*.csv

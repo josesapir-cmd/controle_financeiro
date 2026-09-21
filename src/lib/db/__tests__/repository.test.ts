@@ -11,6 +11,8 @@ import {
   arquivarCentroDeCusto,
   listCategorias,
   listCentrosDeCusto,
+  listReceitasDeSocio,
+  salvarReceitaDeSocio,
   salvarCategoria,
   salvarCentroDeCusto,
   clearCounterpartyLink,
@@ -677,5 +679,96 @@ describe("taxonomia de centros de custo", () => {
 
   it("ignora id que nem uuid e, em vez de estourar", async () => {
     await expect(salvarCategoria(db, "../etc/passwd", { name: "x" })).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * A remuneracao que o extrato nao explica.
+ *
+ * O risco real aqui e o silencioso: reimportar a mesma planilha e dobrar o
+ * historico sem nenhum sinal na tela. Por isso a chave unica e testada antes
+ * de qualquer coisa.
+ */
+describe("receita de socio", () => {
+  const periodo = {
+    source: "Atmos",
+    periodLabel: "3T2025",
+    periodStart: "2025-07-01",
+    paidOn: "2025-10-13",
+    sharePct: 3.17,
+    distributable: 33435687.15,
+    gross: 1060862.35,
+    healthPlan: -21028.05,
+    settlements: -51765.14,
+    withheldTax: 0,
+    net: 988069.17,
+  };
+
+  it("guarda o periodo com a fonte cifrada e devolve em claro", async () => {
+    await salvarReceitaDeSocio(db, periodo);
+
+    const [linha] = await listReceitasDeSocio(db);
+    expect(linha.source).toBe("Atmos");
+    expect(linha.periodLabel).toBe("3T2025");
+    expect(linha.gross).toBeCloseTo(1060862.35, 2);
+    expect(linha.net).toBeCloseTo(988069.17, 2);
+
+    // Cifrado de verdade no banco, nao so na API.
+    const [cru] = await db.query<{ source_enc: string }>(
+      "SELECT source_enc FROM partner_income",
+    );
+    expect(cru.source_enc).not.toContain("Atmos");
+  });
+
+  it("reimportar o mesmo periodo atualiza em vez de duplicar", async () => {
+    await salvarReceitaDeSocio(db, periodo);
+    await salvarReceitaDeSocio(db, { ...periodo, net: 988069.18 });
+
+    const linhas = await listReceitasDeSocio(db);
+    expect(linhas).toHaveLength(1);
+    expect(linhas[0].net).toBeCloseTo(988069.18, 2);
+  });
+
+  it("fontes diferentes com o mesmo rotulo de periodo convivem", async () => {
+    await salvarReceitaDeSocio(db, periodo);
+    await salvarReceitaDeSocio(db, { ...periodo, source: "Outra" });
+
+    expect(await listReceitasDeSocio(db)).toHaveLength(2);
+  });
+
+  it("aceita trimestre apurado e nao pago", async () => {
+    await salvarReceitaDeSocio(db, {
+      ...periodo,
+      periodLabel: "3T2022",
+      periodStart: "2022-07-01",
+      paidOn: null,
+      gross: 909217.76,
+      net: 0,
+    });
+
+    const [linha] = await listReceitasDeSocio(db);
+    expect(linha.paidOn).toBeNull();
+    expect(linha.net).toBe(0);
+  });
+
+  it("ordena por competencia, do mais recente para o mais antigo", async () => {
+    await salvarReceitaDeSocio(db, periodo);
+    await salvarReceitaDeSocio(db, {
+      ...periodo,
+      periodLabel: "1T2026",
+      periodStart: "2026-01-01",
+    });
+
+    expect((await listReceitasDeSocio(db)).map((l) => l.periodLabel)).toEqual([
+      "1T2026",
+      "3T2025",
+    ]);
+  });
+
+  it("linha sem fonte ou sem rotulo nao entra", async () => {
+    await salvarReceitaDeSocio(db, { ...periodo, source: "  " });
+    await salvarReceitaDeSocio(db, { ...periodo, periodLabel: "" });
+
+    expect(await listReceitasDeSocio(db)).toHaveLength(0);
   });
 });

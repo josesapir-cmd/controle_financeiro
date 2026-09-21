@@ -26,7 +26,8 @@
     "recebidos": "node scripts/recebidos.mjs",
     "ativo": "node scripts/ativo.mjs",
     "carteira": "node scripts/carteira.mjs",
-    "fundo": "node scripts/inspecionar-fundo.mjs"
+    "fundo": "node scripts/inspecionar-fundo.mjs",
+    "receita": "node scripts/receita.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
