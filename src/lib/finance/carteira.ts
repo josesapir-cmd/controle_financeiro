@@ -163,20 +163,7 @@ function chaveDoInstrumento(papel: PapelNaCarteira): string {
   return papel.apelidado ? `apelido|${nome}` : `${nome}|${papel.vence ?? ""}`;
 }
 
-/**
- * Como a tabela junta os papeis.
- *
- * "instrumento" responde "quanto tenho neste titulo"; "classe" responde "quanto
- * tenho em CDB". Sao duas perguntas legitimas sobre a mesma carteira, e por
- * isso e um botao e nao uma decisao guardada: trocar de pergunta nao deveria
- * exigir declarar nada nem migrar banco.
- */
-export type ModoDeAgrupar = "instrumento" | "classe";
-
-export function agruparPapeis(
-  papeis: PapelNaCarteira[],
-  modo: ModoDeAgrupar = "instrumento",
-): PapelAgrupado[] {
+export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
   const mapa = new Map<string, PapelAgrupado>();
   // Numerador e denominador da media de taxa, acumulados junto com o resto:
   // percorrer a lista de novo depois so para isso seria varrer n vezes o que ja
@@ -195,17 +182,13 @@ export function agruparPapeis(
   }
 
   for (const papel of papeis) {
-    // Por classe o rotulo E a chave: "CDB" agrupa e "CDB" e o que se le. Nao ha
-    // nome a preservar, porque o nome do grupo nao e o de nenhum dos papeis.
-    const classe = classeDoPapel(papel.tipo, papel.subtipo);
-    const chave = modo === "classe" ? `classe|${classe}` : chaveDoInstrumento(papel);
+    const chave = chaveDoInstrumento(papel);
     const chaveDaCustodia = `${chave}|${papel.instituicao}`;
     const atual = mapa.get(chave);
 
     if (!atual) {
       mapa.set(chave, {
         ...papel,
-        nome: modo === "classe" ? classe : papel.nome,
         posicoes: 1,
         custodias: [
           {
@@ -305,4 +288,77 @@ function somar(a: number | null, b: number | null): number | null {
  */
 export function semZerados(papeis: PapelNaCarteira[]): PapelNaCarteira[] {
   return papeis.filter((papel) => Math.abs(papel.saldo) >= 0.005);
+}
+
+/** Uma classe de papel, com os instrumentos dela por dentro. */
+export interface ClasseDaCarteira {
+  nome: string;
+  saldo: number;
+  aportado: number | null;
+  lucro: number | null;
+  /** Media ponderada pelo saldo das posicoes que informam taxa. */
+  taxa: number | null;
+  /** Quantas posicoes a classe soma, contando todos os instrumentos. */
+  posicoes: number;
+  /** O vencimento quando toda a classe compartilha um; nulo quando divergem. */
+  vence: string | null;
+  instrumentos: PapelAgrupado[];
+}
+
+/**
+ * A carteira em tres niveis: classe, instrumento, custodia.
+ *
+ * A classe responde a pergunta de cima — "quanto tenho em CDB" — e nao depende
+ * de ninguem declarar nada: o subtipo ja vem da corretora, e quatro custodias
+ * que escrevem o nome do Tesouro de quatro jeitos mandam todas o mesmo subtipo.
+ *
+ * Os dois niveis de baixo existem porque a classe sozinha esconde o que
+ * distingue: qual CDB, de que banco, vencendo quando. Guardados atras de um
+ * clique, e nao apagados.
+ */
+export function agruparPorClasse(
+  papeis: PapelNaCarteira[],
+): ClasseDaCarteira[] {
+  const porClasse = new Map<string, PapelNaCarteira[]>();
+
+  for (const papel of papeis) {
+    const classe = classeDoPapel(papel.tipo, papel.subtipo);
+    const atual = porClasse.get(classe);
+    if (atual) atual.push(papel);
+    else porClasse.set(classe, [papel]);
+  }
+
+  const classes: ClasseDaCarteira[] = [];
+
+  for (const [nome, daClasse] of porClasse) {
+    const instrumentos = agruparPapeis(daClasse);
+    const comTaxa = daClasse.filter((p) => p.taxa !== null && p.saldo !== 0);
+    const peso = comTaxa.reduce((s, p) => s + p.saldo, 0);
+
+    classes.push({
+      nome,
+      saldo: daClasse.reduce((s, p) => s + p.saldo, 0),
+      aportado: daClasse.reduce<number | null>(
+        (s, p) => somar(s, p.aportado),
+        null,
+      ),
+      lucro: daClasse.reduce<number | null>((s, p) => somar(s, p.lucro), null),
+      // Mesma regra dos outros niveis: so quem informa taxa entra na media.
+      taxa:
+        peso !== 0
+          ? comTaxa.reduce((s, p) => s + (p.taxa ?? 0) * p.saldo, 0) / peso
+          : null,
+      posicoes: daClasse.length,
+      // Mesma regra dos niveis de baixo: a data so sobrevive se for uma so.
+      // Tres NTN-B 2084 na classe Tesouro tem vencimento; tres CDBs de bancos
+      // diferentes nao tem, e mostrar o de um diria que a classe toda vence la.
+      vence: (() => {
+        const datas = new Set(daClasse.map((p) => p.vence).filter(Boolean));
+        return datas.size === 1 ? [...datas][0]! : null;
+      })(),
+      instrumentos,
+    });
+  }
+
+  return classes.sort((a, b) => b.saldo - a.saldo);
 }

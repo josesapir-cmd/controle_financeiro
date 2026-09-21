@@ -3,22 +3,23 @@
 import { useState } from "react";
 import { dataCompleta } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
-import {
-  agruparPapeis,
-  type ModoDeAgrupar,
-  type PapelNaCarteira,
-} from "@/lib/finance/carteira";
+import { agruparPorClasse, type PapelNaCarteira } from "@/lib/finance/carteira";
 
 /**
- * Os papeis da carteira, com as custodias por dentro.
+ * A carteira inteira numa tabela so, em tres niveis.
  *
- * A linha de cima e o instrumento — "quanto tenho em Renda+ 2065" — porque essa
- * e a pergunta que se faz olhando a carteira. Onde esta custodiado so importa na
- * hora de resgatar, e por isso fica atras de um clique em vez de partir o total
- * em duas linhas que o olho precisa somar.
+ * Classe responde a pergunta de cima — "quanto tenho em CDB" — e e onde a
+ * tabela comeca, fechada. Instrumento diz qual CDB, custodia diz onde ele esta.
+ * Cada nivel abaixo do primeiro existe porque o de cima esconde o que
+ * distingue; guardar atras de um clique nao e o mesmo que apagar.
  *
- * So abre o que tem o que mostrar: com uma custodia unica o nome dela ja esta
- * escrito na linha, e um triangulo ali prometeria detalhe que nao existe.
+ * Esta tabela substituiu as duas que vinham antes dela — "por classe" e "por
+ * instituicao". Eram resumos do que ela ja mostra, e tres tabelas do mesmo
+ * dinheiro na mesma tela fazem o olho conferir em vez de ler.
+ *
+ * So abre o que tem o que mostrar: com um instrumento unico, ou uma custodia
+ * unica, o nome ja esta escrito na linha e um triangulo prometeria detalhe que
+ * nao existe.
  *
  * Abrir e estado de cliente e nao da URL: o dado ja veio inteiro na resposta.
  */
@@ -113,11 +114,13 @@ function Lucro({ valor }: { valor: number | null }) {
 
 export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
   const [abertos, setAbertos] = useState<ReadonlySet<string>>(new Set());
-  const [modo, setModo] = useState<ModoDeAgrupar>("instrumento");
 
-  // Reagrupar no cliente porque o dado ja veio inteiro: trocar de pergunta nao
-  // precisa de ida ao servidor, nem de decisao guardada, nem de migracao.
-  const papeis = agruparPapeis(posicoes, modo);
+  const classes = agruparPorClasse(posicoes);
+  const total = classes.reduce((s, c) => s + c.saldo, 0);
+  const comLucro = classes.filter((c) => c.lucro !== null);
+  const lucro = comLucro.length
+    ? comLucro.reduce((s, c) => s + (c.lucro ?? 0), 0)
+    : null;
 
   function alternar(chave: string) {
     setAbertos((atuais) => {
@@ -127,35 +130,12 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
     });
   }
 
+  if (classes.length === 0) return null;
+
   return (
     <figure className="gr">
       <figcaption className="gr-titulo">
-        <span>Papeis</span>
-
-        {/* Duas perguntas sobre a mesma carteira: "quanto tenho neste titulo" e
-            "quanto tenho em CDB". Trocar entre elas e olhar, nao declarar. */}
-        <span
-          className="gr-modo"
-          role="group"
-          aria-label="Como agrupar os papeis"
-        >
-          {(["instrumento", "classe"] as const).map((opcao) => (
-            <button
-              key={opcao}
-              type="button"
-              className={modo === opcao ? "ativo" : undefined}
-              aria-pressed={modo === opcao}
-              onClick={() => {
-                setModo(opcao);
-                // As chaves mudam junto com o modo; manter o que estava aberto
-                // deixaria linhas expandidas que nao existem mais.
-                setAbertos(new Set());
-              }}
-            >
-              {opcao === "instrumento" ? "Por instrumento" : "Por classe"}
-            </button>
-          ))}
-        </span>
+        Carteira · por classe, abrindo em instrumento e custodia
       </figcaption>
 
       <div className="gr-rolagem">
@@ -178,110 +158,200 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
             </tr>
           </thead>
 
-          {papeis.map((papel) => {
-            const varias = papel.custodias.length > 1;
-            const aberto = abertos.has(papel.id);
-
-            const nome = (
-              <>
-                {papel.manual ? (
-                  <MarcaManual avaliadoEm={papel.avaliadoEm} />
-                ) : null}
-                {papel.nome}
-                <span className="account-meta"> · {papel.instituicao}</span>
-                {/* So aparece quando ha o que somar: um "1" em toda linha seria
-                    ruido, e o silencio ja diz posicao unica. */}
-                {papel.posicoes > 1 ? (
-                  <span
-                    className="gr-badge"
-                    title={`${papel.posicoes} posicoes somadas`}
-                  >
-                    {papel.posicoes}
-                  </span>
-                ) : null}
-              </>
-            );
+          {classes.map((classe) => {
+            // Uma classe com um instrumento so nao tem o que revelar: o nivel
+            // de baixo repetiria a linha de cima com outro recuo.
+            const abreClasse = classe.instrumentos.length > 1;
+            const classeAberta = abertos.has(classe.nome);
+            const unico = abreClasse ? null : classe.instrumentos[0];
 
             return (
-              // Um tbody por papel: a custodia aberta fica ligada ao instrumento
-              // tambem para quem le a tabela por leitor de tela.
               <tbody
-                key={papel.id}
-                className={aberto ? "gr-grupo aberto" : "gr-grupo"}
+                key={classe.nome}
+                className={classeAberta ? "gr-grupo aberto" : "gr-grupo"}
               >
                 <tr>
                   <th scope="row">
-                    {varias ? (
+                    {abreClasse ? (
                       <button
                         type="button"
                         className="gr-abrir"
-                        onClick={() => alternar(papel.id)}
-                        aria-expanded={aberto}
+                        onClick={() => alternar(classe.nome)}
+                        aria-expanded={classeAberta}
                       >
-                        <Seta aberto={aberto} />
-                        {/* Um item de flex so para o rotulo inteiro: solto, cada
-                            pedaco viraria um item, o espaco antes do "·" seria
-                            descartado como espaco de borda e o badge deixaria de
-                            assentar na linha de base do nome. */}
-                        <span className="gr-rotulo">{nome}</span>
+                        <Seta aberto={classeAberta} />
+                        <span className="gr-rotulo">
+                          {classe.nome}
+                          <span className="gr-badge">
+                            {classe.instrumentos.length}
+                          </span>
+                        </span>
                       </button>
                     ) : (
-                      nome
+                      // Uma classe com um instrumento so E aquele instrumento.
+                      // Escrever "FIDC" no lugar de "Green FIDC Solar GD"
+                      // trocaria o nome do papel por um rotulo que nao
+                      // acrescenta nada.
+                      <>
+                        {unico?.manual ? (
+                          <MarcaManual avaliadoEm={unico.avaliadoEm} />
+                        ) : null}
+                        {unico?.nome ?? classe.nome}
+                        <span className="account-meta">
+                          {" "}
+                          · {unico?.instituicao}
+                        </span>
+                        {unico && unico.posicoes > 1 ? (
+                          <span
+                            className="gr-badge"
+                            title={`${unico.posicoes} posicoes somadas`}
+                          >
+                            {unico.posicoes}
+                          </span>
+                        ) : null}
+                      </>
                     )}
                   </th>
                   <td className="gr-so-largo">
                     <span className="gr-data">
-                      {papel.vence
-                        ? dataCompleta(papel.vence)
-                        : papel.manual && papel.avaliadoEm
-                          ? `avaliado em ${dataCompleta(papel.avaliadoEm)}`
+                      {classe.vence
+                        ? dataCompleta(classe.vence)
+                        : unico?.manual && unico.avaliadoEm
+                          ? `avaliado em ${dataCompleta(unico.avaliadoEm)}`
                           : "—"}
                     </span>
                   </td>
                   <td className="gr-num gr-so-largo">
                     <Taxa
-                      valor={papel.taxa}
-                      marcada={papel.taxaMarcada}
-                      marcadaEm={papel.taxaMarcadaEm}
+                      valor={classe.taxa}
+                      marcada={
+                        abreClasse ? null : classe.instrumentos[0]?.taxaMarcada
+                      }
+                      marcadaEm={classe.instrumentos[0]?.taxaMarcadaEm}
                     />
                   </td>
                   <td className="gr-num gr-so-largo">
-                    <Lucro valor={papel.lucro} />
+                    <Lucro valor={classe.lucro} />
                   </td>
-                  <td className="gr-num">{formatBRL(papel.saldo)}</td>
+                  <td className="gr-num">{formatBRL(classe.saldo)}</td>
                 </tr>
 
-                {varias && aberto
-                  ? papel.custodias.map((custodia) => (
-                      <tr key={custodia.instituicao} className="gr-nivel-2">
-                        <th scope="row">
-                          {custodia.instituicao}
-                          {custodia.posicoes > 1 ? (
-                            <span className="gr-badge">
-                              {custodia.posicoes}
+                {abreClasse && classeAberta
+                  ? classe.instrumentos.flatMap((papel) => {
+                      const varias = papel.custodias.length > 1;
+                      const chave = `${classe.nome}/${papel.id}`;
+                      const papelAberto = abertos.has(chave);
+
+                      const rotulo = (
+                        <>
+                          {papel.manual ? (
+                            <MarcaManual avaliadoEm={papel.avaliadoEm} />
+                          ) : null}
+                          {papel.nome}
+                          <span className="account-meta">
+                            {" "}
+                            · {papel.instituicao}
+                          </span>
+                          {papel.posicoes > 1 ? (
+                            <span
+                              className="gr-badge"
+                              title={`${papel.posicoes} posicoes somadas`}
+                            >
+                              {papel.posicoes}
                             </span>
                           ) : null}
-                        </th>
-                        <td className="gr-so-largo" />
-                        <td className="gr-num gr-so-largo">
-                          {/* Com o instrumento marcado a mao, a taxa e dele e
-                              nao da custodia. Repeti-la em cada linha seria
-                              ruido, e um traco se leria como "esta nao tem". */}
-                          {papel.taxaMarcada &&
-                          custodia.taxa === null ? null : (
-                            <Taxa valor={custodia.taxa} />
-                          )}
-                        </td>
-                        <td className="gr-num gr-so-largo">
-                          <Lucro valor={custodia.lucro} />
-                        </td>
-                        <td className="gr-num">{formatBRL(custodia.saldo)}</td>
-                      </tr>
-                    ))
+                        </>
+                      );
+
+                      return [
+                        <tr key={chave} className="gr-nivel-2">
+                          <th scope="row">
+                            {varias ? (
+                              <button
+                                type="button"
+                                className="gr-abrir"
+                                onClick={() => alternar(chave)}
+                                aria-expanded={papelAberto}
+                              >
+                                <Seta aberto={papelAberto} />
+                                <span className="gr-rotulo">{rotulo}</span>
+                              </button>
+                            ) : (
+                              rotulo
+                            )}
+                          </th>
+                          <td className="gr-so-largo">
+                            <span className="gr-data">
+                              {papel.vence
+                                ? dataCompleta(papel.vence)
+                                : papel.manual && papel.avaliadoEm
+                                  ? `avaliado em ${dataCompleta(papel.avaliadoEm)}`
+                                  : "—"}
+                            </span>
+                          </td>
+                          <td className="gr-num gr-so-largo">
+                            <Taxa
+                              valor={papel.taxa}
+                              marcada={papel.taxaMarcada}
+                              marcadaEm={papel.taxaMarcadaEm}
+                            />
+                          </td>
+                          <td className="gr-num gr-so-largo">
+                            <Lucro valor={papel.lucro} />
+                          </td>
+                          <td className="gr-num">{formatBRL(papel.saldo)}</td>
+                        </tr>,
+
+                        ...(varias && papelAberto
+                          ? papel.custodias.map((custodia) => (
+                              <tr
+                                key={`${chave}/${custodia.instituicao}`}
+                                className="gr-nivel-3"
+                              >
+                                <th scope="row">
+                                  {custodia.instituicao}
+                                  {custodia.posicoes > 1 ? (
+                                    <span className="gr-badge">
+                                      {custodia.posicoes}
+                                    </span>
+                                  ) : null}
+                                </th>
+                                <td className="gr-so-largo" />
+                                <td className="gr-num gr-so-largo">
+                                  {papel.taxaMarcada &&
+                                  custodia.taxa === null ? null : (
+                                    <Taxa valor={custodia.taxa} />
+                                  )}
+                                </td>
+                                <td className="gr-num gr-so-largo">
+                                  <Lucro valor={custodia.lucro} />
+                                </td>
+                                <td className="gr-num">
+                                  {formatBRL(custodia.saldo)}
+                                </td>
+                              </tr>
+                            ))
+                          : []),
+                      ];
+                    })
                   : null}
               </tbody>
             );
           })}
+
+          {/* O total fecha a tabela porque agora ela e a unica: sem os dois
+              resumos que vinham antes, a soma precisa estar em algum lugar. */}
+          <tfoot>
+            <tr className="gr-total">
+              <th scope="row">Total</th>
+              <td className="gr-so-largo" />
+              <td className="gr-num gr-so-largo" />
+              <td className="gr-num gr-so-largo">
+                <Lucro valor={lucro} />
+              </td>
+              <td className="gr-num">{formatBRL(total)}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </figure>

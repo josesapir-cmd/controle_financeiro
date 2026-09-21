@@ -6,6 +6,11 @@ import { TabelaDePapeis } from "./TabelaDePapeis";
 /**
  * A carteira que veio do Open Finance.
  *
+ * Um cartao de resumo e uma tabela so. As tabelas "por classe" e "por
+ * instituicao" que ficavam aqui viraram os dois primeiros niveis da tabela de
+ * papeis — eram resumos do que ela ja mostra, e tres tabelas do mesmo dinheiro
+ * na mesma tela fazem o olho conferir em vez de ler.
+ *
  * Fotografia do que existe hoje, e nao extrato: nao tem periodo, e o numero que
  * importa e o saldo de mercado. O lucro aparece ao lado quando a instituicao
  * informa — e so quando informa, porque zero diria que nao rendeu nada, que e
@@ -28,11 +33,6 @@ export function CarteiraDeInvestimentos({ carteira }: { carteira: Carteira }) {
     );
   }
 
-  const maiorClasse = Math.max(...carteira.porClasse.map((g) => g.total), 1);
-  const maiorInstituicao = Math.max(
-    ...carteira.porInstituicao.map((g) => g.total),
-    1,
-  );
   const rendimento =
     carteira.lucro !== null && carteira.total - carteira.lucro > 0
       ? carteira.lucro / (carteira.total - carteira.lucro)
@@ -72,102 +72,6 @@ export function CarteiraDeInvestimentos({ carteira }: { carteira: Carteira }) {
           ) : null}
         </div>
       </section>
-
-      <figure className="gr">
-        <figcaption className="gr-titulo">Por classe</figcaption>
-        <div className="gr-rolagem">
-          <table className="gr-tabela">
-            <thead>
-              <tr>
-                <th scope="col">Classe</th>
-                <th scope="col" className="gr-num">
-                  Valor
-                </th>
-                <th scope="col" className="gr-num">
-                  <span className="gr-so-largo">Participacao</span>
-                  <span className="gr-so-estreito">%</span>
-                </th>
-                <th scope="col" className="gr-so-largo">
-                  Distribuicao
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {carteira.porClasse.map((grupo) => (
-                <tr key={grupo.nome}>
-                  <th scope="row">
-                    {grupo.nome}
-                    <span className="gr-badge">{grupo.papeis}</span>
-                  </th>
-                  <td className="gr-num">{formatBRL(grupo.total)}</td>
-                  <td className="gr-num">
-                    {carteira.total > 0
-                      ? `${((grupo.total / carteira.total) * 100).toFixed(1)}%`
-                      : "—"}
-                  </td>
-                  <td className="gr-so-largo">
-                    <span className="gr-barra" aria-hidden>
-                      <span
-                        style={{
-                          width: `${Math.max(1, (grupo.total / maiorClasse) * 100)}%`,
-                        }}
-                      />
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </figure>
-
-      <figure className="gr">
-        <figcaption className="gr-titulo">Por instituicao</figcaption>
-        <div className="gr-rolagem">
-          <table className="gr-tabela">
-            <thead>
-              <tr>
-                <th scope="col">Instituicao</th>
-                <th scope="col" className="gr-num">
-                  Valor
-                </th>
-                <th scope="col" className="gr-num">
-                  <span className="gr-so-largo">Participacao</span>
-                  <span className="gr-so-estreito">%</span>
-                </th>
-                <th scope="col" className="gr-so-largo">
-                  Distribuicao
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {carteira.porInstituicao.map((grupo) => (
-                <tr key={grupo.nome}>
-                  <th scope="row">
-                    {grupo.nome}
-                    <span className="gr-badge">{grupo.papeis}</span>
-                  </th>
-                  <td className="gr-num">{formatBRL(grupo.total)}</td>
-                  <td className="gr-num">
-                    {carteira.total > 0
-                      ? `${((grupo.total / carteira.total) * 100).toFixed(1)}%`
-                      : "—"}
-                  </td>
-                  <td className="gr-so-largo">
-                    <span className="gr-barra" aria-hidden>
-                      <span
-                        style={{
-                          width: `${Math.max(1, (grupo.total / maiorInstituicao) * 100)}%`,
-                        }}
-                      />
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </figure>
 
       <TabelaDePapeis posicoes={carteira.posicoes} />
     </>
