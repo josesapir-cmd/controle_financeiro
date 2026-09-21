@@ -169,7 +169,7 @@ export function CarteiraDeInvestimentos({ carteira }: { carteira: Carteira }) {
         </div>
       </figure>
 
-      <TabelaDePapeis papeis={carteira.papeis} />
+      <TabelaDePapeis posicoes={carteira.posicoes} />
     </>
   );
 }

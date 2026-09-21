@@ -2207,6 +2207,14 @@ export type { GrupoDaCarteira, PapelAgrupado, PapelNaCarteira };
 
 export interface Carteira {
   papeis: PapelAgrupado[];
+  /**
+   * A lista plana, uma linha por posicao e custodia.
+   *
+   * Vai junto para a tabela poder reagrupar no clique, sem ida ao servidor:
+   * "por instrumento" e "por classe" sao duas leituras do mesmo dado, e o dado
+   * ja veio inteiro.
+   */
+  posicoes: PapelNaCarteira[];
   porClasse: GrupoDaCarteira[];
   porInstituicao: GrupoDaCarteira[];
   total: number;
@@ -2298,6 +2306,7 @@ export async function loadCarteira(): Promise<Carteira> {
 
   return {
     papeis,
+    posicoes: porCustodia,
     porClasse: agrupar(papeis, (papel) =>
       classeDoPapel(papel.tipo, papel.subtipo),
     ),

@@ -4510,9 +4510,48 @@ ul.produtos {
 }
 
 .gr-titulo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
   margin-bottom: 12px;
   font-size: 13px;
   color: var(--text-sub);
+}
+
+/* Segmentado de duas opcoes, encostado a direita do titulo. Mesma gramatica do
+   segmentado que ja existe no app: trilho cinza, opcao ativa em branco. */
+.gr-modo {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 2px;
+  background: var(--bg-weak);
+  border-radius: 999px;
+}
+
+.gr-modo button {
+  height: 26px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-sub);
+  background: none;
+  border: none;
+  border-radius: 999px;
+  box-shadow: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.gr-modo button:hover:not(.ativo) {
+  color: var(--text-strong);
+  background: none;
+}
+
+.gr-modo button.ativo {
+  color: var(--text-strong);
+  background: var(--bg-white);
+  box-shadow: var(--shadow-xs);
 }
 
 .gr-titulo strong {

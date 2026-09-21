@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { dataCompleta } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
-import type { PapelAgrupado } from "@/lib/finance/carteira";
+import {
+  agruparPapeis,
+  type ModoDeAgrupar,
+  type PapelNaCarteira,
+} from "@/lib/finance/carteira";
 
 /**
  * Os papeis da carteira, com as custodias por dentro.
@@ -107,8 +111,13 @@ function Lucro({ valor }: { valor: number | null }) {
   );
 }
 
-export function TabelaDePapeis({ papeis }: { papeis: PapelAgrupado[] }) {
+export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
   const [abertos, setAbertos] = useState<ReadonlySet<string>>(new Set());
+  const [modo, setModo] = useState<ModoDeAgrupar>("instrumento");
+
+  // Reagrupar no cliente porque o dado ja veio inteiro: trocar de pergunta nao
+  // precisa de ida ao servidor, nem de decisao guardada, nem de migracao.
+  const papeis = agruparPapeis(posicoes, modo);
 
   function alternar(chave: string) {
     setAbertos((atuais) => {
@@ -121,7 +130,32 @@ export function TabelaDePapeis({ papeis }: { papeis: PapelAgrupado[] }) {
   return (
     <figure className="gr">
       <figcaption className="gr-titulo">
-        Papeis · uma linha por instrumento
+        <span>Papeis</span>
+
+        {/* Duas perguntas sobre a mesma carteira: "quanto tenho neste titulo" e
+            "quanto tenho em CDB". Trocar entre elas e olhar, nao declarar. */}
+        <span
+          className="gr-modo"
+          role="group"
+          aria-label="Como agrupar os papeis"
+        >
+          {(["instrumento", "classe"] as const).map((opcao) => (
+            <button
+              key={opcao}
+              type="button"
+              className={modo === opcao ? "ativo" : undefined}
+              aria-pressed={modo === opcao}
+              onClick={() => {
+                setModo(opcao);
+                // As chaves mudam junto com o modo; manter o que estava aberto
+                // deixaria linhas expandidas que nao existem mais.
+                setAbertos(new Set());
+              }}
+            >
+              {opcao === "instrumento" ? "Por instrumento" : "Por classe"}
+            </button>
+          ))}
+        </span>
       </figcaption>
 
       <div className="gr-rolagem">

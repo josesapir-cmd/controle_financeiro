@@ -520,6 +520,147 @@ describe("agruparPapeis", () => {
   });
 });
 
+describe("agruparPapeis por classe", () => {
+  it("junta CDB de bancos diferentes sem ninguem declarar nada", () => {
+    // O motivo de existir: perguntar "quanto tenho em CDB" nao deveria exigir
+    // cadastrar apelido, rodar comando nem migrar banco. E outra leitura do
+    // mesmo dado.
+    const linhas = agruparPapeis(
+      [
+        papel({
+          id: "a",
+          nome: "CDB BTG 2027",
+          instituicao: "BTG",
+          subtipo: "CDB",
+          saldo: 287110,
+          vence: "2027-11-30",
+        }),
+        papel({
+          id: "b",
+          nome: "CDB Inter 2029",
+          instituicao: "Inter",
+          subtipo: "CDB",
+          saldo: 141200,
+          vence: "2029-03-05",
+        }),
+        papel({
+          id: "c",
+          nome: "Nubank RDB",
+          instituicao: "Nubank",
+          subtipo: "CDB",
+          saldo: 18720.35,
+          vence: "2028-06-12",
+        }),
+      ],
+      "classe",
+    );
+
+    expect(linhas).toHaveLength(1);
+    expect(linhas[0].nome).toBe("CDB");
+    expect(linhas[0].saldo).toBeCloseTo(447030.35, 2);
+    expect(linhas[0].custodias.map((c) => c.instituicao)).toEqual([
+      "BTG",
+      "Inter",
+      "Nubank",
+    ]);
+    // Tres vencimentos diferentes numa linha so: nenhum deles pode aparecer.
+    expect(linhas[0].vence).toBeNull();
+  });
+
+  it("nao mistura classes diferentes", () => {
+    const linhas = agruparPapeis(
+      [
+        papel({
+          id: "a",
+          nome: "CDB BTG",
+          instituicao: "BTG",
+          subtipo: "CDB",
+          saldo: 100,
+        }),
+        papel({
+          id: "b",
+          nome: "NTN-B",
+          instituicao: "BTG",
+          subtipo: "TREASURY",
+          saldo: 200,
+        }),
+        papel({
+          id: "c",
+          nome: "Fundo X",
+          instituicao: "BTG",
+          tipo: "MUTUAL_FUND",
+          subtipo: null,
+          saldo: 300,
+        }),
+      ],
+      "classe",
+    );
+
+    expect(linhas.map((l) => l.nome)).toEqual([
+      "Fundo",
+      "Tesouro Direto",
+      "CDB",
+    ]);
+  });
+
+  it("o mesmo papel em duas custodias continua uma custodia cada", () => {
+    const [linha] = agruparPapeis(
+      [
+        papel({
+          id: "a",
+          nome: "CDB X",
+          instituicao: "BTG",
+          subtipo: "CDB",
+          saldo: 100,
+        }),
+        papel({
+          id: "b",
+          nome: "CDB Y",
+          instituicao: "BTG",
+          subtipo: "CDB",
+          saldo: 200,
+        }),
+        papel({
+          id: "c",
+          nome: "CDB Z",
+          instituicao: "XP",
+          subtipo: "CDB",
+          saldo: 300,
+        }),
+      ],
+      "classe",
+    );
+
+    expect(linha.posicoes).toBe(3);
+    expect(linha.custodias).toHaveLength(2);
+    expect(linha.custodias.find((c) => c.instituicao === "BTG")?.saldo).toBe(
+      300,
+    );
+  });
+
+  it("por instrumento continua sendo o padrao", () => {
+    const papeis = [
+      papel({
+        id: "a",
+        nome: "CDB BTG",
+        instituicao: "BTG",
+        subtipo: "CDB",
+        saldo: 100,
+      }),
+      papel({
+        id: "b",
+        nome: "CDB Inter",
+        instituicao: "Inter",
+        subtipo: "CDB",
+        saldo: 200,
+      }),
+    ];
+
+    expect(agruparPapeis(papeis)).toHaveLength(2);
+    expect(agruparPapeis(papeis, "classe")).toHaveLength(1);
+  });
+});
+
 describe("semZerados", () => {
   it("tira o papel resgatado que a instituicao ainda lista", () => {
     const papeis = [

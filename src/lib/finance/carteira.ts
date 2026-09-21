@@ -163,7 +163,20 @@ function chaveDoInstrumento(papel: PapelNaCarteira): string {
   return papel.apelidado ? `apelido|${nome}` : `${nome}|${papel.vence ?? ""}`;
 }
 
-export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
+/**
+ * Como a tabela junta os papeis.
+ *
+ * "instrumento" responde "quanto tenho neste titulo"; "classe" responde "quanto
+ * tenho em CDB". Sao duas perguntas legitimas sobre a mesma carteira, e por
+ * isso e um botao e nao uma decisao guardada: trocar de pergunta nao deveria
+ * exigir declarar nada nem migrar banco.
+ */
+export type ModoDeAgrupar = "instrumento" | "classe";
+
+export function agruparPapeis(
+  papeis: PapelNaCarteira[],
+  modo: ModoDeAgrupar = "instrumento",
+): PapelAgrupado[] {
   const mapa = new Map<string, PapelAgrupado>();
   // Numerador e denominador da media de taxa, acumulados junto com o resto:
   // percorrer a lista de novo depois so para isso seria varrer n vezes o que ja
@@ -182,13 +195,17 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
   }
 
   for (const papel of papeis) {
-    const chave = chaveDoInstrumento(papel);
+    // Por classe o rotulo E a chave: "CDB" agrupa e "CDB" e o que se le. Nao ha
+    // nome a preservar, porque o nome do grupo nao e o de nenhum dos papeis.
+    const classe = classeDoPapel(papel.tipo, papel.subtipo);
+    const chave = modo === "classe" ? `classe|${classe}` : chaveDoInstrumento(papel);
     const chaveDaCustodia = `${chave}|${papel.instituicao}`;
     const atual = mapa.get(chave);
 
     if (!atual) {
       mapa.set(chave, {
         ...papel,
+        nome: modo === "classe" ? classe : papel.nome,
         posicoes: 1,
         custodias: [
           {
