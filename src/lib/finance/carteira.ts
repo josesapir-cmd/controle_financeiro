@@ -38,6 +38,16 @@ export interface PapelNaCarteira {
   taxaMarcada?: string | null;
   /** Quando essa taxa foi lida. Taxa marcada envelhece em dias. */
   taxaMarcadaEm?: string | null;
+  /**
+   * O mesmo papel depois do imposto, quando a instituicao informa.
+   *
+   * Anda junto com o bruto em vez de substitui-lo porque os dois sao
+   * verdadeiros e respondem perguntas diferentes: quanto vale, e quanto
+   * sobraria resgatando hoje.
+   */
+  liquido?: number | null;
+  /** O que separa um do outro. */
+  imposto?: number | null;
 }
 
 export interface GrupoDaCarteira {
@@ -361,4 +371,43 @@ export function agruparPorClasse(
   }
 
   return classes.sort((a, b) => b.saldo - a.saldo);
+}
+
+/**
+ * Qual dos dois valores a tela esta somando.
+ *
+ * Nao e uma decisao sobre a carteira, e um jeito de olhar para ela — entao e
+ * botao, e nao coisa guardada. Bruto e o valor de mercado; liquido e o que
+ * sobraria resgatando hoje, ja descontado o imposto.
+ */
+export type ModoDeValor = "bruto" | "liquido";
+
+/**
+ * Troca o saldo pelo liquido, quando ele existe.
+ *
+ * Feito ANTES de agrupar, e nao depois: assim soma, media de taxa,
+ * participacao e total saem todos do mesmo numero, sem nenhum deles precisar
+ * saber que existe um modo.
+ *
+ * Papel sem liquido informado — ativo manual, fundo que a instituicao nao
+ * detalha — mantem o bruto. Zerar a linha por falta de informacao mentiria
+ * mais que repetir o valor que se tem.
+ */
+export function comValor(papeis: PapelNaCarteira[], modo: ModoDeValor): PapelNaCarteira[] {
+  if (modo === "bruto") return papeis;
+
+  return papeis.map((papel) =>
+    papel.liquido === null || papel.liquido === undefined
+      ? papel
+      : {
+          ...papel,
+          saldo: papel.liquido,
+          // O lucro acompanha: um liquido ao lado de um lucro bruto seria meio
+          // liquido, e a diferenca entre os dois e justamente o imposto.
+          lucro:
+            papel.lucro !== null && papel.lucro !== undefined && papel.imposto != null
+              ? papel.lucro - papel.imposto
+              : papel.lucro,
+        },
+  );
 }

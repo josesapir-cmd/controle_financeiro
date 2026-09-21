@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { dataCompleta } from "@/lib/finance/dates";
 import { formatBRL, formatPercent } from "@/lib/finance/money";
-import { agruparPorClasse, type PapelNaCarteira } from "@/lib/finance/carteira";
+import {
+  agruparPorClasse,
+  comValor,
+  type ModoDeValor,
+  type PapelNaCarteira,
+} from "@/lib/finance/carteira";
 
 /**
  * A carteira inteira numa tabela so, em tres niveis.
@@ -131,8 +136,12 @@ function Lucro({ valor }: { valor: number | null }) {
 
 export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
   const [abertos, setAbertos] = useState<ReadonlySet<string>>(new Set());
+  const [modo, setModo] = useState<ModoDeValor>("bruto");
 
-  const classes = agruparPorClasse(posicoes);
+  // A troca acontece ANTES do agrupamento: soma, media de taxa, participacao e
+  // total saem todos do mesmo numero, e nenhum deles precisa saber que existe
+  // um modo.
+  const classes = agruparPorClasse(comValor(posicoes, modo));
   const total = classes.reduce((s, c) => s + c.saldo, 0);
   const comLucro = classes.filter((c) => c.lucro !== null);
   const lucro = comLucro.length
@@ -152,7 +161,28 @@ export function TabelaDePapeis({ posicoes }: { posicoes: PapelNaCarteira[] }) {
   return (
     <figure className="gr">
       <figcaption className="gr-titulo">
-        Carteira · por classe, abrindo em instrumento e custodia
+        <span>Carteira · por classe, abrindo em instrumento e custodia</span>
+
+        {/* Os dois numeros sao verdadeiros e respondem perguntas diferentes:
+            quanto vale, e quanto sobraria resgatando hoje. */}
+        <span className="gr-modo" role="group" aria-label="Qual valor somar">
+          {(["bruto", "liquido"] as const).map((opcao) => (
+            <button
+              key={opcao}
+              type="button"
+              className={modo === opcao ? "ativo" : undefined}
+              aria-pressed={modo === opcao}
+              onClick={() => setModo(opcao)}
+              title={
+                opcao === "bruto"
+                  ? "Valor de mercado, antes do imposto"
+                  : "O que sobraria resgatando hoje, ja descontado o imposto"
+              }
+            >
+              {opcao === "bruto" ? "Bruto" : "Liquido"}
+            </button>
+          ))}
+        </span>
       </figcaption>
 
       <div className="gr-rolagem">

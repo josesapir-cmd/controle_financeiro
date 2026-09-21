@@ -4,6 +4,7 @@ import {
   agruparPapeis,
   classeDoPapel,
   agruparPorClasse,
+  comValor,
   semZerados,
   type PapelNaCarteira,
 } from "../carteira";
@@ -757,5 +758,87 @@ describe("semZerados", () => {
 
   it("mantem saldo negativo, que e um fato e nao um vazio", () => {
     expect(semZerados([papel({ id: "a", saldo: -500 })])).toHaveLength(1);
+  });
+});
+
+describe("comValor", () => {
+  const ntnb = papel({
+    id: "a",
+    nome: "NTN-B1",
+    instituicao: "BTG",
+    subtipo: "TREASURY",
+    saldo: 108844.23,
+    liquido: 107296.2,
+    imposto: 1548.03,
+    lucro: 8845.89,
+  });
+
+  it("no bruto devolve a lista intacta", () => {
+    expect(comValor([ntnb], "bruto")[0]).toBe(ntnb);
+  });
+
+  it("no liquido troca o saldo e desconta o imposto do lucro", () => {
+    const [papelLiquido] = comValor([ntnb], "liquido");
+
+    expect(papelLiquido.saldo).toBe(107296.2);
+    expect(papelLiquido.lucro).toBeCloseTo(8845.89 - 1548.03, 2);
+  });
+
+  it("papel sem liquido informado mantem o bruto", () => {
+    // Ativo manual e fundo que a instituicao nao detalha. Zerar a linha por
+    // falta de informacao mentiria mais que repetir o valor que se tem.
+    const manual = papel({
+      id: "m",
+      nome: "Cripto",
+      instituicao: "carteira",
+      saldo: 300000,
+    });
+
+    expect(comValor([manual], "liquido")[0].saldo).toBe(300000);
+  });
+
+  it("nao mexe no lucro quando o imposto nao veio", () => {
+    const semImposto = papel({
+      id: "f",
+      nome: "Fundo",
+      instituicao: "BTG",
+      saldo: 1000,
+      liquido: 900,
+      lucro: 100,
+    });
+    const [convertido] = comValor([semImposto], "liquido");
+
+    expect(convertido.saldo).toBe(900);
+    expect(convertido.lucro).toBe(100);
+  });
+
+  it("o total do liquido e menor, e a diferenca e o imposto", () => {
+    const papeis = [
+      ntnb,
+      papel({
+        id: "b",
+        nome: "CDB",
+        instituicao: "BTG",
+        saldo: 3355100.91,
+        liquido: 3351855,
+        imposto: 3245.91,
+      }),
+    ];
+
+    const bruto = comValor(papeis, "bruto").reduce((s, p) => s + p.saldo, 0);
+    const liquido = comValor(papeis, "liquido").reduce(
+      (s, p) => s + p.saldo,
+      0,
+    );
+    const imposto = papeis.reduce((s, p) => s + (p.imposto ?? 0), 0);
+
+    expect(bruto - liquido).toBeCloseTo(imposto, 2);
+  });
+
+  it("nao altera a lista original", () => {
+    const papeis = [ntnb];
+    comValor(papeis, "liquido");
+
+    expect(papeis[0].saldo).toBe(108844.23);
   });
 });

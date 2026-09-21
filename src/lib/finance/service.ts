@@ -2269,6 +2269,11 @@ export async function loadCarteira(): Promise<Carteira> {
       // descontado, e um patrimonio liquido de IR que ninguem pagou ainda
       // subestima o que se tem — cai para o liquido so quando o bruto falta.
       saldo: posicao.gross ?? posicao.balance,
+      // O liquido so tem sentido ao lado do bruto: sem bruto informado os dois
+      // seriam o mesmo numero, e um toggle que nao muda nada e pior que
+      // toggle nenhum.
+      liquido: posicao.gross !== null ? posicao.balance : null,
+      imposto: posicao.taxes,
       aportado: posicao.amount,
       lucro: posicao.profit,
       taxa: posicao.annualRate,
