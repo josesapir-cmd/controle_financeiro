@@ -19,6 +19,7 @@
  *   node scripts/carteira.mjs --separar "NTN-B1"
  *   node scripts/carteira.mjs --unir-classe CDB
  *   node scripts/carteira.mjs --unir-classe CDB --como "CDB dos bancos"
+ *   node scripts/carteira.mjs --precos         quantidade, PU e o que a venda daria
  */
 
 import { readFile } from "node:fs/promises";
@@ -146,6 +147,110 @@ try {
       [fp(unir), fp(como), cifrarCom(chave, como.trim()), cifrarCom(chave, unir.trim())],
     );
     console.log(`"${unir}" agora aparece como "${como}".\n`);
+  }
+
+  if (argumentos.includes("--precos")) {
+    /* A conciliacao contra a tela da corretora.
+     *
+     * O preco que a instituicao manda ja e o de RECOMPRA: bruto = quantidade x
+     * PU e o que a venda de hoje produz, e liquido e isso menos o imposto. A
+     * duvida que este modo tira e se todas as custodias marcam assim mesmo —
+     * uma que mande o preco de COMPRA infla o patrimonio sem avisar, e num
+     * titulo longo a diferenca e de por cento, nao de centavos. */
+    const posicoes = await banco.query(
+      `SELECT institution, name_enc, quantity, unit_price, gross_amount, taxes,
+              balance, fixed_annual_rate
+         FROM investments
+        ORDER BY COALESCE(gross_amount, balance) DESC NULLS LAST`,
+    );
+
+    if (posicoes.length === 0) {
+      console.log("Nenhuma posicao guardada. Sincronize em Conexoes.");
+      process.exit(0);
+    }
+
+    const apelidosPreco = new Map(
+      (await banco.query("SELECT fingerprint, alias_enc FROM instrument_aliases")).map(
+        (a) => [a.fingerprint, abrir(a.alias_enc)],
+      ),
+    );
+
+    const porInstrumento = new Map();
+    let semPreco = 0;
+
+    for (const p of posicoes) {
+      const cru = abrir(p.name_enc) ?? "(sem nome)";
+      const nome = apelidosPreco.get(fp(cru)) ?? cru;
+      const qtd = p.quantity === null ? null : Number(p.quantity);
+      const pu = p.unit_price === null ? null : Number(p.unit_price);
+      const bruto = Number(p.gross_amount ?? p.balance ?? 0);
+      const liquido = Number(p.balance ?? 0);
+      if (qtd === null || pu === null) semPreco += 1;
+
+      const g = porInstrumento.get(nome) ?? {
+        qtd: 0, bruto: 0, liquido: 0, imposto: 0, custodias: new Map(),
+      };
+      g.qtd += qtd ?? 0;
+      g.bruto += bruto;
+      g.liquido += liquido;
+      g.imposto += Number(p.taxes ?? 0);
+      const c = g.custodias.get(p.institution) ?? { qtd: 0, bruto: 0, pu: null };
+      c.qtd += qtd ?? 0;
+      c.bruto += bruto;
+      // O PU e do papel, nao do lote: qualquer um serve para comparar curvas.
+      c.pu = c.pu ?? pu;
+      g.custodias.set(p.institution, c);
+      porInstrumento.set(nome, g);
+    }
+
+    console.log("\nQuantidade, preco unitario e o que a venda de hoje daria.\n");
+
+    for (const [nome, g] of [...porInstrumento].sort((a, b) => b[1].bruto - a[1].bruto)) {
+      console.log(`  ${nome}`);
+      // O PU medio sai do proprio total: e o preco que reproduz o bruto.
+      const puMedio = g.qtd > 0 ? g.bruto / g.qtd : null;
+      console.log(
+        `    ${g.qtd > 0 ? `${g.qtd.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} titulos` : "sem quantidade"}` +
+          `${puMedio !== null ? `   PU medio ${puMedio.toFixed(2)}` : ""}`,
+      );
+      console.log(
+        `    bruto ${dinheiro(g.bruto)}   IR ${dinheiro(g.imposto)}` +
+          `   liquido ${dinheiro(g.liquido)}`,
+      );
+      if (g.custodias.size > 1) {
+        for (const [inst, c] of [...g.custodias].sort((a, b) => b[1].bruto - a[1].bruto)) {
+          console.log(
+            `      ${inst.padEnd(16)} ${dinheiro(c.bruto).padStart(18)}` +
+              `${c.pu !== null ? `   PU ${Number(c.pu).toFixed(2)}` : "   sem PU"}`,
+          );
+        }
+        // Custodias do mesmo papel marcando precos diferentes e o sintoma de
+        // uma delas estar na curva de compra em vez da de recompra.
+        const precos = [...g.custodias.values()].map((c) => c.pu).filter((x) => x !== null);
+        if (precos.length > 1) {
+          const menor = Math.min(...precos.map(Number));
+          const maior = Math.max(...precos.map(Number));
+          if (maior / menor - 1 > 0.005) {
+            console.log(
+              `      !! PU difere ${(((maior / menor) - 1) * 100).toFixed(2)}% entre custodias —` +
+                ` alguma pode estar marcando na curva de compra.`,
+            );
+          }
+        }
+      }
+      console.log();
+    }
+
+    const totalBruto = [...porInstrumento.values()].reduce((s, g) => s + g.bruto, 0);
+    const totalLiq = [...porInstrumento.values()].reduce((s, g) => s + g.liquido, 0);
+    console.log(`  TOTAL  bruto ${dinheiro(totalBruto)}   liquido ${dinheiro(totalLiq)}`);
+    if (semPreco > 0) {
+      console.log(
+        `\n  ${semPreco} posicao(oes) sem quantidade ou preco unitario. Sao os campos` +
+          ` da migracao 022:\n  rode npm run migrate e sincronize de novo em Conexoes.`,
+      );
+    }
+    process.exit(0);
   }
 
   const linhas = await banco.query(
