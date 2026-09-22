@@ -2448,6 +2448,7 @@ export async function loadCarteira(): Promise<Carteira> {
       taxa: posicao.annualRate,
       vence: posicao.dueDate,
       apelidado: apelido !== null,
+      compradoEm: posicao.purchaseDate,
     };
   });
 

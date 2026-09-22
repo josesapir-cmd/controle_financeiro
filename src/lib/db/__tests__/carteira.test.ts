@@ -500,6 +500,32 @@ describe("bruto, liquido e o que a Pluggy manda junto", () => {
     expect(posicao.indexPercent).toBe(102);
   });
 
+  // A data da compra e o que permite dizer QUANDO o lote cai de degrau; sem
+  // ela a carteira so sabe em qual ele esta.
+  it("guarda a data da compra do lote", async () => {
+    await substituirPosicoes(db, BTG, [
+      {
+        id: "lote",
+        itemId: BTG,
+        institution: "BTG",
+        type: "FIXED_INCOME",
+        subtype: "TREASURY",
+        balance: 100,
+        purchaseDate: "2025-01-15",
+      },
+    ]);
+
+    expect((await listPosicoes(db))[0].purchaseDate).toBe("2025-01-15");
+  });
+
+  it("posicao sem data de compra nao inventa uma", async () => {
+    await substituirPosicoes(db, BTG, [
+      { id: "s", itemId: BTG, institution: "BTG", type: "FIXED_INCOME", balance: 100 },
+    ]);
+
+    expect((await listPosicoes(db))[0].purchaseDate).toBeNull();
+  });
+
   it("ordena pelo bruto, e nao pelo liquido", async () => {
     await substituirPosicoes(db, BTG, [
       {

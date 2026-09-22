@@ -45,6 +45,13 @@ export interface PapelNaCarteira {
    * tela precisa poder mostrar de quando e.
    */
   precoOficialEm?: string | null;
+  /**
+   * Quando este lote foi comprado, em ISO.
+   *
+   * E dela que sai a data do degrau: o prazo da tabela regressiva corre do dia
+   * em que o dinheiro entrou.
+   */
+  compradoEm?: string | null;
 }
 
 /**
@@ -529,6 +536,30 @@ export interface FaixaDeImposto {
   bruto: number;
   imposto: number;
   posicoes: number;
+  /**
+   * Quando o PRIMEIRO lote desta faixa cai para o degrau seguinte.
+   *
+   * O mais proximo, e nao o mais distante: a pergunta e "quando comeca a
+   * melhorar", e ela se responde com a proxima data, nao com a ultima. Nulo
+   * quando nenhum lote informa a data da compra, e na faixa de 15% — dali nao
+   * se cai mais.
+   */
+  cruzaEm?: string | null;
+  /** Quantos lotes da faixa ainda nao tem data de compra. */
+  semData?: number;
+}
+
+/**
+ * O dia em que um lote comprado em `compradoEm` sai da faixa `ate`.
+ *
+ * Aritmetica de calendario em UTC de proposito: somar dias a uma data local
+ * atravessa horario de verao e devolve o dia anterior duas vezes por ano.
+ */
+export function diaDoDegrau(compradoEm: string, ate: number): string | null {
+  const compra = Date.parse(`${compradoEm}T00:00:00Z`);
+  if (!Number.isFinite(compra)) return null;
+  // O degrau muda no dia seguinte ao limite: 720 dias ainda paga 17,5%.
+  return new Date(compra + (ate + 1) * 86400000).toISOString().slice(0, 10);
 }
 
 /**
@@ -587,7 +618,7 @@ export function porFaixaDeImposto(papeis: PapelNaCarteira[]): FaixaDeImposto[] {
   const faixas = new Map<string, FaixaDeImposto>(
     FAIXAS_DE_IMPOSTO.map((f) => [
       String(f.aliquota),
-      vazia(f.aliquota, f.de, f.ate),
+      { ...vazia(f.aliquota, f.de, f.ate), cruzaEm: null, semData: 0 },
     ]),
   );
   faixas.set("sem", vazia(null, null, null));
@@ -599,6 +630,24 @@ export function porFaixaDeImposto(papeis: PapelNaCarteira[]): FaixaDeImposto[] {
     faixa.bruto += papel.saldo;
     faixa.imposto += papel.imposto ?? 0;
     faixa.posicoes += 1;
+
+    if (aliquota === null) continue;
+
+    // A faixa de 15% nao tem degrau seguinte: a data ali nao responde nada.
+    if (faixa.ate === null) continue;
+
+    if (!papel.compradoEm) {
+      faixa.semData = (faixa.semData ?? 0) + 1;
+      continue;
+    }
+
+    const dia = diaDoDegrau(papel.compradoEm, faixa.ate);
+    if (!dia) {
+      faixa.semData = (faixa.semData ?? 0) + 1;
+      continue;
+    }
+    // O mais proximo: a pergunta e quando COMECA a melhorar.
+    if (!faixa.cruzaEm || dia < faixa.cruzaEm) faixa.cruzaEm = dia;
   }
 
   return [...faixas.values()].filter((f) => f.posicoes > 0);

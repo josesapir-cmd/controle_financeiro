@@ -1712,6 +1712,8 @@ export interface PosicaoRow {
   quantity: number | null;
   unitPrice: number | null;
   indexPercent: number | null;
+  /** Quando o lote foi comprado — o prazo da tabela regressiva corre daqui. */
+  purchaseDate: string | null;
   amount: number | null;
   profit: number | null;
   annualRate: number | null;
@@ -1735,6 +1737,7 @@ export interface PosicaoInput {
   quantity?: number | null;
   unitPrice?: number | null;
   indexPercent?: number | null;
+  purchaseDate?: string | null;
   amount?: number | null;
   profit?: number | null;
   annualRate?: number | null;
@@ -1765,7 +1768,8 @@ export async function listPosicoes(db: Db): Promise<PosicaoRow[]> {
   const linhas = await db.query<Record<string, unknown>>(
     `SELECT id, item_id, institution, type, subtype, name_enc, issuer_enc, balance, amount,
             profit, annual_rate, due_date, currency, status, seen_at,
-            gross_amount, taxes, quantity, unit_price, fixed_annual_rate, index_percent
+            gross_amount, taxes, quantity, unit_price, fixed_annual_rate,
+            index_percent, purchase_date
        FROM investments
       ORDER BY COALESCE(gross_amount, balance) DESC NULLS LAST`,
   );
@@ -1802,6 +1806,7 @@ export async function listPosicoes(db: Db): Promise<PosicaoRow[]> {
     // media ponderada da classe inteira.
     annualRate: semZero(linha.fixed_annual_rate) ?? semZero(linha.annual_rate),
     dueDate: dia(linha.due_date),
+    purchaseDate: dia(linha.purchase_date),
     currency: String(linha.currency ?? "BRL"),
     status: linha.status ? String(linha.status) : null,
     seenAt: new Date(linha.seen_at as string),
@@ -1834,9 +1839,10 @@ export async function substituirPosicoes(
       `INSERT INTO investments
          (id, item_id, institution, type, subtype, name_enc, issuer_enc, balance, amount,
           profit, annual_rate, due_date, currency, status, seen_at, updated_at,
-          gross_amount, taxes, quantity, unit_price, fixed_annual_rate, index_percent)
+          gross_amount, taxes, quantity, unit_price, fixed_annual_rate, index_percent,
+          purchase_date)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now(), now(),
-               $15, $16, $17, $18, $19, $20)
+               $15, $16, $17, $18, $19, $20, $21)
        ON CONFLICT (id) DO UPDATE
          SET item_id = EXCLUDED.item_id,
              institution = EXCLUDED.institution,
@@ -1857,6 +1863,7 @@ export async function substituirPosicoes(
              unit_price = EXCLUDED.unit_price,
              fixed_annual_rate = EXCLUDED.fixed_annual_rate,
              index_percent = EXCLUDED.index_percent,
+             purchase_date = EXCLUDED.purchase_date,
              seen_at = now(),
              updated_at = now()`,
       [
@@ -1880,6 +1887,7 @@ export async function substituirPosicoes(
         posicao.unitPrice ?? null,
         posicao.annualRate ?? null,
         posicao.indexPercent ?? null,
+        posicao.purchaseDate ?? null,
       ],
     );
   }

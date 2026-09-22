@@ -5,6 +5,7 @@ import {
   agruparPorClasse,
   aliquotaDoLote,
   creditoDeImpostoRetido,
+  diaDoDegrau,
   porFaixaDeImposto,
   remarcarAoPrecoOficial,
   semZerados,
@@ -1062,5 +1063,74 @@ describe("porFaixaDeImposto", () => {
 
     expect(faixas.reduce((s, f) => s + f.bruto, 0)).toBeCloseTo(990_000, 2);
     expect(faixas.reduce((s, f) => s + f.posicoes, 0)).toBe(3);
+  });
+});
+
+/**
+ * A data em que o lote cai de degrau.
+ *
+ * Aritmetica de calendario: somar dias a uma data local atravessa horario de
+ * verao e devolve o dia anterior duas vezes por ano.
+ */
+describe("diaDoDegrau", () => {
+  it("o degrau muda no dia SEGUINTE ao limite", () => {
+    // 720 dias ainda paga 17,5%; a queda para 15% e no 721.
+    expect(diaDoDegrau("2025-01-01", 720)).toBe("2026-12-23");
+    expect(diaDoDegrau("2025-01-01", 180)).toBe("2025-07-01");
+    expect(diaDoDegrau("2025-01-01", 360)).toBe("2025-12-28");
+  });
+
+  it("atravessa ano bissexto sem escorregar", () => {
+    expect(diaDoDegrau("2024-01-01", 180)).toBe("2024-06-30");
+  });
+
+  it("data invalida devolve nulo em vez de NaN", () => {
+    expect(diaDoDegrau("nao e data", 180)).toBeNull();
+    expect(diaDoDegrau("", 180)).toBeNull();
+  });
+});
+
+describe("porFaixaDeImposto com data de compra", () => {
+  const lote = (
+    bruto: number,
+    investido: number,
+    imposto: number,
+    compradoEm?: string | null,
+  ) => papel({ saldo: bruto, aportado: investido, imposto, compradoEm });
+
+  // A pergunta e "quando COMECA a melhorar", e ela se responde com a proxima
+  // data, nao com a ultima.
+  it("mostra o degrau do lote mais proximo de cair", () => {
+    const faixas = porFaixaDeImposto([
+      lote(600_000, 500_000, 17_500, "2025-06-01"),
+      lote(300_000, 250_000, 8_750, "2025-01-01"),
+    ]);
+
+    const dezessete = faixas.find((f) => f.aliquota === 17.5)!;
+    // O de janeiro cruza antes.
+    expect(dezessete.cruzaEm).toBe(diaDoDegrau("2025-01-01", 720));
+  });
+
+  // Da faixa de 15% nao se cai mais: a data ali nao responde nada.
+  it("a faixa de 15% nao tem degrau seguinte", () => {
+    const faixas = porFaixaDeImposto([lote(600_000, 500_000, 15_000, "2020-01-01")]);
+    expect(faixas[0].cruzaEm).toBeNull();
+  });
+
+  it("conta os lotes sem data em vez de escondê-los", () => {
+    const faixas = porFaixaDeImposto([
+      lote(600_000, 500_000, 17_500, "2025-01-01"),
+      lote(300_000, 250_000, 8_750, null),
+    ]);
+
+    const dezessete = faixas.find((f) => f.aliquota === 17.5)!;
+    expect(dezessete.semData).toBe(1);
+    expect(dezessete.cruzaEm).toBe(diaDoDegrau("2025-01-01", 720));
+  });
+
+  it("sem nenhuma data a faixa nao inventa uma", () => {
+    const faixas = porFaixaDeImposto([lote(600_000, 500_000, 17_500, null)]);
+    expect(faixas[0].cruzaEm).toBeNull();
+    expect(faixas[0].semData).toBe(1);
   });
 });

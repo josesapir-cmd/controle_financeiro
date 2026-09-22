@@ -5,6 +5,7 @@ import { dataCompleta } from "@/lib/finance/dates";
 import { formatBRL, formatPercent } from "@/lib/finance/money";
 import {
   agruparPorClasse,
+  FAIXAS_DE_IMPOSTO,
   type FaixaDeImposto,
   type PapelNaCarteira,
 } from "@/lib/finance/carteira";
@@ -117,6 +118,12 @@ function Fatia({ valor, total }: { valor: number; total: number }) {
   );
 }
 
+/** O degrau abaixo deste. Nulo em 15%, de onde nao se cai mais. */
+function proximoDegrau(aliquota: number): number | null {
+  const abaixo = FAIXAS_DE_IMPOSTO.filter((f) => f.aliquota < aliquota);
+  return abaixo.length > 0 ? Math.max(...abaixo.map((f) => f.aliquota)) : null;
+}
+
 /**
  * As faixas da tabela regressiva, dentro da linha do instrumento.
  *
@@ -153,9 +160,17 @@ function LinhasDeFaixa({
               </span>
               <span className="account-meta">
                 {" · "}
-                {faixa.ate === null
-                  ? `${faixa.de} dias ou mais`
-                  : `${faixa.de} a ${faixa.ate} dias`}
+                {/* A data do degrau vence a faixa de dias: ela responde
+                    "quando resgatar", que e a pergunta que se faz aqui. A
+                    faixa so aparece quando nenhum lote informou a compra. */}
+                {faixa.cruzaEm
+                  ? `cai para ${formatPercent(proximoDegrau(faixa.aliquota!)!, 1)}% em ${dataCompleta(faixa.cruzaEm)}`
+                  : faixa.ate === null
+                    ? `${faixa.de} dias ou mais`
+                    : `${faixa.de} a ${faixa.ate} dias`}
+                {faixa.semData
+                  ? ` · ${faixa.semData} lote(s) sem data de compra`
+                  : ""}
                 {faixa.investido > 0
                   ? ` · investido ${formatBRL(faixa.investido)}`
                   : ""}

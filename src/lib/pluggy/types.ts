@@ -181,6 +181,15 @@ export interface Investment {
   rate?: number | null;
   annualRate?: number | null;
   dueDate?: string | null;
+  /**
+   * Quando o lote foi comprado.
+   *
+   * E ela que conta para a tabela regressiva do imposto — o prazo corre do dia
+   * em que o dinheiro entrou, e nao do dia em que o papel foi emitido, que e o
+   * que `issueDate` diz.
+   */
+  purchaseDate?: string | null;
+  issueDate?: string | null;
   currencyCode?: string | null;
   status?: string | null;
   institution?: { name?: string | null } | null;

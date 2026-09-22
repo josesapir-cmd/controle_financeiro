@@ -182,6 +182,11 @@ export async function syncConnection(
           // A contratada antes da generica: `annualRate` vem nulo em renda fixa.
           annualRate: posicao.fixedAnnualRate ?? posicao.annualRate ?? null,
           dueDate: posicao.dueDate ? String(posicao.dueDate).slice(0, 10) : null,
+          // A da COMPRA, e nao a de emissao: o prazo da tabela regressiva
+          // corre do dia em que o dinheiro entrou.
+          purchaseDate: posicao.purchaseDate
+            ? String(posicao.purchaseDate).slice(0, 10)
+            : null,
           currency: posicao.currencyCode ?? null,
           status: posicao.status ?? null,
         })),
