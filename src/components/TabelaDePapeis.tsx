@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { dataCompleta } from "@/lib/finance/dates";
 import { formatBRL, formatPercent } from "@/lib/finance/money";
-import { agruparPorClasse, type PapelNaCarteira } from "@/lib/finance/carteira";
+import {
+  agruparPorClasse,
+  type FaixaDeImposto,
+  type PapelNaCarteira,
+} from "@/lib/finance/carteira";
 
 /**
  * A carteira inteira numa tabela so, em tres niveis.
@@ -113,6 +117,65 @@ function Fatia({ valor, total }: { valor: number; total: number }) {
   );
 }
 
+/**
+ * As faixas da tabela regressiva, dentro da linha do instrumento.
+ *
+ * Nao e uma tabela ao lado: e o MESMO dinheiro por outro eixo. Quem abriu a
+ * linha ja esta perguntando o que ela esconde, e "quanto ja passou dos 720
+ * dias" e uma das respostas — a que diz se resgatar hoje custa imposto a toa.
+ *
+ * Vem depois das custodias porque responde depois: primeiro onde o papel esta,
+ * so entao em que degrau. O recuo e o mesmo, e o que separa as duas leituras e
+ * o rotulo da aliquota, que nenhuma custodia tem.
+ */
+function LinhasDeFaixa({
+  faixas,
+  chave,
+  nivel,
+  total,
+  totalLiquido,
+}: {
+  faixas: FaixaDeImposto[];
+  chave: string;
+  nivel: string;
+  total: number;
+  totalLiquido: number;
+}) {
+  return (
+    <>
+      {faixas.map((faixa) => {
+        const liquido = faixa.bruto - faixa.imposto;
+        return (
+          <tr key={`${chave}/ir/${faixa.aliquota}`} className={nivel}>
+            <th scope="row">
+              <span className="gr-aliquota">
+                IR {formatPercent(faixa.aliquota!, 1)}%
+              </span>
+              <span className="account-meta">
+                {" · "}
+                {faixa.ate === null
+                  ? `${faixa.de} dias ou mais`
+                  : `${faixa.de} a ${faixa.ate} dias`}
+                {faixa.investido > 0
+                  ? ` · investido ${formatBRL(faixa.investido)}`
+                  : ""}
+              </span>
+            </th>
+            <td className="gr-num">{formatBRL(faixa.bruto)}</td>
+            <td className="gr-num">
+              <Fatia valor={faixa.bruto} total={total} />
+            </td>
+            <td className="gr-num">{formatBRL(liquido)}</td>
+            <td className="gr-num">
+              <Fatia valor={liquido} total={totalLiquido} />
+            </td>
+          </tr>
+        );
+      })}
+    </>
+  );
+}
+
 export function TabelaDePapeis({
   posicoes,
   vistoEm,
@@ -193,7 +256,8 @@ export function TabelaDePapeis({
               classe.instrumentos.length === 1 ? classe.instrumentos[0] : null;
             const abreClasse =
               classe.instrumentos.length > 1 ||
-              (unico?.custodias.length ?? 0) > 1;
+              (unico?.custodias.length ?? 0) > 1 ||
+              (unico?.faixas.length ?? 0) > 0;
             const classeAberta = abertos.has(classe.nome);
 
             return (
@@ -293,9 +357,22 @@ export function TabelaDePapeis({
                     ))
                   : null}
 
+                {classeAberta && unico ? (
+                  <LinhasDeFaixa
+                    faixas={unico.faixas}
+                    chave={classe.nome}
+                    nivel="gr-nivel-2"
+                    total={total}
+                    totalLiquido={totalLiquido}
+                  />
+                ) : null}
+
                 {abreClasse && classeAberta && !unico
                   ? classe.instrumentos.flatMap((papel) => {
-                      const varias = papel.custodias.length > 1;
+                      // Uma custodia so ainda tem o que revelar quando ha
+                      // degraus de imposto por dentro.
+                      const varias =
+                        papel.custodias.length > 1 || papel.faixas.length > 0;
                       const chave = `${classe.nome}/${papel.id}`;
                       const papelAberto = abertos.has(chave);
 
@@ -384,6 +461,19 @@ export function TabelaDePapeis({
                                 </td>
                               </tr>
                             ))
+                          : []),
+
+                        ...(papelAberto && papel.faixas.length > 0
+                          ? [
+                              <LinhasDeFaixa
+                                key={`${chave}/faixas`}
+                                faixas={papel.faixas}
+                                chave={chave}
+                                nivel="gr-nivel-3"
+                                total={total}
+                                totalLiquido={totalLiquido}
+                              />,
+                            ]
                           : []),
                       ];
                     })

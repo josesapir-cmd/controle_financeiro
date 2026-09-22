@@ -1,5 +1,4 @@
 import type { Carteira } from "@/lib/finance/service";
-import { FaixasDeImposto } from "./FaixasDeImposto";
 import { TabelaDePapeis } from "./TabelaDePapeis";
 
 /**
@@ -30,11 +29,6 @@ export function CarteiraDeInvestimentos({ carteira }: { carteira: Carteira }) {
   }
 
   return (
-    <>
-      <TabelaDePapeis posicoes={carteira.posicoes} vistoEm={carteira.vistoEm} />
-      {/* Logo abaixo da carteira porque le o mesmo dinheiro por outro eixo:
-          nao "quanto tenho em que", e "quanto ja passou dos 720 dias". */}
-      <FaixasDeImposto posicoes={carteira.posicoes} />
-    </>
+    <TabelaDePapeis posicoes={carteira.posicoes} vistoEm={carteira.vistoEm} />
   );
 }

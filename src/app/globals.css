@@ -5613,3 +5613,12 @@ ul.produtos {
   font-size: 15px;
   font-weight: 600;
 }
+
+/* A aliquota dentro da linha do instrumento.
+   Numero tabular e um pouco mais escuro que a custodia ao lado: as duas
+   leituras compartilham o recuo, e o que as separa e este rotulo. */
+.gr-tabela .gr-aliquota {
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-secundario, #4b5563);
+  font-weight: 500;
+}

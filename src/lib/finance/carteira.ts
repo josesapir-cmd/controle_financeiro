@@ -115,6 +115,14 @@ export interface PapelAgrupado extends PapelNaCarteira {
   vencimentosVariados?: boolean;
   /** Sempre com pelo menos uma; mais de uma e o que merece expandir. */
   custodias: CustodiaDoPapel[];
+  /**
+   * Onde os lotes deste instrumento estao na tabela regressiva do imposto.
+   *
+   * Vazio quando nenhum lote informa imposto — fundo e acao nao tem degrau.
+   * Vive aqui, e nao numa tabela ao lado, porque e o MESMO dinheiro visto por
+   * outro eixo: quem abre a linha ja esta perguntando o que ela esconde.
+   */
+  faixas: FaixaDeImposto[];
 }
 
 /**
@@ -153,6 +161,9 @@ function chaveDoInstrumento(papel: PapelNaCarteira): string {
 
 export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
   const mapa = new Map<string, PapelAgrupado>();
+  // Os lotes crus de cada grupo, guardados para as faixas de imposto: o
+  // agrupado ja perdeu a aliquota de cada um ao somar.
+  const lotes = new Map<string, PapelNaCarteira[]>();
   // Numerador e denominador da media de taxa, acumulados junto com o resto:
   // percorrer a lista de novo depois so para isso seria varrer n vezes o que ja
   // esta na mao.
@@ -179,6 +190,7 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
         ...papel,
         liquido: papel.liquido ?? papel.saldo,
         posicoes: 1,
+        faixas: [],
         custodias: [
           {
             instituicao: papel.instituicao,
@@ -239,6 +251,10 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
 
     ponderar(chave, papel);
     ponderar(chaveDaCustodia, papel);
+
+    const daChave = lotes.get(chave);
+    if (daChave) daChave.push(papel);
+    else lotes.set(chave, [papel]);
   }
 
   // A taxa e a media ponderada pelo saldo — a taxa daquela posicao inteira, e
@@ -250,6 +266,11 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
     };
 
     grupo.taxa = media(chave);
+    // Faixa sem aliquota conhecida nao vira linha: ela e o "nao sei", e uma
+    // linha dizendo isso dentro do instrumento so tiraria espaco do que sei.
+    grupo.faixas = porFaixaDeImposto(lotes.get(chave) ?? []).filter(
+      (f) => f.aliquota !== null,
+    );
     for (const custodia of grupo.custodias) {
       custodia.taxa = media(`${chave}|${custodia.instituicao}`);
     }
