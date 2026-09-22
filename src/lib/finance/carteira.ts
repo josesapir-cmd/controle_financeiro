@@ -483,3 +483,102 @@ export function remarcarAoPrecoOficial(
     precoOficialEm: preco.em,
   };
 }
+
+/**
+ * A tabela regressiva do imposto sobre renda fixa.
+ *
+ * A aliquota cai com o tempo de aplicacao, e cai em degraus: no dia 721 um
+ * lote que pagava 17,5% passa a pagar 15%. Quem sabe onde cada lote esta na
+ * tabela sabe quando resgatar sem doar imposto.
+ */
+export const FAIXAS_DE_IMPOSTO = [
+  { aliquota: 22.5, de: 0, ate: 180 },
+  { aliquota: 20, de: 181, ate: 360 },
+  { aliquota: 17.5, de: 361, ate: 720 },
+  { aliquota: 15, de: 721, ate: null },
+] as const;
+
+export interface FaixaDeImposto {
+  /** 22,5 / 20 / 17,5 / 15, ou nulo para o que nao informa imposto. */
+  aliquota: number | null;
+  /** Dias de aplicacao que colocam um lote nesta faixa. */
+  de: number | null;
+  ate: number | null;
+  investido: number;
+  bruto: number;
+  imposto: number;
+  posicoes: number;
+}
+
+/**
+ * A aliquota que a instituicao aplicou a este lote.
+ *
+ * Sai do proprio numero — imposto dividido pelo lucro — em vez de precisar da
+ * data da compra, que a Pluggy nao manda. Ela vem com ruido de arredondamento,
+ * entao e encaixada no degrau mais proximo; longe demais de qualquer um, nao e
+ * a tabela regressiva e fica de fora.
+ */
+export function aliquotaDoLote(papel: PapelNaCarteira): number | null {
+  const imposto = papel.imposto;
+  const investido = papel.aportado;
+  if (imposto === null || imposto === undefined || investido === null) return null;
+
+  const lucro = papel.saldo - investido;
+  // Lucro perto de zero nao sustenta a divisao: uma diferenca de centavos no
+  // denominador vira dezenas de pontos percentuais na aliquota.
+  if (lucro <= 1) return null;
+
+  const bruta = (imposto / lucro) * 100;
+  let melhor: number | null = null;
+  let distancia = Infinity;
+
+  for (const faixa of FAIXAS_DE_IMPOSTO) {
+    const d = Math.abs(faixa.aliquota - bruta);
+    if (d < distancia) {
+      distancia = d;
+      melhor = faixa.aliquota;
+    }
+  }
+
+  // Meio ponto percentual e folga de arredondamento; alem disso e outra coisa.
+  return distancia <= 0.5 ? melhor : null;
+}
+
+/**
+ * Quanto esta em cada degrau da tabela regressiva.
+ *
+ * Ordenado da aliquota mais alta para a mais baixa: e a ordem em que os lotes
+ * andam com o tempo, e a primeira linha e a que mais tem a ganhar esperando.
+ * O que nao informa imposto entra numa faixa sem aliquota, em vez de sumir —
+ * some-lo as outras diria que o patrimonio inteiro e renda fixa tributada.
+ */
+export function porFaixaDeImposto(papeis: PapelNaCarteira[]): FaixaDeImposto[] {
+  const vazia = (aliquota: number | null, de: number | null, ate: number | null) => ({
+    aliquota,
+    de,
+    ate,
+    investido: 0,
+    bruto: 0,
+    imposto: 0,
+    posicoes: 0,
+  });
+
+  const faixas = new Map<string, FaixaDeImposto>(
+    FAIXAS_DE_IMPOSTO.map((f) => [
+      String(f.aliquota),
+      vazia(f.aliquota, f.de, f.ate),
+    ]),
+  );
+  faixas.set("sem", vazia(null, null, null));
+
+  for (const papel of papeis) {
+    const aliquota = aliquotaDoLote(papel);
+    const faixa = faixas.get(aliquota === null ? "sem" : String(aliquota))!;
+    faixa.investido += papel.aportado ?? 0;
+    faixa.bruto += papel.saldo;
+    faixa.imposto += papel.imposto ?? 0;
+    faixa.posicoes += 1;
+  }
+
+  return [...faixas.values()].filter((f) => f.posicoes > 0);
+}

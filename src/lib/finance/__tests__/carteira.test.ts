@@ -3,7 +3,9 @@ import {
   agruparPapeis,
   classeDoPapel,
   agruparPorClasse,
+  aliquotaDoLote,
   creditoDeImpostoRetido,
+  porFaixaDeImposto,
   remarcarAoPrecoOficial,
   semZerados,
   type PapelNaCarteira,
@@ -957,5 +959,108 @@ describe("remarcarAoPrecoOficial", () => {
     });
     expect(noPrejuizo.imposto!).toBe(0);
     expect(noPrejuizo.liquido).toBeCloseTo(noPrejuizo.saldo, 2);
+  });
+});
+
+/**
+ * Onde cada lote esta na tabela regressiva.
+ *
+ * A aliquota sai do proprio numero — imposto sobre lucro — porque a data da
+ * compra nao vem da Pluggy. O que se ganha com isso e saber quanto esta a um
+ * passo de cair um degrau; o que nao se ganha e a data exata do degrau.
+ */
+describe("aliquotaDoLote", () => {
+  const lote = (bruto: number, investido: number, imposto: number) =>
+    papel({ saldo: bruto, aportado: investido, imposto });
+
+  it("encaixa cada lote no degrau da tabela", () => {
+    // 15% sobre R$ 100.000 de lucro.
+    expect(aliquotaDoLote(lote(600_000, 500_000, 15_000))).toBe(15);
+    expect(aliquotaDoLote(lote(600_000, 500_000, 17_500))).toBe(17.5);
+    expect(aliquotaDoLote(lote(600_000, 500_000, 20_000))).toBe(20);
+    expect(aliquotaDoLote(lote(600_000, 500_000, 22_500))).toBe(22.5);
+  });
+
+  it("absorve o arredondamento da instituicao", () => {
+    // 15,03% ainda e a faixa de 15%.
+    expect(aliquotaDoLote(lote(600_000, 500_000, 15_030))).toBe(15);
+  });
+
+  // 30% nao esta na tabela regressiva de renda fixa: dizer "15%" ali seria
+  // inventar um degrau para caber.
+  it("recusa o que nao e a tabela regressiva", () => {
+    expect(aliquotaDoLote(lote(600_000, 500_000, 30_000))).toBeNull();
+  });
+
+  it("sem imposto ou sem aportado nao da para saber", () => {
+    expect(aliquotaDoLote(papel({ saldo: 100, aportado: 90 }))).toBeNull();
+    expect(aliquotaDoLote(papel({ saldo: 100, aportado: null, imposto: 1 }))).toBeNull();
+  });
+
+  // Centavos no denominador viram dezenas de pontos percentuais na aliquota.
+  it("lucro perto de zero nao vira divisao instavel", () => {
+    expect(aliquotaDoLote(lote(500_000.5, 500_000, 0.1))).toBeNull();
+    expect(aliquotaDoLote(lote(400_000, 500_000, 0))).toBeNull();
+  });
+});
+
+describe("porFaixaDeImposto", () => {
+  const lote = (bruto: number, investido: number, imposto: number) =>
+    papel({ saldo: bruto, aportado: investido, imposto });
+
+  it("soma o investido de cada degrau", () => {
+    const faixas = porFaixaDeImposto([
+      lote(600_000, 500_000, 15_000),
+      lote(300_000, 250_000, 7_500),
+      lote(200_000, 180_000, 4_000),
+    ]);
+
+    const quinze = faixas.find((f) => f.aliquota === 15)!;
+    expect(quinze.investido).toBe(750_000);
+    expect(quinze.posicoes).toBe(2);
+
+    const vinte = faixas.find((f) => f.aliquota === 20)!;
+    expect(vinte.investido).toBe(180_000);
+  });
+
+  // A primeira linha e a que mais tem a ganhar esperando.
+  it("ordena da aliquota mais alta para a mais baixa", () => {
+    const faixas = porFaixaDeImposto([
+      lote(600_000, 500_000, 15_000),
+      lote(600_000, 500_000, 22_500),
+      lote(600_000, 500_000, 17_500),
+    ]);
+
+    expect(faixas.map((f) => f.aliquota)).toEqual([22.5, 17.5, 15]);
+  });
+
+  // Somar fundo e acao as faixas diria que o patrimonio inteiro e renda fixa.
+  it("o que nao informa imposto fica numa faixa sem aliquota", () => {
+    const faixas = porFaixaDeImposto([
+      lote(600_000, 500_000, 15_000),
+      papel({ saldo: 90_000, aportado: 80_000 }),
+    ]);
+
+    const sem = faixas.find((f) => f.aliquota === null)!;
+    expect(sem.investido).toBe(80_000);
+    expect(sem.posicoes).toBe(1);
+  });
+
+  it("nao inventa faixa vazia", () => {
+    expect(porFaixaDeImposto([lote(600_000, 500_000, 15_000)])).toHaveLength(1);
+    expect(porFaixaDeImposto([])).toEqual([]);
+  });
+
+  // O total tem que continuar fechando com a carteira.
+  it("a soma das faixas e a carteira inteira", () => {
+    const papeis = [
+      lote(600_000, 500_000, 15_000),
+      lote(300_000, 250_000, 22_500 / 3),
+      papel({ saldo: 90_000, aportado: 80_000 }),
+    ];
+    const faixas = porFaixaDeImposto(papeis);
+
+    expect(faixas.reduce((s, f) => s + f.bruto, 0)).toBeCloseTo(990_000, 2);
+    expect(faixas.reduce((s, f) => s + f.posicoes, 0)).toBe(3);
   });
 });
