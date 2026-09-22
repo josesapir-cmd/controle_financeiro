@@ -125,7 +125,7 @@ export function TabelaDePapeis({
   return (
     <figure className="gr">
       <figcaption className="gr-titulo">
-        <span>Carteira · por classe, abrindo em instrumento e custodia</span>
+        <span>Carteira · valores de venda hoje, por classe</span>
 
         {/* Um valor de carteira sem data parece sempre de hoje. Esta e a
             unica coisa do cartao de resumo que nao podia sair com ele. */}
@@ -141,13 +141,26 @@ export function TabelaDePapeis({
           <thead>
             <tr>
               <th scope="col">Instrumento</th>
-              <th scope="col" className="gr-num">
+              {/* Os dois valores sao de VENDA HOJE, e a tabela nunca disse
+                  isso. O preco que a instituicao marca ja e o de recompra —
+                  no Tesouro ele ja carrega o spread que se paga saindo antes
+                  do vencimento. Quem lia "Bruto" entendia "valor de face" e
+                  conferia contra a tela errada. */}
+              <th
+                scope="col"
+                className="gr-num"
+                title="Valor de mercado hoje: o que a instituicao paga recomprando, antes do imposto"
+              >
                 Bruto
               </th>
               <th scope="col" className="gr-num">
                 %
               </th>
-              <th scope="col" className="gr-num">
+              <th
+                scope="col"
+                className="gr-num"
+                title="O que sobraria na conta vendendo hoje, ja descontado o imposto"
+              >
                 Liquido
               </th>
               <th scope="col" className="gr-num">
