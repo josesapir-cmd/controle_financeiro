@@ -63,6 +63,7 @@ describe("migracoes", () => {
       "transaction_products",
       "transaction_splits",
       "transactions",
+      "treasury_quotes",
     ]);
   });
 

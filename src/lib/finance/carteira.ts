@@ -37,6 +37,14 @@ export interface PapelNaCarteira {
   liquido?: number | null;
   /** O que separa um do outro. */
   imposto?: number | null;
+  /**
+   * Remarcado ao preco oficial do Tesouro, na Data Base do arquivo.
+   *
+   * Anda junto com o papel porque muda o que a linha afirma: o valor deixou de
+   * ser o que a corretora disse e passou a ser o que a fonte publica diz, e a
+   * tela precisa poder mostrar de quando e.
+   */
+  precoOficialEm?: string | null;
 }
 
 /**
@@ -193,6 +201,9 @@ export function agruparPapeis(papeis: PapelNaCarteira[]): PapelAgrupado[] {
       // Basta um membro digitado a mao para o grupo inteiro precisar do aviso:
       // parte do numero nao se re-sincroniza.
       atual.manual = atual.manual || papel.manual;
+      // Basta um lote remarcado para o grupo inteiro poder dizer de quando e o
+      // preco: todos os lotes do mesmo titulo sao marcados no mesmo dia.
+      atual.precoOficialEm = atual.precoOficialEm ?? papel.precoOficialEm;
       // O vencimento so sobrevive se for o mesmo em todo o grupo.
       //
       // Data ausente e data desconhecida, nao data diferente: a XP manda a
@@ -405,4 +416,70 @@ export function agruparPorClasse(
   }
 
   return classes.sort((a, b) => b.saldo - a.saldo);
+}
+
+/** O preco oficial de um titulo do Tesouro, como a carteira precisa dele. */
+export interface PrecoOficial {
+  /** A taxa da curva, sem o spread de recompra. */
+  taxaCompra: number;
+  /** O preco pelo qual o Tesouro recompra hoje. */
+  precoVenda: number;
+  /** A Data Base do arquivo. */
+  em: string;
+}
+
+/**
+ * A posicao remarcada ao preco oficial do Tesouro.
+ *
+ * Quatro custodias mandam quatro precos para o MESMO titulo — 186,95, 188,48 e
+ * 189,12 para a Renda+ 2065 — e so uma batia com o Tesouro. As outras nao
+ * estao erradas de metodologia: estao com preco velho, e cada uma atualiza
+ * quando quer. Num papel de quarenta e tres anos de duration, 1,16% de preco
+ * sao 2,7 pontos-base, ou seja, poucos dias de mercado, e R$ 54 mil de
+ * patrimonio que nao existe.
+ *
+ * Para o Tesouro Direto existe UM preco oficial por dia. Entao a corretora
+ * passa a informar so a quantidade, que ela sabe, e o preco vem da fonte.
+ *
+ * O imposto e reescalado pelo lucro, e nao copiado: ele foi calculado sobre um
+ * bruto maior, e manter o numero velho ao lado de um bruto novo daria um
+ * liquido pior que qualquer das duas versoes. A aliquota de cada lote se
+ * preserva porque a conta e feita lote a lote.
+ */
+export function remarcarAoPrecoOficial(
+  papel: PapelNaCarteira,
+  quantidade: number | null,
+  preco: PrecoOficial,
+): PapelNaCarteira {
+  // Sem quantidade nao ha o que remarcar: o preco sozinho nao diz o tamanho da
+  // posicao, e inventar um seria pior que deixar o numero da corretora.
+  if (quantidade === null || quantidade <= 0) return papel;
+
+  const bruto = quantidade * preco.precoVenda;
+  if (!Number.isFinite(bruto) || bruto <= 0) return papel;
+
+  const impostoAntigo = papel.imposto ?? 0;
+  const brutoAntigo = papel.saldo;
+  const investido = papel.aportado;
+
+  // Lucro velho perto de zero nao da escala confiavel — nesse caso o imposto
+  // tambem e perto de zero, e leva-lo inteiro nao move nada.
+  const lucroAntigo = investido === null ? null : brutoAntigo - investido;
+  const lucroNovo = investido === null ? null : bruto - investido;
+
+  const imposto =
+    lucroAntigo !== null && lucroNovo !== null && Math.abs(lucroAntigo) > 0.01
+      ? Math.max(0, (impostoAntigo * lucroNovo) / lucroAntigo)
+      : impostoAntigo;
+
+  return {
+    ...papel,
+    saldo: bruto,
+    liquido: bruto - imposto,
+    imposto,
+    // A taxa da curva substitui a contratada: a pergunta que a linha responde
+    // passa a ser "a quanto o mercado marca isto hoje".
+    taxa: preco.taxaCompra,
+    precoOficialEm: preco.em,
+  };
 }

@@ -11,6 +11,7 @@ import {
   instrumentFingerprint,
   listApelidosDeInstrumento,
   listAtivosManuais,
+  listCotacoesDoTesouro,
   listPosicoes,
   listReceitasDeSocio,
   listRegrasDeCartao,
@@ -84,10 +85,12 @@ import {
   type Atribuicao,
 } from "./classificacao";
 import { montarCarteira, type CarteiraDeCompromissos } from "./compromissos";
+import { casarComOTitulo } from "@/lib/tesouro.mjs";
 import {
   agruparPapeis,
   classeDoPapel,
   creditoDeImpostoRetido,
+  remarcarAoPrecoOficial,
   semZerados,
   type PapelAgrupado,
   type PapelNaCarteira,
@@ -2391,11 +2394,12 @@ export interface Carteira {
  * ainda nao aportado.
  */
 export async function loadCarteira(): Promise<Carteira> {
-  const [posicoes, ativos, apelidos, receitas] = await Promise.all([
+  const [posicoes, ativos, apelidos, receitas, precos] = await Promise.all([
     listPosicoes(db()).catch(() => []),
     listAtivosManuais(db()).catch(() => []),
     listApelidosDeInstrumento(db()).catch(() => []),
     listReceitasDeSocio(db()).catch(() => []),
+    listCotacoesDoTesouro(db()).catch(() => []),
   ]);
 
   // A mesma NTN-B chega com quatro nomes, um por custodia. Nenhuma regra de
@@ -2405,6 +2409,18 @@ export async function loadCarteira(): Promise<Carteira> {
   const porFingerprint = new Map(apelidos.map((a) => [a.fingerprint, a.alias]));
   const apelidar = (nome: string) =>
     porFingerprint.get(instrumentFingerprint(nome)) ?? null;
+
+  // O preco oficial do Tesouro, procurado pelo PRECO que a corretora marcou.
+  // Casar por nome nao funciona: a mesma NTN-B chega escrita de quatro jeitos.
+  const doTesouro = precos.map((p) => ({
+    titulo: p.title,
+    vence: p.maturity,
+    base: p.quotedAt,
+    taxaCompra: p.buyRate,
+    taxaVenda: p.sellRate,
+    precoCompra: p.buyPrice,
+    precoVenda: p.sellPrice,
+  }));
 
   const posicoesLidas: PapelNaCarteira[] = posicoes.map((posicao) => {
     // Sem nome, o tipo ja diz mais que um id opaco.
@@ -2433,6 +2449,24 @@ export async function loadCarteira(): Promise<Carteira> {
       vence: posicao.dueDate,
       apelidado: apelido !== null,
     };
+  });
+
+  // Remarca o que for Tesouro ao preco oficial do dia. A corretora continua
+  // dizendo a QUANTIDADE, que ela sabe; o preco vem da fonte publica, porque
+  // para Tesouro existe um so e as custodias divergem por dias de defasagem.
+  const remarcadas = posicoesLidas.map((papel, i) => {
+    const posicao = posicoes[i];
+    const achado = casarComOTitulo(
+      { precoUnitario: posicao.unitPrice, vence: posicao.dueDate },
+      doTesouro,
+    );
+    return achado
+      ? remarcarAoPrecoOficial(papel, posicao.quantity, {
+          taxaCompra: achado.taxaCompra,
+          precoVenda: achado.precoVenda,
+          em: achado.base,
+        })
+      : papel;
   });
 
   // O que a Pluggy nao ve entra aqui, e entra na soma: cota de fundo fechado,
@@ -2468,7 +2502,7 @@ export async function loadCarteira(): Promise<Carteira> {
   // Agrupa antes de somar qualquer coisa: a corretora manda uma posicao por
   // lote comprado, e o resumo tem que contar instrumentos, nao ordens de compra.
   const porCustodia = semZerados([
-    ...posicoesLidas,
+    ...remarcadas,
     ...manuais,
     ...(retencao ? [retencao] : []),
   ]);

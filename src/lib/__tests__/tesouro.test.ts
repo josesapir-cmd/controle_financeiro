@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  casarPeloPreco,
+  casarComOTitulo,
   doUltimoDia,
   lerPrecoTaxa,
   spreadEmBps,
-} from "../tesouro";
+} from "../tesouro.mjs";
 
 /**
  * O arquivo diario do Tesouro Transparente.
@@ -85,44 +85,83 @@ describe("doUltimoDia", () => {
   });
 });
 
-describe("casarPeloPreco", () => {
+describe("casarComOTitulo", () => {
   const hoje = doUltimoDia(lerPrecoTaxa(ARQUIVO));
 
-  it("acha o titulo pelo preco de recompra que a corretora marcou", () => {
-    const achado = casarPeloPreco({ precoUnitario: 186.95, vence: null }, hoje);
-    expect(achado?.titulo).toBe("Tesouro Renda+ Aposentadoria Extra 2065");
-    expect(achado?.taxaCompra).toBe(7.02);
+  // O defeito que a primeira versao tinha: ela casava pelo preco, e o preco da
+  // corretora E o dado defasado. Das quatro custodias da Renda+ so o Inter
+  // casava — justamente o unico que ja estava certo.
+  it("casa pelo vencimento mesmo com o preco da corretora defasado", () => {
+    for (const puDefasado of [189.12, 188.48, 186.95, 199.0]) {
+      const achado = casarComOTitulo(
+        { precoUnitario: puDefasado, vence: "2084-12-15" },
+        hoje,
+      );
+      expect(achado?.precoVenda).toBe(186.95);
+      expect(achado?.taxaCompra).toBe(7.02);
+    }
   });
 
-  it("tolera a diferenca de arredondamento entre as duas pontas", () => {
-    expect(casarPeloPreco({ precoUnitario: 186.949, vence: null }, hoje)).not.toBeNull();
+  it("o preco desempata quando dois titulos vencem no mesmo dia", () => {
+    const gemeos = [
+      ...hoje,
+      // Mesmo vencimento, estrutura diferente: PU bem distante.
+      {
+        titulo: "Tesouro IPCA+ com Juros Semestrais 2084",
+        vence: "2084-12-15",
+        base: "2026-09-18",
+        taxaCompra: 7.1,
+        taxaVenda: 7.22,
+        precoCompra: 4200,
+        precoVenda: 4100,
+      },
+    ];
+
+    expect(
+      casarComOTitulo({ precoUnitario: 189.12, vence: "2084-12-15" }, gemeos)?.titulo,
+    ).toContain("Renda+");
+    expect(
+      casarComOTitulo({ precoUnitario: 4050, vence: "2084-12-15" }, gemeos)?.titulo,
+    ).toContain("Juros Semestrais");
   });
 
-  // Tres Selic de vencimentos diferentes ficam dentro de 0,3% um do outro: so
-  // o preco escolheria errado, e uma taxa errada na tela e pior que nenhuma.
-  it("recusa empate em vez de chutar", () => {
-    const quaseSelic = casarPeloPreco({ precoUnitario: 19890, vence: null }, hoje, 0.01);
-    expect(quaseSelic).toBeNull();
+  it("empate de verdade devolve nulo em vez de chutar", () => {
+    const gemeos = [
+      ...hoje,
+      {
+        titulo: "Outro 2084",
+        vence: "2084-12-15",
+        base: "2026-09-18",
+        taxaCompra: 7.03,
+        taxaVenda: 7.15,
+        precoCompra: 196.9,
+        precoVenda: 187.0,
+      },
+    ];
+
+    expect(casarComOTitulo({ precoUnitario: 186.97, vence: "2084-12-15" }, gemeos)).toBeNull();
   });
 
-  it("o vencimento desempata quando a corretora informa", () => {
-    const achado = casarPeloPreco(
-      { precoUnitario: 19890, vence: "2029-03-01" },
-      hoje,
-      0.01,
-    );
-    expect(achado?.vence).toBe("2029-03-01");
+  // Sem vencimento nao ha outra ancora: so a coincidencia de preco sustenta.
+  it("sem vencimento volta a exigir o preco", () => {
+    expect(casarComOTitulo({ precoUnitario: 186.95, vence: null }, hoje)?.taxaCompra).toBe(7.02);
+    expect(casarComOTitulo({ precoUnitario: 189.12, vence: null }, hoje)).toBeNull();
   });
 
-  it("sem preco unitario nao ha o que casar", () => {
-    expect(casarPeloPreco({ precoUnitario: null, vence: null }, hoje)).toBeNull();
-    expect(casarPeloPreco({ precoUnitario: 0, vence: null }, hoje)).toBeNull();
+  it("vencimento que nao existe no arquivo cai no preco", () => {
+    expect(
+      casarComOTitulo({ precoUnitario: 186.95, vence: "2099-01-01" }, hoje)?.taxaCompra,
+    ).toBe(7.02);
   });
 
-  // O preco que a corretora manda pode estar velho: se estiver longe demais de
-  // qualquer linha do dia, nao ha casamento — e isso e informacao, nao falha.
-  it("preco fora de qualquer curva nao casa", () => {
-    expect(casarPeloPreco({ precoUnitario: 500, vence: null }, hoje)).toBeNull();
+  it("sem vencimento e sem preco nao ha o que casar", () => {
+    expect(casarComOTitulo({ precoUnitario: null, vence: null }, hoje)).toBeNull();
+    expect(casarComOTitulo({ precoUnitario: 0, vence: null }, hoje)).toBeNull();
+  });
+
+  // Tres Selic ficam dentro de 0,3% um do outro: so o preco escolheria errado.
+  it("recusa empate entre vencimentos proximos sem ancora", () => {
+    expect(casarComOTitulo({ precoUnitario: 19890, vence: null }, hoje, 0.01)).toBeNull();
   });
 });
 

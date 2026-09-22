@@ -71,11 +71,25 @@ function MarcaManual({ avaliadoEm }: { avaliadoEm?: string | null }) {
  * aparece aqui, porque nao ha de onde busca-la sem alguem digitar, e taxa
  * digitada envelhece em dias sem nenhum sinal ao lado de um saldo de hoje.
  */
-function Taxa({ valor }: { valor?: number | null }) {
+function Taxa({
+  valor,
+  oficialEm,
+}: {
+  valor?: number | null;
+  oficialEm?: string | null;
+}) {
   if (valor === null || valor === undefined) return null;
 
   return (
-    <span className="gr-taxa" title="Taxa contratada na compra">
+    <span
+      className="gr-taxa"
+      title={
+        oficialEm
+          ? `Taxa da curva do Tesouro em ${dataCompleta(oficialEm)}, sem o spread de recompra. ` +
+            "O valor ao lado ja e o de venda, marcado ao preco oficial do mesmo dia."
+          : "Taxa contratada na compra"
+      }
+    >
       {" @ "}
       {formatPercent(valor, 2)}%
     </span>
@@ -202,7 +216,7 @@ export function TabelaDePapeis({
                               "FIDC" no lugar de "Green FIDC Solar GD" trocaria
                               o nome do papel por um rotulo. */}
                           {unico?.nome ?? classe.nome}
-                          <Taxa valor={unico?.taxa ?? classe.taxa} />
+                          <Taxa valor={unico?.taxa ?? classe.taxa} oficialEm={unico?.precoOficialEm} />
                           <span className="gr-badge">
                             {unico
                               ? unico.custodias.length
@@ -220,7 +234,7 @@ export function TabelaDePapeis({
                           <MarcaManual avaliadoEm={unico.avaliadoEm} />
                         ) : null}
                         {unico?.nome ?? classe.nome}
-                        <Taxa valor={unico?.taxa} />
+                        <Taxa valor={unico?.taxa} oficialEm={unico?.precoOficialEm} />
                         <span className="account-meta">
                           {" "}
                           · {unico?.instituicao}
@@ -291,7 +305,7 @@ export function TabelaDePapeis({
                             <MarcaManual avaliadoEm={papel.avaliadoEm} />
                           ) : null}
                           {papel.nome}
-                          <Taxa valor={papel.taxa} />
+                          <Taxa valor={papel.taxa} oficialEm={papel.precoOficialEm} />
                           <span className="account-meta">
                             {" "}
                             · {papel.instituicao}

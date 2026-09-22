@@ -4,6 +4,7 @@ import {
   classeDoPapel,
   agruparPorClasse,
   creditoDeImpostoRetido,
+  remarcarAoPrecoOficial,
   semZerados,
   type PapelNaCarteira,
 } from "../carteira";
@@ -878,5 +879,83 @@ describe("creditoDeImpostoRetido", () => {
     expect(classes).toHaveLength(1);
     expect(classes[0].nome).toBe("Credito tributario");
     expect(classes[0].saldo).toBeCloseTo(73626.62, 2);
+  });
+});
+
+/**
+ * Remarcar a posicao ao preco oficial do Tesouro.
+ *
+ * Mexe em patrimonio, entao os numeros abaixo sao os reais da conciliacao: a
+ * Renda+ 2065 valia R$ 4.798.476,81 pelos precos das corretoras e
+ * R$ 4.744.431,90 pelo Tesouro, com 25.378,08 titulos a 186,95.
+ */
+describe("remarcarAoPrecoOficial", () => {
+  const preco = { taxaCompra: 7.02, precoVenda: 186.95, em: "2026-09-18" };
+
+  const renda: PapelNaCarteira = papel({
+    nome: "Renda+ 2065",
+    tipo: "FIXED_INCOME",
+    subtipo: "TREASURY",
+    saldo: 4_798_476.81,
+    liquido: 4_705_630.97,
+    imposto: 92_845.84,
+    aportado: 4_276_317.43,
+    taxa: 7.1,
+  });
+
+  it("o bruto passa a ser quantidade x preco oficial", () => {
+    const novo = remarcarAoPrecoOficial(renda, 25_378.08, preco);
+    expect(novo.saldo).toBeCloseTo(4_744_432.06, 2);
+    // O que o site do Tesouro mostra, a menos do arredondamento do PU.
+    expect(Math.abs(novo.saldo - 4_744_431.9)).toBeLessThan(1);
+  });
+
+  it("a taxa da curva substitui a contratada", () => {
+    expect(remarcarAoPrecoOficial(renda, 25_378.08, preco).taxa).toBe(7.02);
+    expect(remarcarAoPrecoOficial(renda, 25_378.08, preco).precoOficialEm).toBe(
+      "2026-09-18",
+    );
+  });
+
+  // O imposto foi calculado sobre um bruto maior. Copia-lo deixaria o liquido
+  // pior que qualquer das duas versoes.
+  it("reescala o imposto pelo lucro, preservando a aliquota do lote", () => {
+    const novo = remarcarAoPrecoOficial(renda, 25_378.08, preco);
+    const aliquotaAntes = 92_845.84 / (4_798_476.81 - 4_276_317.43);
+    const aliquotaDepois = novo.imposto! / (novo.saldo - 4_276_317.43);
+
+    expect(aliquotaDepois).toBeCloseTo(aliquotaAntes, 6);
+    expect(novo.imposto!).toBeLessThan(92_845.84);
+    expect(novo.liquido).toBeCloseTo(novo.saldo - novo.imposto!, 2);
+  });
+
+  // O preco sozinho nao diz o tamanho da posicao.
+  it("sem quantidade nao remarca nada", () => {
+    expect(remarcarAoPrecoOficial(renda, null, preco)).toBe(renda);
+    expect(remarcarAoPrecoOficial(renda, 0, preco)).toBe(renda);
+    expect(remarcarAoPrecoOficial(renda, -1, preco)).toBe(renda);
+  });
+
+  it("sem aportado informado leva o imposto como veio", () => {
+    const semAporte = { ...renda, aportado: null };
+    const novo = remarcarAoPrecoOficial(semAporte, 25_378.08, preco);
+    expect(novo.imposto).toBe(92_845.84);
+  });
+
+  it("lucro perto de zero nao vira divisao instavel", () => {
+    const noZero = { ...renda, saldo: 4_276_317.44, imposto: 0.01 };
+    const novo = remarcarAoPrecoOficial(noZero, 25_378.08, preco);
+    expect(Number.isFinite(novo.imposto!)).toBe(true);
+    expect(novo.imposto!).toBeGreaterThanOrEqual(0);
+  });
+
+  it("nunca produz imposto negativo", () => {
+    // Preco oficial abaixo do que foi aportado: a posicao esta no prejuizo.
+    const noPrejuizo = remarcarAoPrecoOficial(renda, 25_378.08, {
+      ...preco,
+      precoVenda: 100,
+    });
+    expect(noPrejuizo.imposto!).toBe(0);
+    expect(noPrejuizo.liquido).toBeCloseTo(noPrejuizo.saldo, 2);
   });
 });

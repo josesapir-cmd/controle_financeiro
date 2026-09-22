@@ -2223,3 +2223,82 @@ export async function salvarReceitaDeSocio(
 export async function apagarReceitaDeSocio(db: Db, id: string): Promise<void> {
   await db.query("DELETE FROM partner_income WHERE id = $1", [id]);
 }
+
+/* ==========================================================================
+   Precos do Tesouro — o preco oficial, baixado e nao digitado
+   ========================================================================== */
+
+export interface CotacaoDoTesouro {
+  fingerprint: string;
+  title: string;
+  maturity: string;
+  /** A Data Base do arquivo, nao a do download. */
+  quotedAt: string;
+  /** A taxa da curva, sem o spread. */
+  buyRate: number;
+  sellRate: number;
+  buyPrice: number;
+  /** O que a posicao vale vendendo hoje. */
+  sellPrice: number;
+}
+
+export function treasuryFingerprint(titulo: string, vence: string): string {
+  return fingerprint("tesouro", `${titulo.trim().toUpperCase()}|${vence}`);
+}
+
+export async function listCotacoesDoTesouro(db: Db): Promise<CotacaoDoTesouro[]> {
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT fingerprint, title, maturity, quoted_at, buy_rate, sell_rate,
+            buy_price, sell_price
+       FROM treasury_quotes`,
+  );
+
+  return linhas.map((linha) => ({
+    fingerprint: String(linha.fingerprint),
+    title: String(linha.title),
+    maturity: dia(linha.maturity) ?? "",
+    quotedAt: dia(linha.quoted_at) ?? "",
+    buyRate: numero(linha.buy_rate),
+    sellRate: numero(linha.sell_rate),
+    buyPrice: numero(linha.buy_price),
+    sellPrice: numero(linha.sell_price),
+  }));
+}
+
+/**
+ * Grava a foto de um dia, substituindo a anterior do mesmo titulo.
+ *
+ * Nao e historico: e o preco de hoje. Guardar as duas fotos deixaria a tela
+ * escolher entre uma certa e uma velha, que foi o defeito da marcacao a mao.
+ */
+export async function salvarCotacaoDoTesouro(
+  db: Db,
+  dados: Omit<CotacaoDoTesouro, "fingerprint">,
+): Promise<void> {
+  if (!dados.title.trim() || !dados.maturity || !dados.quotedAt) return;
+
+  await db.query(
+    `INSERT INTO treasury_quotes
+       (fingerprint, title, maturity, quoted_at, buy_rate, sell_rate,
+        buy_price, sell_price)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (fingerprint) DO UPDATE
+       SET title = EXCLUDED.title,
+           quoted_at = EXCLUDED.quoted_at,
+           buy_rate = EXCLUDED.buy_rate,
+           sell_rate = EXCLUDED.sell_rate,
+           buy_price = EXCLUDED.buy_price,
+           sell_price = EXCLUDED.sell_price,
+           updated_at = now()`,
+    [
+      treasuryFingerprint(dados.title, dados.maturity),
+      dados.title.trim(),
+      dados.maturity,
+      dados.quotedAt,
+      dados.buyRate,
+      dados.sellRate,
+      dados.buyPrice,
+      dados.sellPrice,
+    ],
+  );
+}
