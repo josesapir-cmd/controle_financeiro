@@ -591,3 +591,33 @@ describe("bruto, liquido e o que a Pluggy manda junto", () => {
     expect(posicao.taxes).toBe(0);
   });
 });
+
+/**
+ * O painel ficou vazio em producao porque `listPosicoes` passou a pedir
+ * `purchase_date`, coluna que so existe depois da 026 — e a migracao e rodada a
+ * mao, enquanto o deploy sobe sozinho no push. O SELECT estourava, um
+ * `.catch(() => [])` engolia, e a tela dizia "nenhuma posicao sincronizada".
+ *
+ * O teste nao conserta o descompasso entre deploy e migracao; ele garante que a
+ * leitura GRITA em vez de devolver lista vazia, que e o que permite a tela
+ * dizer a verdade.
+ */
+describe("esquema atrasado", () => {
+  it("falha alto quando falta a coluna da migracao mais nova", async () => {
+    await substituirPosicoes(db, BTG, [
+      {
+        id: "a",
+        itemId: BTG,
+        institution: "BTG",
+        type: "FIXED_INCOME",
+        balance: 100,
+      },
+    ]);
+
+    expect(await listPosicoes(db)).toHaveLength(1);
+
+    await pg.exec("ALTER TABLE investments DROP COLUMN purchase_date");
+
+    await expect(listPosicoes(db)).rejects.toThrow();
+  });
+});

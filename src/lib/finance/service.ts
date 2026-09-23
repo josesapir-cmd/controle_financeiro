@@ -2383,6 +2383,15 @@ export interface Carteira {
   posicoes: PapelNaCarteira[];
   /** Quando a posicao mais antiga foi vista pela ultima vez. */
   vistoEm: Date | null;
+  /**
+   * O que nao deu para ler, pelo nome.
+   *
+   * Vazio e o caso normal. Nao-vazio quase sempre quer dizer migracao pendente:
+   * o app sobe sozinho num push e as migracoes sao rodadas a mao, entao a janela
+   * entre as duas coisas existe e precisa aparecer na tela em vez de virar
+   * "voce nao tem nada".
+   */
+  falhas: string[];
 }
 
 /**
@@ -2394,12 +2403,33 @@ export interface Carteira {
  * ainda nao aportado.
  */
 export async function loadCarteira(): Promise<Carteira> {
+  /**
+   * Leitura que pode falhar sem derrubar a pagina — mas que DIZ que falhou.
+   *
+   * Antes cada uma destas tinha `.catch(() => [])`, e uma migracao pendente
+   * virava "nenhuma posicao sincronizada": a tela afirmava que o patrimonio
+   * nao existe quando o que houve foi um erro de leitura. Engolir o erro nao
+   * deixou a tela neutra, deixou ela mentindo com cara de certa.
+   */
+  const falhas: string[] = [];
+  async function tentar<T>(
+    nome: string,
+    ler: () => Promise<T[]>,
+  ): Promise<T[]> {
+    try {
+      return await ler();
+    } catch {
+      falhas.push(nome);
+      return [];
+    }
+  }
+
   const [posicoes, ativos, apelidos, receitas, precos] = await Promise.all([
-    listPosicoes(db()).catch(() => []),
-    listAtivosManuais(db()).catch(() => []),
-    listApelidosDeInstrumento(db()).catch(() => []),
-    listReceitasDeSocio(db()).catch(() => []),
-    listCotacoesDoTesouro(db()).catch(() => []),
+    tentar("posicoes", () => listPosicoes(db())),
+    tentar("ativos manuais", () => listAtivosManuais(db())),
+    tentar("apelidos", () => listApelidosDeInstrumento(db())),
+    tentar("receitas", () => listReceitasDeSocio(db())),
+    tentar("precos do Tesouro", () => listCotacoesDoTesouro(db())),
   ]);
 
   // A mesma NTN-B chega com quatro nomes, um por custodia. Nenhuma regra de
@@ -2512,6 +2542,7 @@ export async function loadCarteira(): Promise<Carteira> {
   return {
     papeis,
     posicoes: porCustodia,
+    falhas,
     vistoEm: posicoes.reduce<Date | null>(
       (maisAntigo, posicao) =>
         !maisAntigo || posicao.seenAt < maisAntigo
