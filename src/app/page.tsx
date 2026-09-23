@@ -254,7 +254,11 @@ export default async function Home({
       ) : (
         <>
           <DespesasPorConta contas={dados.contas} total={dados.total} />
-          <DespesasPorCategoria categorias={dados.categorias} total={dados.total} />
+          <DespesasPorCategoria
+            categorias={dados.categorias}
+            semCategoria={dados.semCategoria}
+            total={dados.total}
+          />
         </>
       )}
     </main>

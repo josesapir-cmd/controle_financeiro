@@ -4659,7 +4659,8 @@ ul.produtos {
   background: var(--bg-weak);
 }
 
-.gr-tabela tbody th {
+.gr-tabela tbody th,
+.gr-tabela tfoot th {
   font-weight: 500;
   color: var(--text-strong);
   /* O `th` global pinta o fundo de cinza e proibe quebra de linha porque foi
@@ -4687,6 +4688,26 @@ ul.produtos {
 .gr-tabela .gr-total td {
   font-weight: 600;
   border-bottom: none;
+  /* O `td` global desenha o separador com sombra interna, e nao com borda.
+     Tirar so a borda deixava meia risca solta sob o total — do comeco da
+     coluna de valor ate a direita, onde estao os `td` — como se a tabela
+     tivesse mais uma linha em branco. */
+  box-shadow: none;
+}
+
+/* O lugar da seta e da bolinha, vazio. A linha do nao classificado nao abre e
+   nao tem cor propria; sem reservar o espaco, o nome dela comecaria 32px a
+   esquerda de todos os outros e o olho leria isso como outra coluna. */
+.gr-sem-seta {
+  display: inline-block;
+  width: 32px;
+}
+
+/* Tom apagado: o residual nao e uma categoria, e a ausencia de uma. Classe
+   propria e nao `account-meta` — aquela vira bloco no celular, para servir a
+   segunda linha da folha, e aqui jogaria a contagem para baixo do nome. */
+.gr-residual {
+  color: var(--text-soft);
 }
 
 /* Aparece so no aperto do celular, onde o rotulo por extenso nao cabe. */
@@ -4722,6 +4743,13 @@ ul.produtos {
 
   .gr-so-estreito {
     display: inline;
+  }
+
+  /* O recuo encolhe junto com os outros no celular. Com os 32px do desktop,
+     "Nao classificado" quebrava no meio do nome — desalinhar 12px custa menos
+     do que uma linha partida em duas. */
+  .gr-sem-seta {
+    width: 20px;
   }
 }
 
