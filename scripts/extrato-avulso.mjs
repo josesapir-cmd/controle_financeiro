@@ -174,10 +174,39 @@ const documento = (d) => {
 function contraparte(t) {
   const saida = (t.amount ?? 0) < 0;
   const outro = saida ? t.paymentData?.receiver : t.paymentData?.payer;
-  const nome = outro?.name?.trim();
-  const doc = String(outro?.documentNumber?.value ?? "").trim();
-  if (!nome && !doc) return { nome: "(nao identificada)", doc: "", docInteiro: "" };
-  return { nome: nome || "(sem nome)", doc: documento(doc), docInteiro: doc };
+  const proprio = saida ? t.paymentData?.payer : t.paymentData?.receiver;
+
+  const soDigitos = (v) => String(v ?? "").replace(/\D/g, "");
+  const doc = soDigitos(outro?.documentNumber?.value);
+  const docDoTitular = soDigitos(proprio?.documentNumber?.value);
+
+  // MESMO documento dos dois lados: a transferencia foi para uma conta da
+  // propria pessoa em outro banco. Nao e dinheiro saindo, e dinheiro mudando de
+  // endereco — e chamar isso de "terceiro" numa apuracao de familia e acusar
+  // alguem que nao fez nada. Que o documento do recebedor e real, e nao eco do
+  // pagador, se comprova nas linhas em que ele DIFERE: a Pluggy preenche o
+  // documento verdadeiro de quem recebe quando ele e outro.
+  const propria = Boolean(doc && docDoTitular && doc === docDoTitular);
+
+  // O nome do recebedor vem nulo em PIX entre contas proprias; a descricao do
+  // Nubank carrega o nome depois de uma barra.
+  const daDescricao = (t.description ?? "").split("|")[1]?.trim();
+  const nome = outro?.name?.trim() || daDescricao || "";
+
+  if (!nome && !doc) return { nome: "(nao identificada)", doc: "", docInteiro: "", propria: false };
+
+  const banco = outro?.routingNumber
+    ? `banco ${outro.routingNumber}${outro.branchNumber ? ` ag ${outro.branchNumber}` : ""}` +
+      `${outro.accountNumber ? ` cc ${outro.accountNumber}` : ""}`
+    : "";
+
+  return {
+    nome: nome || "(sem nome)",
+    doc: documento(doc),
+    docInteiro: doc,
+    propria,
+    banco,
+  };
 }
 
 /**
@@ -191,6 +220,7 @@ const MUDA_DE_BOLSO =
   /aplica|resgate|caixinha|rdb|cdb|poupan|invest|reserva|tesouro|cofrinho|rendimento/i;
 
 const mudouDeBolso = (t) =>
+  contraparte(t).propria ||
   MUDA_DE_BOLSO.test(`${t.description ?? ""} ${t.descriptionRaw ?? ""} ${t.category ?? ""}`);
 
 const csv = (linhas) =>
@@ -366,16 +396,50 @@ function montarResumo({ item, contas, lancamentosPorConta, investimentos }) {
   p("## Para onde foi o dinheiro que saiu");
   p();
   const soma = (lista) => Math.abs(lista.reduce((s, t) => s + t.amount, 0));
+  const proprias = deBolso.filter((t) => contraparte(t).propria);
+  const aplicacoes = deBolso.filter((t) => !contraparte(t).propria);
+
+  p(`Sairam ${dinheiro(soma(saidas))} da conta na janela, em tres destinos:`);
+  p();
+  p("| Para onde | Valor | O que significa |");
+  p("|---|---:|---|");
   p(
-    `Sairam ${dinheiro(soma(saidas))} da conta na janela. Destes, ` +
-      `${dinheiro(soma(deBolso))} parecem ter ido para aplicacao ou caixinha ` +
-      `— dinheiro que mudou de bolso e continua sendo dela — e ` +
-      `**${dinheiro(soma(paraFora))} foram para fora**.`,
+    `| Aplicacao nos proprios investimentos | ${dinheiro(soma(aplicacoes))} ` +
+      "| continua sendo dela, na aba Investimentos |",
   );
+  p(
+    `| Conta dela em outro banco | ${dinheiro(soma(proprias))} ` +
+      "| mesmo CPF dos dois lados: nao saiu do controle dela |",
+  );
+  p(`| **Terceiros** | **${dinheiro(soma(paraFora))}** | **e so isto que e pergunta** |`);
   p();
-  p("Essa separacao e por PALAVRA na descricao, nao classificacao do banco — trate");
-  p("como primeira leitura e confira no CSV antes de acreditar.");
+  p("A primeira linha sai de PALAVRA na descricao e e heuristica — confira no CSV.");
+  p("A segunda nao e: ela compara o documento de quem paga com o de quem recebe, e");
+  p("documento igual e a mesma pessoa. Que o documento do recebedor e real, e nao");
+  p("copia do pagador, se ve nas linhas em que ele difere.");
   p();
+
+  if (proprias.length > 0) {
+    const destinos = new Map();
+    for (const t of proprias) {
+      const c = contraparte(t);
+      const atual = destinos.get(c.banco) ?? { n: 0, total: 0, nome: c.nome };
+      atual.n += 1;
+      atual.total += Math.abs(t.amount);
+      destinos.set(c.banco, atual);
+    }
+    p("### Para a conta dela em outro banco");
+    p();
+    p("| Destino | Em nome de | Vezes | Total |");
+    p("|---|---|---:|---:|");
+    for (const [banco, v] of destinos) {
+      p(`| ${banco || "(sem dados da conta)"} | ${v.nome} | ${v.n} | ${dinheiro(v.total)} |`);
+    }
+    p();
+    p("Este dinheiro nao sumiu — ele esta no outro banco. Para fechar a conta de");
+    p("verdade, o extrato que falta e o de la.");
+    p();
+  }
 
   const porContraparte = new Map();
   for (const t of paraFora) {
@@ -399,7 +463,8 @@ function montarResumo({ item, contas, lancamentosPorConta, investimentos }) {
       p(`| ${v.nome} | ${v.doc} | ${v.n} | ${dinheiro(v.total)} | ${v.primeiro} | ${v.ultimo} |`);
     }
     p();
-    p("O mesmo nome recebendo muitas vezes e o padrao que vale olhar de perto.");
+    p("So terceiros aqui: transferencia para conta da propria pessoa saiu desta");
+    p("tabela. O mesmo nome recebendo muitas vezes e o padrao que vale olhar.");
     p();
   }
 
@@ -411,7 +476,7 @@ function montarResumo({ item, contas, lancamentosPorConta, investimentos }) {
     const { nome, doc } = contraparte(t);
     p(
       `| ${dia(t.date)} | ${dinheiro(t.amount)} | ${t.description ?? ""} ` +
-        `| ${nome} ${doc} | ${mudouDeBolso(t) ? "mudou de bolso" : ""} |`,
+        `| ${nome} ${doc} | ${contraparte(t).propria ? "conta dela em outro banco" : mudouDeBolso(t) ? "aplicacao" : ""} |`,
     );
   }
   p();
@@ -509,9 +574,9 @@ for (const conta of contas) {
   await writeFile(
     path.join(saida, nome),
     csv([
-      ["data", "descricao", "valor", "saldo apos", "categoria", "tipo", "quem", "documento", "mudou de bolso", "id"],
+      ["data", "descricao", "valor", "saldo apos", "categoria", "tipo", "quem", "documento", "mudou de bolso (para onde)", "id"],
       ...lancamentos.map((t) => {
-        const { nome, docInteiro } = contraparte(t);
+        const { nome, docInteiro, propria } = contraparte(t);
         return [
           dia(t.date),
           t.description ?? "",
@@ -521,7 +586,7 @@ for (const conta of contas) {
           t.type ?? "",
           nome,
           docInteiro,
-          mudouDeBolso(t) ? "sim" : "",
+          propria ? "conta dela em outro banco" : mudouDeBolso(t) ? "aplicacao" : "",
           t.id,
         ];
       }),
