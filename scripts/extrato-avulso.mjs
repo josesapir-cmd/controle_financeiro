@@ -119,6 +119,26 @@ async function pegar(caminho, tolerar = []) {
 }
 
 /**
+ * Tenta uma lista de caminhos e devolve o primeiro que responder.
+ *
+ * Existe porque a documentacao da Pluggy nao esta ao alcance de quem roda isto
+ * offline, e chutar UM caminho e errar significa um produto inteiro faltando em
+ * silencio — foi o que aconteceu: a conexao trazia nota de corretagem e
+ * emprestimo, e o script nem perguntava. Errar a rota agora custa um 404
+ * anotado no relatorio, e nao um buraco que ninguem ve.
+ */
+async function primeiroQueResponder(nome, caminhos) {
+  for (const caminho of caminhos) {
+    const corpo = await pegar(caminho, [400, 403, 404, 405, 501]);
+    if (corpo) {
+      const itens = corpo.results ?? corpo.data ?? (Array.isArray(corpo) ? corpo : [corpo]);
+      return { nome, caminho, itens: Array.isArray(itens) ? itens : [itens] };
+    }
+  }
+  return { nome, caminho: null, itens: [] };
+}
+
+/**
  * Todas as paginas de lancamentos de uma conta.
  *
  * A v2 devolve `next` ja como query string pronta — nao e o valor de um
@@ -232,7 +252,7 @@ const csv = (linhas) =>
 /* Relatorio                                                                  */
 /* -------------------------------------------------------------------------- */
 
-function montarResumo({ item, contas, lancamentosPorConta, investimentos, movimentos }) {
+function montarResumo({ item, contas, lancamentosPorConta, investimentos, movimentos, extras }) {
   const linhas = [];
   const p = (...t) => linhas.push(t.join(""));
 
@@ -297,6 +317,71 @@ function montarResumo({ item, contas, lancamentosPorConta, investimentos, movime
     }
   }
   p();
+
+  /* --- a coleta foi exaustiva? ------------------------------------------- */
+
+  // A pergunta que derrubou a primeira versao deste script: "e se estiver
+  // faltando alguma coisa?". O `item.products` diz o que a conexao carrega. Se
+  // o relatorio nao comparar isso com o que ele foi buscar, quem le nao tem
+  // como saber que um produto inteiro ficou de fora — e foi o que aconteceu com
+  // nota de corretagem e emprestimo.
+  const carregados = (item?.products ?? []).map((x) => String(x).toUpperCase());
+  if (carregados.length > 0) {
+    // O que este script cobre, por produto do item.
+    const cobertura = {
+      ACCOUNTS: contas.length > 0 ? `${contas.length} conta(s)` : "nenhuma conta voltou",
+      TRANSACTIONS: `${todos.length} lancamento(s)`,
+      INVESTMENTS: `${investimentos.length} posicao(oes)`,
+      INVESTMENTS_TRANSACTIONS: `${(movimentos ?? []).length} movimento(s)`,
+      PAYMENT_DATA: "vem dentro de cada lancamento",
+    };
+    const porNome = new Map((extras ?? []).map((e) => [e.nome, e]));
+    const doExtra = (nome, produto) => {
+      const e = porNome.get(nome);
+      if (!e) return;
+      cobertura[produto] = e.caminho
+        ? `${e.itens.length} item(ns)`
+        : "**pedi e a API nao respondeu em nenhuma rota**";
+    };
+    doExtra("identidade", "IDENTITY");
+    doExtra("emprestimos", "LOANS");
+    doExtra("notas de corretagem", "BROKERAGE_NOTE");
+    doExtra("beneficios", "BENEFITS");
+
+    const faturas = (extras ?? []).filter((e) => e.nome.startsWith("faturas do cartao"));
+    if (faturas.length > 0) {
+      const total = faturas.reduce((s, f) => s + f.itens.length, 0);
+      cobertura.CREDIT_CARDS = `${total} fatura(s)`;
+    }
+
+    p("## A coleta foi exaustiva?");
+    p();
+    p("A conexao declara o que carrega. Esta tabela compara com o que foi pedido:");
+    p();
+    p("| Produto que a conexao tem | O que voltou |");
+    p("|---|---|");
+    const faltando = [];
+    for (const produto of carregados) {
+      const tem = cobertura[produto];
+      if (tem === undefined) faltando.push(produto);
+      p(`| ${produto} | ${tem ?? "**NAO FOI BUSCADO por este script**"} |`);
+    }
+    p();
+    if (faltando.length > 0) {
+      p(`> **${faltando.length} produto(s) sem cobertura:** ${faltando.join(", ")}.`);
+      p("> A conexao tem esse dado e este script nao foi busca-lo. Se a pergunta for");
+      p("> para onde o dinheiro foi, isso e buraco — nao conclua nada sem fechar.");
+    } else {
+      p("Todo produto que a conexao carrega foi pedido. O que nao esta aqui, nao esta");
+      p("na conexao — e a proxima parada e o banco, nao outro script.");
+    }
+    p();
+    p("Isto cobre o que a CONEXAO tem. O consentimento do Open Finance pode ter sido");
+    p("dado para menos produtos do que a instituicao oferece: compare a lista acima");
+    p("com `connector.products` no bruto.json — se faltar produto ali, o caminho e");
+    p("refazer o consentimento pedindo tudo.");
+    p();
+  }
 
   /* --- contas e a conferencia do saldo ------------------------------------ */
 
@@ -639,6 +724,57 @@ for (const investimento of investimentos) {
 }
 if (movimentos.length > 0) console.log(`  ${movimentos.length} movimento(s) de investimento`);
 
+/*
+ * O resto do que a conexao carrega.
+ *
+ * O `item.products` diz o que foi coletado. Pedir menos do que esta ali e
+ * deixar dado em cima da mesa sem saber — e num caso em que a pergunta e "para
+ * onde foi o dinheiro", emprestimo tomado no nome da pessoa e nota de
+ * corretagem de um resgate sao exatamente o que falta.
+ */
+const extras = [];
+for (const [nome, caminhos] of [
+  ["identidade", [`/identity?itemId=${itemId}`]],
+  ["emprestimos", [`/loans?itemId=${itemId}`]],
+  [
+    "notas de corretagem",
+    [
+      `/brokerage-notes?itemId=${itemId}`,
+      `/brokerage_notes?itemId=${itemId}`,
+      `/investments/brokerage-notes?itemId=${itemId}`,
+    ],
+  ],
+  ["beneficios", [`/benefits?itemId=${itemId}`]],
+]) {
+  extras.push(await primeiroQueResponder(nome, caminhos));
+}
+
+// Fatura de cartao e por conta, e nao por conexao.
+for (const conta of contas) {
+  if (String(conta.type ?? "").toUpperCase() !== "CREDIT") continue;
+  const achado = await primeiroQueResponder(
+    `faturas do cartao ${conta.number ?? conta.id}`,
+    [`/bills?accountId=${conta.id}`],
+  );
+  extras.push(achado);
+
+  // A fatura traz o total; os lancamentos dela vem por fatura.
+  for (const fatura of achado.itens) {
+    if (!fatura?.id) continue;
+    const linhas = await primeiroQueResponder(
+      `lancamentos da fatura ${dia(fatura.dueDate)}`,
+      [`/bills/${fatura.id}/transactions`, `/v2/transactions?billId=${fatura.id}`],
+    );
+    if (linhas.itens.length > 0) extras.push(linhas);
+  }
+}
+
+for (const e of extras) {
+  console.log(
+    `  ${e.nome}: ${e.caminho ? `${e.itens.length} item(ns)` : "nao respondeu em nenhuma rota"}`,
+  );
+}
+
 /* --- gravar -------------------------------------------------------------- */
 
 await mkdir(saida, { recursive: true });
@@ -646,7 +782,7 @@ await mkdir(saida, { recursive: true });
 await writeFile(
   path.join(saida, "bruto.json"),
   JSON.stringify(
-    { item, contas, lancamentos: Object.fromEntries(lancamentosPorConta), investimentos, movimentos },
+    { item, contas, lancamentos: Object.fromEntries(lancamentosPorConta), investimentos, movimentos, extras },
     null,
     2,
   ),
@@ -732,7 +868,7 @@ if (movimentos.length > 0) {
 
 await writeFile(
   path.join(saida, "resumo.md"),
-  montarResumo({ item, contas, lancamentosPorConta, investimentos, movimentos }),
+  montarResumo({ item, contas, lancamentosPorConta, investimentos, movimentos, extras }),
 );
 
 console.log("  resumo.md");
