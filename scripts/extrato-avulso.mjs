@@ -29,6 +29,7 @@
  * Uso:
  *   node scripts/extrato-avulso.mjs <itemId>
  *   node scripts/extrato-avulso.mjs <itemId> --saida ~/algum/lugar
+ *   node scripts/extrato-avulso.mjs <itemId> --sondar   mapeia a API e sai
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -116,6 +117,29 @@ async function pegar(caminho, tolerar = []) {
     throw new Error(`GET ${caminho} respondeu HTTP ${resposta.status}: ${await resposta.text()}`);
   }
   return resposta.json();
+}
+
+/**
+ * Bate numa rota so para saber o que ela responde.
+ *
+ * Serve ao modo --sondar: quando um produto aparece em `item.products` e o
+ * script nao acha o endereco dele, o que resolve nao e chutar de novo no
+ * escuro — e mapear a API de uma vez e ver qual porta abre.
+ */
+async function sondar(caminho) {
+  try {
+    const resposta = await fetch(`${API}${caminho}`, { headers: { "X-API-KEY": apiKey } });
+    const texto = await resposta.text();
+    let quantos = null;
+    try {
+      const corpo = JSON.parse(texto);
+      const itens = corpo.results ?? corpo.data ?? (Array.isArray(corpo) ? corpo : null);
+      if (Array.isArray(itens)) quantos = itens.length;
+    } catch {}
+    return { caminho, status: resposta.status, quantos, amostra: texto.slice(0, 120) };
+  } catch (erro) {
+    return { caminho, status: 0, quantos: null, amostra: String(erro.message).slice(0, 120) };
+  }
 }
 
 /**
@@ -703,6 +727,50 @@ console.log(`  ${item?.connector?.name ?? "?"} · status ${item?.status ?? "?"}`
 
 const contas = (await pegar(`/accounts?itemId=${itemId}`))?.results ?? [];
 console.log(`  ${contas.length} conta(s)`);
+
+if (argumentos.includes("--sondar")) {
+  const investimentosParaSondar = (await pegar(`/investments?itemId=${itemId}`))?.results ?? [];
+  const umInvestimento = investimentosParaSondar[0]?.id;
+  const umaConta = contas[0]?.id;
+
+  const candidatos = [
+    `/brokerage-notes?itemId=${itemId}`,
+    `/brokerage_notes?itemId=${itemId}`,
+    `/brokerageNotes?itemId=${itemId}`,
+    `/investments/brokerage-notes?itemId=${itemId}`,
+    `/items/${itemId}/brokerage-notes`,
+    umaConta ? `/brokerage-notes?accountId=${umaConta}` : null,
+    umInvestimento ? `/investments/${umInvestimento}/brokerage-notes` : null,
+    umInvestimento ? `/investments/${umInvestimento}/brokerage_notes` : null,
+    `/benefits?itemId=${itemId}`,
+    `/opportunities?itemId=${itemId}`,
+    `/portfolios?itemId=${itemId}`,
+    `/items/${itemId}/resources`,
+    `/items/${itemId}/products`,
+    `/consents?itemId=${itemId}`,
+    umaConta ? `/bills?accountId=${umaConta}` : null,
+  ].filter(Boolean);
+
+  console.log("\n--sondar: batendo em cada rota candidata\n");
+  const mapa = [];
+  for (const caminho of candidatos) {
+    const r = await sondar(caminho);
+    mapa.push(r);
+    const marca = r.status === 200 ? "OK " : r.status === 404 ? "404" : `${r.status}`;
+    console.log(
+      `  ${marca}  ${caminho}` +
+        (r.quantos !== null ? `   -> ${r.quantos} item(ns)` : "") +
+        (r.status === 200 && r.quantos === null ? `   -> ${r.amostra}` : ""),
+    );
+  }
+
+  const abriram = mapa.filter((r) => r.status === 200);
+  console.log(
+    `\n${abriram.length} rota(s) responderam 200. ` +
+      "As que trouxeram item sao as que faltavam — me mande esta saida.",
+  );
+  process.exit(0);
+}
 
 const lancamentosPorConta = new Map();
 for (const conta of contas) {
