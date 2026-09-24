@@ -28,7 +28,8 @@
     "carteira": "node scripts/carteira.mjs",
     "fundo": "node scripts/inspecionar-fundo.mjs",
     "receita": "node scripts/receita.mjs",
-    "tesouro": "node scripts/tesouro.mjs"
+    "tesouro": "node scripts/tesouro.mjs",
+    "extrato": "node scripts/extrato-avulso.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
