@@ -365,7 +365,7 @@ function montarResumo({ item, contas, lancamentosPorConta, investimentos, movime
       if (!e) return;
       cobertura[produto] = e.caminho
         ? `${e.itens.length} item(ns)`
-        : "**pedi e a API nao respondeu em nenhuma rota**";
+        : "**barrado (403) ou rota desconhecida — veja `--sondar`**";
     };
     doExtra("identidade", "IDENTITY");
     doExtra("emprestimos", "LOANS");
@@ -396,8 +396,20 @@ function montarResumo({ item, contas, lancamentosPorConta, investimentos, movime
       p("> A conexao tem esse dado e este script nao foi busca-lo. Se a pergunta for");
       p("> para onde o dinheiro foi, isso e buraco — nao conclua nada sem fechar.");
     } else {
-      p("Todo produto que a conexao carrega foi pedido. O que nao esta aqui, nao esta");
-      p("na conexao — e a proxima parada e o banco, nao outro script.");
+      const barrados = Object.entries(cobertura).filter(
+        ([produto, texto]) => carregados.includes(produto) && String(texto).includes("barrado"),
+      );
+      if (barrados.length > 0) {
+        p(`> **${barrados.length} produto(s) a conexao COLETOU e este acesso nao le:** ` +
+          barrados.map(([k]) => k).join(", ") + ".");
+        p("> A diferenca importa: 403 nao e dado inexistente, e dado existente do outro");
+        p("> lado de uma porta fechada — quase sempre produto que o plano da Pluggy nao");
+        p("> inclui. O dado esta la. Apagar a conexao destroi o que nao foi lido, e");
+        p("> refaze-la exige o titular consentindo de novo.");
+      } else {
+        p("Todo produto que a conexao carrega foi pedido e respondeu. O que nao esta");
+        p("aqui nao esta na conexao — a proxima parada e o banco, nao outro script.");
+      }
     }
     p();
     p("Isto cobre o que a CONEXAO tem. O consentimento do Open Finance pode ter sido");
@@ -813,6 +825,12 @@ for (const [nome, caminhos] of [
     ],
   ],
   ["beneficios", [`/benefits?itemId=${itemId}`]],
+  // Estas duas responderam 200 onde a familia de produtos responde 403: o
+  // consentimento diz o que foi autorizado e ate quando, e `resources` lista o
+  // que a conexao coletou de fato. Sao a prova documental de ate onde a coleta
+  // podia ir — e e o que sobra quando um produto e barrado pelo plano.
+  ["consentimento", [`/consents?itemId=${itemId}`]],
+  ["recursos coletados", [`/items/${itemId}/resources`]],
 ]) {
   extras.push(await primeiroQueResponder(nome, caminhos));
 }
