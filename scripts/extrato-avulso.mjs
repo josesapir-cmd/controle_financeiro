@@ -232,7 +232,7 @@ const csv = (linhas) =>
 /* Relatorio                                                                  */
 /* -------------------------------------------------------------------------- */
 
-function montarResumo({ item, contas, lancamentosPorConta, investimentos }) {
+function montarResumo({ item, contas, lancamentosPorConta, investimentos, movimentos }) {
   const linhas = [];
   const p = (...t) => linhas.push(t.join(""));
 
@@ -260,12 +260,22 @@ function montarResumo({ item, contas, lancamentosPorConta, investimentos }) {
     );
     p(`- Janela coberta: **${primeiro} a ${ultimo}** (cerca de ${meses} meses)`);
     p();
-    if (meses <= 13) {
-      p("> **Atencao.** O Open Finance costuma entregar 12 meses e mais nada. Se o");
-      p("> dinheiro saiu antes de " + primeiro + ", ele nao esta em lugar nenhum deste");
-      p("> arquivo — e nao porque nao existiu. Nesse caso o caminho e pedir o extrato");
-      p("> completo direto ao banco, que e um direito do titular, e nao insistir aqui.");
+    // O teto de doze meses e do Open Finance e vale sempre. Mas uma janela que
+    // COMECA depois desse teto nao quer dizer, sozinha, que o extrato veio
+    // cortado: numa conta que so se mexe quando algo vence, os meses antes do
+    // primeiro vencimento sao vazios de verdade. Dizer "faltou dado" nos dois
+    // casos assusta a toa; dizer qual e qual custa duas linhas.
+    const limite = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+    p();
+    p(`> **O teto e 12 meses.** Antes de ${limite} o Open Finance nao entrega extrato,`);
+    p("> entao o que aconteceu antes disso nao esta aqui — e nao porque nao existiu.");
+    if (primeiro > limite) {
+      p(`> Esta coleta comeca depois disso, em ${primeiro}. Pode ser corte do banco, ou`);
+      p("> pode ser que nao houve movimento nenhum no comeco da janela: compare com a");
+      p("> primeira data da secao **A historia das posicoes** antes de concluir.");
     }
+    p("> Para ir mais para tras, o caminho e pedir o extrato completo ao banco, que e");
+    p("> direito do titular — nao ha script que contorne isso.");
   } else {
     p("- Janela coberta: **nenhum lancamento veio**");
   }
@@ -345,6 +355,92 @@ function montarResumo({ item, contas, lancamentosPorConta, investimentos }) {
     p("Este dinheiro **nao sumiu**: ele saiu da conta corrente e continua sendo dela.");
     p("Vale somar com o saldo das contas antes de concluir qualquer coisa.");
     p();
+  }
+
+  /* --- a historia das posicoes, que vai muito alem da janela ------------- */
+
+  // O extrato para em doze meses; a POSICAO carrega a data em que foi comprada.
+  // E por aqui que se enxerga tres, cinco anos atras — e e a unica coisa nesta
+  // coleta que responde "como era antes".
+  const comData = investimentos.filter((i) => i.purchaseDate || i.date);
+  if (comData.length > 0) {
+    p("## A historia das posicoes");
+    p();
+    p("O extrato para na janela acima. As posicoes, nao: cada uma diz quando foi");
+    p("comprada. E a unica janela longa que esta coleta tem.");
+    p();
+    p("| Comprada em | Papel | Aportado | Hoje | Situacao |");
+    p("|---|---|---:|---:|---|");
+
+    const ordem = [...comData].sort((a, b) =>
+      String(a.purchaseDate ?? a.date).localeCompare(String(b.purchaseDate ?? b.date)),
+    );
+    for (const i of ordem) {
+      const encerrada = String(i.status ?? "").startsWith("TOTAL_WITH") || !(i.amount ?? 0);
+      const venda = (movimentos ?? []).find(
+        (m) => m.investimento === i.name && m.type === "SELL",
+      );
+      p(
+        `| ${dia(i.purchaseDate) || "—"} | ${(i.name ?? "").slice(0, 46)} ` +
+          `| ${i.amountOriginal ? dinheiro(i.amountOriginal) : "—"} ` +
+          `| ${encerrada ? "—" : dinheiro(i.amount)} ` +
+          `| ${encerrada ? `encerrada em ${dia(i.date)}${venda ? ` por ${dinheiro(venda.amount)}` : ""}` : "ativa"} |`,
+      );
+    }
+    p();
+  }
+
+  /* --- o resgate que nao chegou ------------------------------------------ */
+
+  // A pergunta que ninguem faz sozinho olhando o extrato: a posicao foi
+  // encerrada — o dinheiro dela apareceu na conta? Quando aparece, bate ao
+  // centavo no mesmo dia. Quando nao aparece, e a unica coisa nesta coleta que
+  // merece a palavra "sumiu", e ainda assim so como pergunta.
+  const entradas = todos.filter((t) => t.amount > 0);
+  const encerradas = investimentos.filter(
+    (i) => String(i.status ?? "").startsWith("TOTAL_WITH") || !(i.amount ?? 0),
+  );
+
+  const semRastro = [];
+  for (const i of encerradas) {
+    const venda = (movimentos ?? []).find(
+      (m) => m.investimento === i.name && m.type === "SELL",
+    );
+    if (!venda) {
+      semRastro.push({ papel: i.name, em: dia(i.date), valor: null });
+      continue;
+    }
+    const caiu = entradas.some((t) => Math.abs(t.amount - venda.amount) < 0.02);
+    if (!caiu) semRastro.push({ papel: i.name, em: dia(venda.date), valor: venda.amount });
+  }
+
+  if (encerradas.length > 0) {
+    p("## Posicoes encerradas: o dinheiro apareceu na conta?");
+    p();
+    const conferidas = encerradas.length - semRastro.length;
+    p(
+      `${encerradas.length} posicao(oes) foram encerradas. ${conferidas} tiveram o ` +
+        "resgate batendo ao centavo com uma entrada na conta corrente, no mesmo dia.",
+    );
+    p();
+
+    if (semRastro.length > 0) {
+      p(`### ${semRastro.length} sem rastro na conta corrente`);
+      p();
+      p("| Papel | Encerrada em | Valor do resgate |");
+      p("|---|---|---:|");
+      for (const x of semRastro) {
+        p(`| ${x.papel} | ${x.em} | ${x.valor ? dinheiro(x.valor) : "**nao informado**"} |`);
+      }
+      p();
+      p("Isto **nao prova desvio**. Uma posicao pode ter sido encerrada antes da");
+      p("janela e so agora sair da lista, ou o resgate pode ter sido liquidado em");
+      p("outra conta, ou a instituicao pode simplesmente nao reportar o movimento.");
+      p("Mas e a unica linha desta coleta que o extrato nao explica sozinho — e e");
+      p("exatamente ela que se leva ao banco, com nome e data, para pedir o");
+      p("documento: quanto foi resgatado, quando, e para qual conta foi creditado.");
+      p();
+    }
   }
 
   /* --- mes a mes ---------------------------------------------------------- */
@@ -636,7 +732,7 @@ if (movimentos.length > 0) {
 
 await writeFile(
   path.join(saida, "resumo.md"),
-  montarResumo({ item, contas, lancamentosPorConta, investimentos }),
+  montarResumo({ item, contas, lancamentosPorConta, investimentos, movimentos }),
 );
 
 console.log("  resumo.md");
