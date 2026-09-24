@@ -412,6 +412,60 @@ function montarResumo({ item, contas, lancamentosPorConta, investimentos, movime
       }
     }
     p();
+    // A conferencia definitiva: `resources` e a lista, item a item, do que a
+    // conexao coletou. Contar por tipo e comparar com o que esta em maos nao
+    // depende de eu ter adivinhado endpoint nenhum — se bater, nao sobrou nada
+    // escondido; se nao bater, a diferenca e exatamente o que falta buscar.
+    const recursos = porNome.get("recursos coletados")?.itens ?? [];
+    if (recursos.length > 0) {
+      const contar = (lista, chave) => {
+        const m = new Map();
+        for (const x of lista) m.set(chave(x), (m.get(chave(x)) ?? 0) + 1);
+        return m;
+      };
+      const declarados = contar(recursos, (x) => String(x.type ?? "?"));
+
+      const emMaos = new Map([
+        ["ACCOUNT", contas.filter((c) => String(c.type).toUpperCase() === "BANK").length],
+        ["CREDIT_CARD_ACCOUNT", contas.filter((c) => String(c.type).toUpperCase() === "CREDIT").length],
+        ["TREASURE_TITLE", investimentos.filter((i) => String(i.subtype) === "TREASURY").length],
+        ["FUND", investimentos.filter((i) => String(i.type) === "MUTUAL_FUND").length],
+        [
+          "BANK_FIXED_INCOME",
+          investimentos.filter(
+            (i) => String(i.type) === "FIXED_INCOME" && String(i.subtype) !== "TREASURY",
+          ).length,
+        ],
+      ]);
+
+      p("### Conferencia item a item");
+      p();
+      p("A conexao lista cada recurso que coletou. Contando por tipo:");
+      p();
+      p("| Tipo | A conexao coletou | Temos em maos | |");
+      p("|---|---:|---:|---|");
+      let fecha = true;
+      for (const [tipo, quantos] of [...declarados].sort()) {
+        const nosso = emMaos.get(tipo);
+        const ok = nosso === quantos;
+        if (!ok) fecha = false;
+        p(`| ${tipo} | ${quantos} | ${nosso ?? "—"} | ${ok ? "confere" : "**FALTA**"} |`);
+      }
+      p();
+      const falhos = recursos.filter((x) => String(x.status) !== "AVAILABLE");
+      if (falhos.length > 0) {
+        p(`> ${falhos.length} recurso(s) com coleta incompleta na origem: ` +
+          `${[...new Set(falhos.map((x) => `${x.type}/${x.status}`))].join(", ")}.`);
+        p();
+      }
+      p(
+        fecha
+          ? "**Fecha.** Nada ficou para tras nesta conexao — o que nao esta aqui nao foi coletado."
+          : "**Nao fecha.** A diferenca acima e exatamente o que ainda falta buscar.",
+      );
+      p();
+    }
+
     p("Isto cobre o que a CONEXAO tem. O consentimento do Open Finance pode ter sido");
     p("dado para menos produtos do que a instituicao oferece: compare a lista acima");
     p("com `connector.products` no bruto.json — se faltar produto ali, o caminho e");
