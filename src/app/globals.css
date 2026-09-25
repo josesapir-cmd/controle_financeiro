@@ -5647,6 +5647,39 @@ ul.produtos {
    leituras compartilham o recuo, e o que as separa e este rotulo. */
 .gr-tabela .gr-aliquota {
   font-variant-numeric: tabular-nums;
-  color: var(--texto-secundario, #4b5563);
+  /* Era `--texto-secundario`, token que nao existe neste sistema: so o fallback
+     chumbado ao lado e que vinha pintando. */
+  color: var(--text-sub);
   font-weight: 500;
+}
+
+/* A virada entre as duas leituras da mesma linha aberta: em cima ONDE o papel
+   esta, embaixo em QUE degrau do imposto ele cai. Sao eixos diferentes do mesmo
+   dinheiro, e no mesmo recuo o olho lia a faixa como mais uma corretora. O
+   traco e um tom acima do separador comum, e o respiro vem junto — sozinho, o
+   traco viraria so mais uma linha da grade. */
+/* Nao pode ser `border-top`: com `border-collapse: collapse`, quando duas
+   celulas disputam o mesmo trecho e tem a mesma espessura, ganha a de cima — o
+   separador da custodia anterior apagava o traco novo, e a virada continuava
+   invisivel. Sombra interna nao entra no colapso, e e o mesmo recurso que o
+   `td` global ja usa para desenhar o proprio separador. */
+.gr-tabela .gr-corte > th {
+  box-shadow: inset 0 1px 0 var(--stroke-sub);
+  /* O `th` global arredonda a primeira celula para o cabecalho, e a sombra
+     segue o raio: sem zerar, o traco comeca com um gancho e nao encosta na
+     borda como as outras linhas da tabela. */
+  border-radius: 0;
+}
+
+.gr-tabela .gr-corte > td {
+  box-shadow:
+    inset 0 1px 0 var(--stroke-sub),
+    inset 0 -1px 0 var(--stroke-soft);
+}
+
+/* O respiro vem junto com o traco: sozinho, ele seria mais uma linha da grade
+   em vez de uma virada de assunto. */
+.gr-tabela .gr-corte > th,
+.gr-tabela .gr-corte > td {
+  padding-top: 20px;
 }

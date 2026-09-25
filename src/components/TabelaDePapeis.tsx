@@ -132,8 +132,10 @@ function proximoDegrau(aliquota: number): number | null {
  * dias" e uma das respostas — a que diz se resgatar hoje custa imposto a toa.
  *
  * Vem depois das custodias porque responde depois: primeiro onde o papel esta,
- * so entao em que degrau. O recuo e o mesmo, e o que separa as duas leituras e
- * o rotulo da aliquota, que nenhuma custodia tem.
+ * so entao em que degrau. O recuo e o mesmo nos dois, e confiar so no rotulo
+ * para separar as leituras nao deu certo: no mesmo nivel, "IR 22,5%" era lido
+ * como mais uma custodia — uma corretora chamada IR. Por isso a primeira faixa
+ * leva um traco, quando ha custodia acima dela.
  */
 function LinhasDeFaixa({
   faixas,
@@ -141,19 +143,25 @@ function LinhasDeFaixa({
   nivel,
   total,
   totalLiquido,
+  separar,
 }: {
   faixas: FaixaDeImposto[];
   chave: string;
   nivel: string;
   total: number;
   totalLiquido: number;
+  /** Ha linha de custodia logo acima: a primeira faixa marca a virada. */
+  separar: boolean;
 }) {
   return (
     <>
-      {faixas.map((faixa) => {
+      {faixas.map((faixa, i) => {
         const liquido = faixa.bruto - faixa.imposto;
         return (
-          <tr key={`${chave}/ir/${faixa.aliquota}`} className={nivel}>
+          <tr
+            key={`${chave}/ir/${faixa.aliquota}`}
+            className={separar && i === 0 ? `${nivel} gr-corte` : nivel}
+          >
             <th scope="row">
               <span className="gr-aliquota">
                 IR {formatPercent(faixa.aliquota!, 1)}%
@@ -379,6 +387,7 @@ export function TabelaDePapeis({
                     nivel="gr-nivel-2"
                     total={total}
                     totalLiquido={totalLiquido}
+                    separar={unico.custodias.length > 0}
                   />
                 ) : null}
 
@@ -487,6 +496,7 @@ export function TabelaDePapeis({
                                 nivel="gr-nivel-3"
                                 total={total}
                                 totalLiquido={totalLiquido}
+                                separar={papel.custodias.length > 0}
                               />,
                             ]
                           : []),
