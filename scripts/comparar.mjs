@@ -42,6 +42,8 @@ import {
   aoAno,
   impostoDeFia,
   lerInformeDeFluxo,
+  lerSerieSolta,
+  lerSeriesJson,
   mesesNecessarios,
   simularAporte,
   soDigitos,
@@ -81,6 +83,9 @@ const pct = (v) =>
     : `${v >= 0 ? "+" : ""}${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const dia = (v) =>
   !v ? null : v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10);
+
+const diasEntre = (de, ate) =>
+  Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86400000);
 
 /* -------------------------------------------------------------------------- */
 /* A serie de cotas                                                           */
@@ -155,10 +160,13 @@ await lerEnv();
 const alvo = opcao("papel");
 const cnpj = soDigitos(opcao("cnpj"));
 
-if (!alvo || cnpj.length !== 14) {
+const serieSolta = opcao("cotas");
+
+if (!alvo || (!serieSolta && cnpj.length !== 14)) {
   console.error(
-    "Faltou o papel ou o CNPJ do fundo.\n\n" +
-      '  node scripts/comparar.mjs --papel "Renda+" --cnpj 18.248.733/0001-05\n',
+    "Faltou o papel, e o CNPJ do fundo ou um arquivo de cotas.\n\n" +
+      '  node scripts/comparar.mjs --papel "Renda+" --cnpj 18.248.733/0001-05\n' +
+      '  node scripts/comparar.mjs --papel "Renda+" --cotas cotas.csv\n',
   );
   process.exit(1);
 }
@@ -178,15 +186,17 @@ const abrir = (v) => {
 try {
   /* --- os lotes da carteira --------------------------------------------- */
 
+  // Sem filtro no SQL: o que nao serve precisa ser CONTADO e explicado. A
+  // primeira versao filtrava aqui, uma boleta sobrava, e a tela dizia so o
+  // resultado dela — como se fosse a carteira inteira.
   const linhas = await banco.query(
     `SELECT id, institution, name_enc, amount, gross_amount, balance, taxes,
             quantity, unit_price, due_date, purchase_date
        FROM investments
-      WHERE purchase_date IS NOT NULL AND amount > 0
-      ORDER BY purchase_date`,
+      ORDER BY purchase_date NULLS LAST`,
   );
 
-  const lotes = linhas
+  const todos = linhas
     .map((l) => ({
       institution: l.institution,
       nome: abrir(l.name_enc) ?? "(sem nome)",
@@ -200,11 +210,42 @@ try {
     }))
     .filter((l) => l.nome.toLowerCase().includes(alvo.toLowerCase()));
 
-  if (lotes.length === 0) {
+  if (todos.length === 0) {
+    const nomes = [...new Set(linhas.map((l) => abrir(l.name_enc)).filter(Boolean))];
     console.error(
-      `Nenhum lote com data de compra casa com "${alvo}".\n` +
-        "Se a coluna estiver vazia, rode `npm run sync` — a data da compra veio na 026.",
+      `Nenhuma posicao com "${alvo}" no nome. O que existe na carteira:\n` +
+        nomes.map((n) => `  ${n}`).join("\n"),
     );
+    process.exit(1);
+  }
+
+  const semData = todos.filter((l) => !l.compradoEm);
+  const semAporte = todos.filter((l) => l.compradoEm && !(l.aportado > 0));
+  const lotes = todos.filter((l) => l.compradoEm && l.aportado > 0);
+
+  console.log(
+    `\n${todos.length} posicao(oes) casam com "${alvo}"; ${lotes.length} tem data de` +
+      " compra e valor aportado.",
+  );
+
+  if (semData.length > 0) {
+    const soma = semData.reduce((s, l) => s + l.bruto, 0);
+    console.log(
+      `  ${semData.length} sem data de compra (${dinheiro(soma)}): ficam de fora, porque` +
+        "\n  sem a data nao ha em que dia comprar a cota do fundo. A data veio na" +
+        "\n  migracao 026 — se a coluna esta vazia, rode `npm run sync`.",
+    );
+  }
+  if (semAporte.length > 0) {
+    const soma = semAporte.reduce((s, l) => s + l.bruto, 0);
+    console.log(
+      `  ${semAporte.length} sem valor aportado (${dinheiro(soma)}): a Pluggy nao mandou` +
+        "\n  `amountOriginal` nessas, e sem ele nao ha quanto aplicar no fundo.",
+    );
+  }
+
+  if (lotes.length === 0) {
+    console.error("\nNenhuma boleta utilizavel. Veja os motivos acima.");
     process.exit(1);
   }
 
@@ -244,14 +285,57 @@ try {
 
   /* --- a serie de cotas do fundo ----------------------------------------- */
 
-  const cache = await lerCache(cnpj);
-  const local = opcao("arquivo");
+  const exportar = opcao("exportar");
+  if (exportar) {
+    await writeFile(
+      path.resolve(exportar),
+      JSON.stringify(
+        lotes.map((l) => ({
+          compradoEm: l.compradoEm,
+          aportado: l.aportado,
+          bruto: l.bruto,
+          imposto: l.imposto,
+          instituicao: l.instituicao,
+          vence: l.vence,
+        })),
+        null,
+        2,
+      ),
+    );
+    console.log(`\n${lotes.length} boleta(s) em ${exportar}.`);
+    console.log("Nao ha nome de papel nem id: so data, valor e imposto.");
+  }
+
+  if (serieSolta) {
+    console.log(`\nLendo as cotas de ${serieSolta}`);
+  }
+
+  /*
+   * Duas formas de serie pronta. O JSON com um dia por chave e varias series
+   * dentro traz os indices junto — e ai a pergunta deixa de ser "o fundo bateu
+   * o meu papel" e vira "quem bateu quem", que e a que vale.
+   */
+  let referencias = new Map();
+
+  if (serieSolta) {
+    const conteudo = await readFile(path.resolve(serieSolta), "utf8");
+    if (conteudo.trimStart().startsWith("{")) {
+      referencias = lerSeriesJson(conteudo);
+    } else {
+      referencias.set("fundo", lerSerieSolta(conteudo));
+    }
+  }
+
+  const cache = serieSolta
+    ? { cnpj, meses: { colada: referencias.get(opcao("serie") ?? "fundo") ?? [] } }
+    : await lerCache(cnpj);
+  const local = serieSolta ? null : opcao("arquivo");
 
   if (local) {
     console.log(`\nLendo ${local}`);
     const pontos = await lerInforme(createReadStream(path.resolve(local), "utf8"), cnpj);
     for (const p of pontos) (cache.meses[p.dia.slice(0, 7).replace("-", "")] ??= []).push(p);
-  } else {
+  } else if (!serieSolta) {
     const hoje = new Date().toISOString().slice(0, 10);
     const precisa = mesesNecessarios([...lotes.map((l) => l.compradoEm), hoje]);
     const faltando = precisa.filter((m) => !cache.meses[m]);
@@ -301,8 +385,7 @@ try {
   let semCota = 0;
   let semImposto = 0;
 
-  const diasEntre = (de, ate) =>
-    Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86400000);
+
 
   for (const lote of lotes) {
     const s = simularAporte(
@@ -380,6 +463,69 @@ try {
     `  ${d >= 0 ? "o fundo teria rendido" : "o papel rendeu"} ${dinheiro(Math.abs(d))} ` +
       `${d >= 0 ? "a mais" : "a mais"}.`,
   );
+
+  /* --- e contra cada referencia que veio junto ---------------------------- */
+
+  if (referencias.size > 1) {
+    console.log("\nMesmos aportes, mesmas datas, contra cada referencia do arquivo:\n");
+    const larg = [22, 18, 12, 16];
+    console.log(
+      ["referencia", "valor hoje", "a.a.", "vs o papel"]
+        .map((c, i) => c.padStart(larg[i]))
+        .join(""),
+    );
+    console.log("-".repeat(larg.reduce((a, b) => a + b, 0)));
+
+    const linhas = [{ nome: alvo, valor: soma.papel, aa: null }];
+
+    for (const [nome, serie] of referencias) {
+      let total = 0;
+      let fora = 0;
+      let diasPonderados = 0;
+
+      for (const lote of lotes) {
+        const r = simularAporte(
+          { aportado: lote.aportado, compradoEm: lote.compradoEm },
+          serie,
+          opcao("ate") ?? serie.at(-1).dia,
+        );
+        if (!r) {
+          fora += 1;
+          continue;
+        }
+        total += r.valor;
+        diasPonderados += r.dias * lote.aportado;
+      }
+
+      // Prazo medio ponderado pelo aporte: anualizar a carteira inteira por um
+      // unico prazo so faz sentido se o prazo for o que o dinheiro viveu, e nao
+      // a media simples das boletas.
+      const dias = soma.aportado > 0 ? diasPonderados / soma.aportado : 0;
+      linhas.push({
+        nome,
+        valor: total,
+        aa: aoAno(soma.aportado, total, dias),
+        fora,
+      });
+    }
+
+    const diasDoPapel =
+      soma.aportado > 0
+        ? lotes.reduce((s, l) => s + diasEntre(l.compradoEm, l.marcadoEm ?? ate) * l.aportado, 0) /
+          soma.aportado
+        : 0;
+    linhas[0].aa = aoAno(soma.aportado, soma.papel, diasDoPapel);
+
+    for (const l of [...linhas].sort((a, b) => b.valor - a.valor)) {
+      const diferenca = l.nome === alvo ? "" : dinheiro(l.valor - soma.papel);
+      console.log(
+        [l.nome.slice(0, 20), dinheiro(l.valor), pct(l.aa), diferenca]
+          .map((c, i) => String(c).padStart(larg[i]))
+          .join("") + (l.fora ? `   (${l.fora} lote(s) fora da serie)` : ""),
+      );
+    }
+    console.log(`\nTodas partem de ${dinheiro(soma.aportado)} aportados nas mesmas datas.`);
+  }
 
   console.log(
     "\nO contrafactual supoe aporte unico na data, sem resgate e sem taxa de\n" +

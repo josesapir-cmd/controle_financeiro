@@ -5,7 +5,7 @@ export interface ColunasDoInforme {
 }
 
 export interface PontoDeCota {
-  cnpj: string;
+  cnpj: string | null;
   dia: string;
   cota: number;
 }
@@ -34,6 +34,8 @@ export function lerInformeDeFluxo(
   cnpj: string,
   criarInterface: (fluxo: NodeJS.ReadableStream) => AsyncIterable<string>,
 ): Promise<PontoDeCota[]>;
+export function lerSeriesJson(texto: string | object): Map<string, PontoDeCota[]>;
+export function lerSerieSolta(texto: string): PontoDeCota[];
 export function cotaEm(serie: PontoDeCota[], dia: string): CotaEncontrada | null;
 export function mesesNecessarios(datas: (string | null | undefined)[]): string[];
 export function simularAporte(

@@ -7,6 +7,8 @@ import {
   cotaEm,
   impostoDeFia,
   lerInformeDeFluxo,
+  lerSerieSolta,
+  lerSeriesJson,
   lerLinhaDoInformeDiario,
   mesesNecessarios,
   simularAporte,
@@ -189,5 +191,108 @@ describe("um informe inteiro, em streaming", () => {
 
   it("reclama quando nao ha cabecalho reconhecivel", async () => {
     await expect(ler("a;b;c\n1;2;3", "18248733000105")).rejects.toThrow(/cabecalho/i);
+  });
+});
+
+describe("serie colada de qualquer lugar", () => {
+  it("le data ISO com ponto decimal", () => {
+    expect(lerSerieSolta("2026-09-22;3.141590\n2026-09-23;3.150000")).toEqual([
+      { cnpj: null, dia: "2026-09-22", cota: 3.14159 },
+      { cnpj: null, dia: "2026-09-23", cota: 3.15 },
+    ]);
+  });
+
+  it("le data brasileira com virgula decimal", () => {
+    expect(lerSerieSolta("22/09/2026;3,141590")).toEqual([
+      { cnpj: null, dia: "2026-09-22", cota: 3.14159 },
+    ]);
+  });
+
+  // "1.234,56" e "1,234.56" sao o mesmo numero em convencoes diferentes. O
+  // ultimo separador e o decimal nos dois casos.
+  it("resolve milhar e decimal pelo ultimo separador", () => {
+    expect(lerSerieSolta("2026-09-22;1.234,56")[0].cota).toBe(1234.56);
+    expect(lerSerieSolta("2026-09-22;1,234.56")[0].cota).toBe(1234.56);
+  });
+
+  // Numa serie de cotas "1.234567" e uma cota de um e pouco. Ler como milhar
+  // daria 1.234.567 e o contrafactual erraria por seis ordens de grandeza.
+  it("com um separador so, ele e o decimal", () => {
+    expect(lerSerieSolta("2026-09-22;1.234567")[0].cota).toBe(1.234567);
+  });
+
+  it("aceita tab, virgula e espaco como separador de coluna", () => {
+    expect(lerSerieSolta("2026-09-22\t2,50")[0].cota).toBe(2.5);
+    expect(lerSerieSolta("2026-09-22 2.50")[0].cota).toBe(2.5);
+  });
+
+  // Os digitos da propria data nao podem virar candidatos a cota.
+  it("nao confunde a data com o numero", () => {
+    expect(lerSerieSolta("22/09/2026;7,00")[0].cota).toBe(7);
+    expect(lerSerieSolta("2026-09-22,7.00")[0].cota).toBe(7);
+  });
+
+  it("pula cabecalho e linhas sem data", () => {
+    const texto = ["Data;Cota", "", "referencia do fundo", "2026-09-22;2.5"].join("\n");
+    expect(lerSerieSolta(texto)).toHaveLength(1);
+  });
+
+  it("devolve ordenado por data, mesmo vindo embaralhado", () => {
+    const texto = "2026-09-25;3\n2026-09-21;1\n2026-09-23;2";
+    expect(lerSerieSolta(texto).map((p) => p.cota)).toEqual([1, 2, 3]);
+  });
+});
+
+describe("series em JSON, uma chave por dia", () => {
+  const ARQUIVO = {
+    "2013-07-10": { CDI: 30.77408, IBOV: 45483.43, fundo: 100 },
+    "2013-07-11": { CDI: 30.78316, IBOV: 46626.26, fundo: 99.99898655 },
+    "2015-10-17": { IBOV: 47236.11 },
+    "2026-09-28": { CDI: 108.4817384, IBOV: 182991.13, fundo: 789.88172719 },
+    lixo: { fundo: 1 },
+  };
+
+  it("separa uma serie por nome", () => {
+    const series = lerSeriesJson(JSON.stringify(ARQUIVO));
+    expect([...series.keys()].sort()).toEqual(["CDI", "IBOV", "fundo"]);
+  });
+
+  // Fim de semana e feriado vem so com IBOV repetido, sem cota do fundo. A
+  // serie do fundo nao pode ganhar um furo nem um ponto inventado.
+  it("um dia sem a serie nao entra naquela serie", () => {
+    const series = lerSeriesJson(JSON.stringify(ARQUIVO));
+    expect(series.get("fundo")!.map((p) => p.dia)).toEqual([
+      "2013-07-10",
+      "2013-07-11",
+      "2026-09-28",
+    ]);
+    expect(series.get("IBOV")).toHaveLength(4);
+  });
+
+  it("ignora chave que nao e data", () => {
+    const series = lerSeriesJson(JSON.stringify(ARQUIVO));
+    expect(series.get("fundo")!.some((p) => p.dia === "lixo")).toBe(false);
+  });
+
+  it("aceita o objeto ja desserializado", () => {
+    expect(lerSeriesJson(ARQUIVO).get("fundo")).toHaveLength(3);
+  });
+
+  // O nivel do indice nao importa: so a razao entra na conta. CDI em 108 e
+  // cota em 789 tem que dar a mesma resposta para o mesmo aporte.
+  it("o contrafactual funciona em qualquer escala", () => {
+    const series = lerSeriesJson(ARQUIVO);
+    const fundo = simularAporte(
+      { aportado: 1000, compradoEm: "2013-07-10" },
+      series.get("fundo")!,
+      "2026-09-28",
+    )!;
+    const cdi = simularAporte(
+      { aportado: 1000, compradoEm: "2013-07-10" },
+      series.get("CDI")!,
+      "2026-09-28",
+    )!;
+    expect(fundo.valor).toBeCloseTo(7898.8173, 2);
+    expect(cdi.valor).toBeCloseTo(3525.1009, 2);
   });
 });

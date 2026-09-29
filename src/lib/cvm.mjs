@@ -97,6 +97,99 @@ export async function lerInformeDeFluxo(fluxo, cnpj, criarInterface) {
 }
 
 /**
+ * Uma serie de cotas colada de qualquer lugar.
+ *
+ * O informe da CVM tem layout fixo; o que sai de uma lamina, de um extrato da
+ * gestora ou de uma planilha nao tem. Como o dado e sempre o mesmo par — um dia
+ * e um numero — vale procurar os dois em cada linha em vez de exigir formato.
+ *
+ * Decimal: quando ha ponto E virgula, o ultimo manda, que resolve tanto
+ * "1.234,56" quanto "1,234.56". Com so um separador ele e o decimal — numa
+ * serie de cotas "1.234567" e uma cota de um e pouco, nao um milhao.
+ */
+export function lerSerieSolta(texto) {
+  const pontos = [];
+
+  for (const linha of String(texto ?? "").split(/\r?\n/)) {
+    const bruta = linha.trim();
+    if (!bruta) continue;
+
+    const iso = bruta.match(/(\d{4})-(\d{2})-(\d{2})/);
+    const br = bruta.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (!iso && !br) continue;
+
+    const dia = iso
+      ? `${iso[1]}-${iso[2]}-${iso[3]}`
+      : `${br[3]}-${br[2]}-${br[1]}`;
+
+    // O numero e procurado no que sobra depois de tirar a data, senao os
+    // proprios digitos dela virariam candidatos.
+    const resto = bruta.replace(iso ? iso[0] : br[0], " ");
+    const candidatos = resto.match(/-?\d[\d.,]*/g) ?? [];
+
+    let cota = null;
+    for (const cru of candidatos) {
+      const ultimoPonto = cru.lastIndexOf(".");
+      const ultimaVirgula = cru.lastIndexOf(",");
+      let normal;
+
+      if (ultimoPonto !== -1 && ultimaVirgula !== -1) {
+        normal =
+          ultimaVirgula > ultimoPonto
+            ? cru.replace(/\./g, "").replace(",", ".")
+            : cru.replace(/,/g, "");
+      } else {
+        normal = cru.replace(",", ".");
+      }
+
+      const n = Number(normal);
+      if (Number.isFinite(n) && n > 0) {
+        cota = n;
+        break;
+      }
+    }
+
+    if (cota !== null) pontos.push({ cnpj: null, dia, cota });
+  }
+
+  return pontos.sort((a, b) => a.dia.localeCompare(b.dia));
+}
+
+/**
+ * Uma serie em JSON no formato {"2013-07-10": {"fundo": 100, "CDI": 30.77}}.
+ *
+ * E o que sai das ferramentas de comparacao de fundo: um dia por chave, e
+ * varias series por dia. Cada uma vira uma serie propria, porque o que se quer
+ * nao e so "quanto o fundo rendeu" — e "quanto ele rendeu COMPARADO a".
+ *
+ * O nivel de cada indice nao importa; so a razao entre duas datas entra na
+ * conta. Por isso CDI em 108 e cota em 789 convivem sem normalizacao: o
+ * contrafactual divide o de sair pelo de entrar nos dois casos.
+ */
+export function lerSeriesJson(texto) {
+  const bruto = typeof texto === "string" ? JSON.parse(texto) : texto;
+  const series = new Map();
+
+  for (const [dia, valores] of Object.entries(bruto ?? {})) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) continue;
+    if (!valores || typeof valores !== "object") continue;
+
+    for (const [nome, valor] of Object.entries(valores)) {
+      const n = Number(valor);
+      // Dia sem cotacao aparece com a serie ausente — e tambem com zero em
+      // alguns exportadores. Os dois significam "nao cotou", e deixar passar
+      // faria o contrafactual dividir por zero.
+      if (!Number.isFinite(n) || n <= 0) continue;
+      if (!series.has(nome)) series.set(nome, []);
+      series.get(nome).push({ cnpj: null, dia, cota: n });
+    }
+  }
+
+  for (const pontos of series.values()) pontos.sort((a, b) => a.dia.localeCompare(b.dia));
+  return series;
+}
+
+/**
  * A cota que vale para uma data: a ultima em que houve cotacao ATE ela.
  *
  * Fundo nao cota em fim de semana nem feriado, e aporte lancado num sabado e
