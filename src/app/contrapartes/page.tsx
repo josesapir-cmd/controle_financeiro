@@ -6,7 +6,6 @@ import { AccountFilter } from "@/components/AccountFilter";
 import { accountQuery, buildQuery, parseAccountIds } from "@/lib/finance/account-selection";
 import { translateCategory } from "@/lib/finance/categories";
 import {
-  groupByCategory,
   maskDocument,
   NAO_IDENTIFICADA,
   type CounterpartyTotal,
@@ -417,11 +416,9 @@ export default async function Contrapartes({
       : `/contrapartes?${queryPeriodo}&open=${encodeURIComponent(key)}`;
   const identificadas = dados.counterparties.filter((c) => c.key !== NAO_IDENTIFICADA);
   const naoIdentificada = dados.counterparties.find((c) => c.key === NAO_IDENTIFICADA);
-  const porCategoria = groupByCategory(identificadas);
 
   // Classificada e o que o usuario confirmou. Sugestao nao classifica nada.
   const classificadas = identificadas.filter((c) => c.category);
-  const pendentes = identificadas.filter((c) => !c.category);
 
   return (
     <main className="page">
@@ -526,98 +523,23 @@ export default async function Contrapartes({
         decididas={dados.conciliacoesDecididas}
       />
 
-      {classificadas.length > 0 ? (
-        <section>
-          <h2>Totais por categoria</h2>
-          <div className="card">
-            <ul className="rollup">
-              {porCategoria.map((categoria) => (
-                <li key={categoria.category}>
-                  <div className="rollup-linha">
-                    <span className="description">{categoria.category}</span>
-                    <span className="bar-value">
-                      {categoria.sent > 0 ? formatBRL(-categoria.sent) : formatBRL(categoria.received)}
-                    </span>
-                  </div>
-                  <ul>
-                    {categoria.subcategories.map((sub) => (
-                      <li key={sub.subcategory}>
-                        <div className="rollup-linha sub">
-                          <span>
-                            {sub.subcategory}
-                            <span className="account-meta">
-                              {" "}
-                              · {sub.counterparties}{" "}
-                              {sub.counterparties === 1 ? "contraparte" : "contrapartes"}
-                            </span>
-                          </span>
-                          <span className="bar-value">
-                            {sub.sent > 0 ? formatBRL(-sub.sent) : formatBRL(sub.received)}
-                          </span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-      ) : null}
-
+      {/*
+        Uma tabela so, classificadas e nao classificadas juntas.
+        Separar em duas listas colocava a mesma contraparte em lugares
+        diferentes conforme o mes tivesse ou nao categoria, e obrigava a
+        procurar em qual das duas ela estava. O que falta classificar aparece
+        com "—" na coluna de categoria e continua editavel pelo mesmo link.
+      */}
       <section>
         <h2>
-          Aguardando classificacao{pendentes.length > 0 ? ` (${pendentes.length})` : ""}
+          Contrapartes no periodo{identificadas.length > 0 ? ` (${identificadas.length})` : ""}
         </h2>
 
-        {pendentes.length === 0 ? (
+        {identificadas.length === 0 ? (
           <div className="card">
-            <p className="empty">
-              Tudo classificado neste periodo. Contrapartes novas aparecem aqui.
-            </p>
+            <p className="empty">Nenhuma contraparte neste periodo.</p>
           </div>
         ) : (
-          <div className="card table-scroll">
-            <table className="empilha">
-              <thead>
-                <tr>
-                  <th scope="col">Contraparte</th>
-                  <th scope="col" className="num">Enviado</th>
-                  <th scope="col" className="num">Recebido</th>
-                  <th scope="col" className="num">Liquido</th>
-                  <th scope="col">Classificar</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendentes.map((c) => (
-                  <Fragment key={c.key}>
-                    <tr>
-                      <td className="description">
-                        <IdentidadeContraparte
-                          c={c}
-                          aberta={aberta === c.key}
-                          alternarPara={alternar(c.key)}
-                        />
-                      </td>
-                      <Valores c={c} />
-                      <td>
-                        <FormularioClassificacao c={c} />
-                      </td>
-                    </tr>
-                    {aberta === c.key ? (
-                      <LinhasDeLancamentos c={c} colunas={5} accountNames={dados.accountNames} />
-                    ) : null}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {classificadas.length > 0 ? (
-        <section>
-          <h2>Classificadas ({classificadas.length})</h2>
           <div className="card table-scroll">
             <table className="empilha">
               <thead>
@@ -632,7 +554,7 @@ export default async function Contrapartes({
                 </tr>
               </thead>
               <tbody>
-                {classificadas.map((c) => (
+                {identificadas.map((c) => (
                   <Fragment key={c.key}>
                     {editando === c.key ? (
                       <tr>
@@ -649,7 +571,7 @@ export default async function Contrapartes({
                         </td>
                       </tr>
                     ) : (
-                      <tr className="linha-classificada">
+                      <tr className={c.category ? "linha-classificada" : undefined}>
                         <td className="description">
                           <IdentidadeContraparte
                             c={c}
@@ -658,7 +580,7 @@ export default async function Contrapartes({
                           />
                         </td>
                         <Valores c={c} />
-                        <td data-rotulo="Categoria">{c.category}</td>
+                        <td data-rotulo="Categoria">{c.category ?? "—"}</td>
                         <td data-rotulo="Subcategoria">{c.subcategory ?? "—"}</td>
                         <td>
                           <Link
@@ -666,7 +588,7 @@ export default async function Contrapartes({
                             href={`/contrapartes?${queryPeriodo}&edit=${encodeURIComponent(c.key)}`}
                             scroll={false}
                           >
-                            Editar
+                            {c.category ? "Editar" : "Classificar"}
                           </Link>
                         </td>
                       </tr>
@@ -679,8 +601,8 @@ export default async function Contrapartes({
               </tbody>
             </table>
           </div>
-        </section>
-      ) : null}
+        )}
+      </section>
 
       <datalist id="categorias">
         {taxonomia.categories.map((categoria) => (

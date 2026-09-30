@@ -8,10 +8,16 @@ import {
   acharOuCriarCategoria,
   acharOuCriarCentroDeCusto,
   clearCounterpartyLink,
+  definirApelido,
   setCounterpartyLink,
   setLabel,
   vincularCentroDeCusto,
 } from "@/lib/db/repository";
+import type { SugestaoDeContraparte } from "@/lib/finance/busca-de-contraparte";
+import {
+  esquecerIndiceDeContrapartes,
+  loadSugestoesDeContrapartes,
+} from "@/lib/finance/service";
 
 export async function salvarContraparte(formData: FormData): Promise<void> {
   await requireSession();
@@ -43,8 +49,42 @@ export async function salvarContraparte(formData: FormData): Promise<void> {
 
   await vincularCentroDeCusto(db, fingerprint, centroId);
 
+  esquecerIndiceDeContrapartes();
   revalidatePath("/contrapartes");
   revalidatePath("/categorias");
+}
+
+/**
+ * Grava so o apelido da contraparte.
+ *
+ * A busca conhece a contraparte pelo nome que o banco mandou, e o apelido e
+ * como o usuario a chama — ele aparece no lugar do nome nas outras telas. Acao
+ * separada da classificacao de proposito: o formulario da busca nao tem campo
+ * de categoria, e reaproveitar `salvarContraparte` mandaria categoria vazia e
+ * apagaria a classificacao existente.
+ */
+export async function salvarApelido(formData: FormData): Promise<void> {
+  await requireSession();
+
+  const fingerprint = String(formData.get("key") ?? "");
+  if (!fingerprint) return;
+
+  await definirApelido(
+    fromPostgres(getSql()),
+    fingerprint,
+    String(formData.get("alias") ?? ""),
+  );
+
+  esquecerIndiceDeContrapartes();
+  // O apelido substitui o nome em toda tela que mostra contraparte, entao
+  // nenhuma delas pode continuar servindo a versao anterior do cache.
+  revalidatePath("/", "layout");
+}
+
+/** Sugestoes do autocomplete da busca. Chamada a cada tecla, ja com debounce. */
+export async function sugerirContrapartes(termo: string): Promise<SugestaoDeContraparte[]> {
+  await requireSession();
+  return loadSugestoesDeContrapartes(String(termo ?? "").slice(0, 120));
 }
 
 /**

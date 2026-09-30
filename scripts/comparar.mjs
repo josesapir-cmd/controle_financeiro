@@ -198,6 +198,7 @@ try {
 
   const todos = linhas
     .map((l) => ({
+      id: l.id,
       institution: l.institution,
       nome: abrir(l.name_enc) ?? "(sem nome)",
       aportado: Number(l.amount),
@@ -291,19 +292,23 @@ try {
       path.resolve(exportar),
       JSON.stringify(
         lotes.map((l) => ({
+          id: l.id,
+          nome: l.nome,
+          instituicao: l.institution,
           compradoEm: l.compradoEm,
+          vence: l.vence,
           aportado: l.aportado,
           bruto: l.bruto,
           imposto: l.imposto,
-          instituicao: l.instituicao,
-          vence: l.vence,
+          quantidade: l.quantidade,
+          precoUnitario: l.precoUnitario,
+          marcadoEm: l.marcadoEm ?? null,
         })),
         null,
         2,
       ),
     );
-    console.log(`\n${lotes.length} boleta(s) em ${exportar}.`);
-    console.log("Nao ha nome de papel nem id: so data, valor e imposto.");
+    console.log(`\n${lotes.length} boleta(s) em ${exportar}, com nome, id e vencimento.`);
   }
 
   if (serieSolta) {

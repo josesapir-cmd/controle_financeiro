@@ -5537,12 +5537,74 @@ ul.produtos {
 }
 
 .busca-campo {
+  position: relative;
   flex: 1;
   min-width: 0;
 }
 
 .busca-campo input {
   width: 100%;
+}
+
+/* Lista do autocomplete. Absoluta sobre o resto da pagina de proposito: se ela
+   empurrasse o conteudo, a tela inteira pularia a cada tecla. */
+.busca-sugestoes {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-soft);
+  border-radius: 10px;
+  box-shadow: 0 12px 24px -12px rgba(14, 18, 27, 0.2);
+}
+
+.busca-sugestoes li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.busca-sugestoes li.destacada {
+  background: var(--bg-weak);
+}
+
+.busca-sugestoes .description {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* O nome do banco fica ao lado do apelido, e nao no lugar dele — e encolhe
+   primeiro. Base zero faz o nome escolhido ocupar o que precisa e sobrar o
+   resto para este: sem isso, num celular, "Zona Sul" virava "Z…" para caber o
+   nome comprido da maquininha, que e justamente o que ninguem procurou. */
+.busca-sugestoes li > .account-meta {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A contagem e a ordem da lista: nao pode ser a primeira coisa a ser cortada. */
+.busca-sugestoes .sugestao-contagem {
+  flex: none;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.busca-apelido {
+  margin-bottom: 12px;
 }
 
 .busca-resultado {

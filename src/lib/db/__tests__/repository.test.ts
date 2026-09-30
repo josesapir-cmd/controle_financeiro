@@ -27,6 +27,7 @@ import {
   listLabels,
   listTransactions,
   markSync,
+  definirApelido,
   setLabel,
   syncStatus,
   upsertAccount,
@@ -319,6 +320,60 @@ describe("rotulos de contraparte", () => {
   it("apaga o registro quando todos os campos ficam vazios", async () => {
     await setLabel(db, "fp-contraparte", { category: "Viagem" });
     await setLabel(db, "fp-contraparte", { category: "", subcategory: "", alias: "" });
+    expect(await listLabels(db)).toHaveLength(0);
+  });
+});
+
+/**
+ * O apelido tem gravacao propria porque a tela de busca so conhece ele. O que
+ * estes testes pinam e o estrago que `setLabel` faria no lugar dela: mandar
+ * categoria vazia apagaria a classificacao sem ninguem ter pedido.
+ */
+describe("apelido isolado", () => {
+  it("grava o apelido sem tocar na classificacao", async () => {
+    await setLabel(db, "fp-contraparte", {
+      category: "Alimentacao",
+      subcategory: "Mercado",
+      officialName: "SUPERMERCADO ZONA SUL S.A.",
+    });
+
+    await definirApelido(db, "fp-contraparte", "Zona Sul");
+
+    const [rotulo] = await listLabels(db);
+    expect(rotulo.alias).toBe("Zona Sul");
+    expect(rotulo.category).toBe("Alimentacao");
+    expect(rotulo.subcategory).toBe("Mercado");
+    expect(rotulo.officialName).toBe("SUPERMERCADO ZONA SUL S.A.");
+  });
+
+  it("cria o registro quando a contraparte ainda nao tinha rotulo", async () => {
+    await definirApelido(db, "fp-nova", "Dona Maria");
+    const [rotulo] = await listLabels(db);
+    expect(rotulo.fingerprint).toBe("fp-nova");
+    expect(rotulo.alias).toBe("Dona Maria");
+    expect(rotulo.category).toBeNull();
+  });
+
+  it("nao guarda o apelido em claro", async () => {
+    await definirApelido(db, "fp-nova", "Dona Maria");
+    const { rows } = await pg.query<{ alias_enc: string }>(
+      "SELECT alias_enc FROM counterparty_labels",
+    );
+    expect(rows[0].alias_enc).not.toContain("Maria");
+  });
+
+  it("campo vazio apaga o apelido e mantem o resto", async () => {
+    await setLabel(db, "fp-contraparte", { category: "Alimentacao", alias: "Zona Sul" });
+    await definirApelido(db, "fp-contraparte", "");
+
+    const [rotulo] = await listLabels(db);
+    expect(rotulo.alias).toBeNull();
+    expect(rotulo.category).toBe("Alimentacao");
+  });
+
+  it("apaga o registro quando o apelido era o unico rotulo", async () => {
+    await definirApelido(db, "fp-nova", "Dona Maria");
+    await definirApelido(db, "fp-nova", "   ");
     expect(await listLabels(db)).toHaveLength(0);
   });
 });

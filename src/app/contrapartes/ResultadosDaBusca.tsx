@@ -2,6 +2,7 @@ import Link from "next/link";
 import { dataCompleta } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
 import type { BuscaDeContrapartes } from "@/lib/finance/service";
+import { salvarApelido } from "./actions";
 
 /**
  * O que a busca achou, e o historico da contraparte escolhida.
@@ -106,6 +107,29 @@ export function ResultadosDaBusca({
               : ""}
             historico completo, fora do periodo da tela
           </p>
+
+          {/* O apelido vale para o app inteiro, nao so para esta tela: o nome
+              que o banco manda e o nome que a maquininha registrou, e e aqui,
+              olhando o historico, que se reconhece de quem ele e. Campo vazio
+              apaga o apelido e devolve o nome original. */}
+          <form action={salvarApelido} className="inline-form busca-apelido">
+            <input type="hidden" name="key" value={escolhida.key} />
+            <label className="cp-oculto" htmlFor="apelido-da-contraparte">
+              Apelido de {escolhida.nome}
+            </label>
+            <input
+              id="apelido-da-contraparte"
+              type="text"
+              name="alias"
+              placeholder="Apelido"
+              defaultValue={escolhida.apelido ?? ""}
+              title="Como voce chama esta contraparte. Aparece no lugar do nome nas outras telas."
+            />
+            <button type="submit">{escolhida.apelido ? "Salvar apelido" : "Dar um apelido"}</button>
+            {escolhida.apelido ? (
+              <span className="account-meta">vazio apaga e volta o nome original</span>
+            ) : null}
+          </form>
 
           <div className="gr-rolagem">
             <table className="gr-tabela">

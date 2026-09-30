@@ -41,3 +41,27 @@ export function contraparteCasa(
     casaComBusca(contraparte.alias, termo)
   );
 }
+
+/**
+ * Uma linha do autocomplete: nome e volume, sem o historico.
+ *
+ * Mora aqui, e nao no servico, porque a caixa de busca e componente de cliente
+ * e o servico e `server-only` — importar a constante de la arrastaria o modulo
+ * inteiro para o bundle do navegador.
+ */
+export interface SugestaoDeContraparte {
+  key: string;
+  nome: string;
+  nomeOficial: string | null;
+  apelido: string | null;
+  contagem: number;
+}
+
+/**
+ * Minimo de caracteres antes de sugerir.
+ *
+ * Um digito casa com quase toda a carteira, entao a primeira letra nao carrega
+ * informacao nenhuma: sugerir a partir dela devolveria a lista inteira cortada
+ * no limite, que e pior que nao sugerir.
+ */
+export const MINIMO_DO_AUTOCOMPLETE = 2;

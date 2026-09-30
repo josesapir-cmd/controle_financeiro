@@ -56,7 +56,11 @@ import {
   type CounterpartyRegistry,
   type CounterpartyTotal,
 } from "./counterparties";
-import { contraparteCasa } from "./busca-de-contraparte";
+import {
+  contraparteCasa,
+  MINIMO_DO_AUTOCOMPLETE,
+  type SugestaoDeContraparte,
+} from "./busca-de-contraparte";
 import { pedidosPlausiveis, type PedidoLido } from "./pedido-do-print";
 import { isUserInitiatedExpense } from "./automatic";
 import { maskDocument, normalizeName } from "./counterparties";
@@ -2229,6 +2233,8 @@ export interface ContraparteEncontrada {
   key: string;
   nome: string;
   nomeOficial: string | null;
+  /** O apelido gravado, para o formulario da busca poder edita-lo. */
+  apelido: string | null;
   categoria: string | null;
   subcategoria: string | null;
   enviado: number;
@@ -2320,6 +2326,7 @@ export async function loadBuscaDeContrapartes(
       key: c.key,
       nome: c.name,
       nomeOficial: c.officialName ?? null,
+      apelido: c.alias ?? null,
       categoria: c.category ?? null,
       subcategoria: c.subcategory ?? null,
       enviado: c.sent,
@@ -2366,6 +2373,100 @@ export async function loadBuscaDeContrapartes(
         }
       : null,
   };
+}
+
+/** Quantas sugestoes cabem na lista sem ela virar uma tela de resultados. */
+const LIMITE_DAS_SUGESTOES = 8;
+
+/**
+ * Por quanto tempo o indice de nomes vive em memoria.
+ *
+ * Curto de proposito: ele existe para atravessar uma digitada, nao para ser
+ * cache. Um apelido recem-salvo aparece na busca seguinte de qualquer forma,
+ * porque quem grava rotulo tambem chama `esquecerIndiceDeContrapartes`.
+ */
+const VALIDADE_DO_INDICE_MS = 15_000;
+
+let indiceDeContrapartes: { em: number; itens: SugestaoDeContraparte[] } | null = null;
+
+/**
+ * Indice de nomes para o autocomplete.
+ *
+ * O nome da contraparte esta cifrado no banco, entao nao ha `SELECT DISTINCT`
+ * que resolva: montar a lista custa ler e decifrar o historico inteiro. Caro
+ * demais para repetir a cada tecla, e por isso o resultado fica alguns segundos
+ * em memoria — e por isso tambem o indice guarda so nome e contagem, e nao os
+ * lancamentos.
+ */
+async function indiceParaAutocomplete(): Promise<SugestaoDeContraparte[]> {
+  const agora = Date.now();
+  if (indiceDeContrapartes && agora - indiceDeContrapartes.em < VALIDADE_DO_INDICE_MS) {
+    return indiceDeContrapartes.itens;
+  }
+
+  const conexao = db();
+  const [linhas, registry, decisoes] = await Promise.all([
+    listTransactions(conexao),
+    listLabels(conexao).then(paraRegistro),
+    listCounterpartyLinks(conexao),
+  ]);
+
+  const transacoes = linhas.map(paraTransacao);
+  const conciliado = conciliar(transacoes, decisoes);
+  const cadastro = herdarRotulos(registry, conciliado.sugestoes, decisoes);
+
+  const itens = aggregateCounterparties(
+    conciliado.transacoes.filter((t) => !t.counterparty?.self),
+    cadastro,
+  )
+    .filter((c) => c.key !== NAO_IDENTIFICADA)
+    .map((c) => ({
+      key: c.key,
+      nome: c.name,
+      nomeOficial: c.officialName ?? null,
+      apelido: c.alias ?? null,
+      contagem: c.count,
+    }));
+
+  indiceDeContrapartes = { em: agora, itens };
+  return itens;
+}
+
+/** Joga o indice fora. Chamado por quem grava rotulo, para nao sugerir o antigo. */
+export function esquecerIndiceDeContrapartes(): void {
+  indiceDeContrapartes = null;
+}
+
+/**
+ * Sugestoes para o autocomplete da busca.
+ *
+ * Mesmo casamento da busca completa — apelido e nome oficial contam, porque a
+ * pessoa pode lembrar de qualquer um dos dois —, so que devolvendo nome e
+ * contagem em vez do historico.
+ */
+export async function loadSugestoesDeContrapartes(
+  termo: string,
+): Promise<SugestaoDeContraparte[]> {
+  const limpo = termo.trim();
+  if (limpo.length < MINIMO_DO_AUTOCOMPLETE) return [];
+
+  const itens = await indiceParaAutocomplete();
+
+  return itens
+    .filter((c) =>
+      contraparteCasa(
+        {
+          name: c.nome,
+          officialName: c.nomeOficial ?? undefined,
+          alias: c.apelido ?? undefined,
+        },
+        limpo,
+      ),
+    )
+    // Do mais movimentado para o menos: com oito linhas, a ordem decide o que a
+    // pessoa ve, e quem tem mais lancamento e quem ela provavelmente procura.
+    .sort((a, b) => b.contagem - a.contagem)
+    .slice(0, LIMITE_DAS_SUGESTOES);
 }
 
 export type { PapelAgrupado, PapelNaCarteira };

@@ -449,6 +449,54 @@ export async function setLabel(
 }
 
 /**
+ * Grava so o apelido, preservando o resto do rotulo.
+ *
+ * Existe porque `setLabel` reescreve as quatro colunas de uma vez: a tela de
+ * busca so conhece o apelido, e chamar `setLabel` de la mandaria categoria e
+ * subcategoria vazias — apagando a classificacao de quem ja estava classificado
+ * sem que a tela tivesse pedido nada disso.
+ */
+export async function definirApelido(
+  db: Db,
+  fp: string,
+  apelido: string | null,
+): Promise<void> {
+  const alias = apelido?.trim() || null;
+
+  if (!alias) {
+    await db.query(
+      `UPDATE counterparty_labels
+          SET alias_enc = NULL, updated_at = now()
+        WHERE fingerprint = $1`,
+      [fp],
+    );
+    // Registro que ficou sem rotulo nenhum nao precisa ocupar espaco, como em
+    // `setLabel`. O centro de custo segura a linha: apagar com ele preenchido
+    // desfaria o vinculo da taxonomia.
+    await db.query(
+      `DELETE FROM counterparty_labels
+        WHERE fingerprint = $1
+          AND category IS NULL
+          AND subcategory IS NULL
+          AND alias_enc IS NULL
+          AND official_name_enc IS NULL
+          AND cost_center_id IS NULL`,
+      [fp],
+    );
+    return;
+  }
+
+  await db.query(
+    `INSERT INTO counterparty_labels (fingerprint, alias_enc, updated_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (fingerprint) DO UPDATE
+       SET alias_enc = EXCLUDED.alias_enc,
+           updated_at = now()`,
+    [fp, encryptOptional(alias)],
+  );
+}
+
+/**
  * Decisoes de identidade entre contrapartes.
  *
  * Destino preenchido significa "e a mesma contraparte"; destino nulo significa
