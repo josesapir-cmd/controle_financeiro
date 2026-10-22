@@ -30,7 +30,8 @@
     "receita": "node scripts/receita.mjs",
     "tesouro": "node scripts/tesouro.mjs",
     "extrato": "node scripts/extrato-avulso.mjs",
-    "comparar": "node scripts/comparar.mjs"
+    "comparar": "node scripts/comparar.mjs",
+    "resgate": "node scripts/resgate.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
