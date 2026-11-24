@@ -201,6 +201,19 @@ describe("registro de passkey", () => {
     expect(await registro.concluirRegistro(registro.propositoDoRegistro(concessao!))).toBe("dono");
   });
 
+  it("o aparelho do dono pode receber a passkey da assistente, mas nao uma segunda dela", () => {
+    const existentes = [
+      { id: "do-dono", papel: "dono" as const },
+      { id: "da-assistente", papel: "assistente" as const },
+    ];
+    expect(registro.credenciaisAExcluir(existentes, { tipo: "convite", codigo: "X" })).toEqual([
+      { id: "da-assistente" },
+    ]);
+    expect(registro.credenciaisAExcluir(existentes, { tipo: "sessao" })).toEqual([
+      { id: "do-dono" },
+    ]);
+  });
+
   it("proposito forjado nao concede nada", async () => {
     await credencial("dono-1", "dono");
     expect(await registro.concluirRegistro("registro:convite:NAOEXISTE")).toBeNull();

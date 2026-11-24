@@ -12,7 +12,13 @@ import {
   saveCredential,
   takeRegistrationChallenge,
 } from "@/lib/auth/credentials";
-import { autorizarRegistro, concluirRegistro, propositoDoRegistro } from "@/lib/auth/registro";
+import {
+  autorizarRegistro,
+  concluirRegistro,
+  credenciaisAExcluir,
+  papelDaConcessao,
+  propositoDoRegistro,
+} from "@/lib/auth/registro";
 import { createSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +68,7 @@ export async function POST(request: Request) {
     }
 
     const existentes = await listCredentials();
-    const assistente = concessao.tipo === "convite";
+    const assistente = papelDaConcessao(concessao) === "assistente";
 
     const opcoes = await generateRegistrationOptions({
       rpName,
@@ -70,8 +76,10 @@ export async function POST(request: Request) {
       userName: assistente ? "assistente" : "dono",
       userDisplayName: assistente ? "Assistente" : "Dono",
       attestationType: "none",
-      // Impede registrar duas vezes o mesmo dispositivo.
-      excludeCredentials: existentes.map((c) => ({ id: c.id })),
+      // Impede registrar duas vezes o mesmo dispositivo PARA O MESMO PAPEL.
+      // Ver `credenciaisAExcluir`: com o dono na lista, o aparelho dele
+      // recusava criar a passkey da assistente.
+      excludeCredentials: credenciaisAExcluir(existentes, concessao),
       authenticatorSelection: {
         residentKey: "preferred",
         userVerification: "preferred",

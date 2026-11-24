@@ -87,3 +87,26 @@ export async function concluirRegistro(purpose: string): Promise<Papel | null> {
   }
 }
 
+
+/** O papel que a credencial criada por esta concessao vai ter. */
+export function papelDaConcessao(c: Concessao): Papel {
+  return c.tipo === "convite" ? "assistente" : "dono";
+}
+
+/**
+ * As credenciais que o navegador deve recusar recriar neste aparelho.
+ *
+ * So as do MESMO papel. A lista existe para nao registrar o mesmo aparelho
+ * duas vezes, e nao como controle de acesso — esse e o convite. Com todas na
+ * lista, o celular que ja tinha a passkey do dono recusava criar a da
+ * assistente ("The authenticator was previously registered"), e testar o
+ * convite no proprio aparelho, ou a assistente usar um computador da casa,
+ * ficava impossivel.
+ */
+export function credenciaisAExcluir<T extends { id: string; papel: Papel }>(
+  existentes: T[],
+  concessao: Concessao,
+): { id: string }[] {
+  const papel = papelDaConcessao(concessao);
+  return existentes.filter((c) => c.papel === papel).map((c) => ({ id: c.id }));
+}
