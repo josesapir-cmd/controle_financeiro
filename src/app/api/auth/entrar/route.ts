@@ -14,7 +14,20 @@ import { createSession, pruneSessions } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
+/** Toda resposta e JSON, inclusive a de erro inesperado: ver a rota de registro. */
 export async function POST(request: Request) {
+  try {
+    return await entrar(request);
+  } catch (erro) {
+    console.error("entrada por passkey falhou", erro);
+    return NextResponse.json(
+      { error: `O servidor falhou ao entrar: ${erro instanceof Error ? erro.message : "erro desconhecido"}` },
+      { status: 500 },
+    );
+  }
+}
+
+async function entrar(request: Request) {
   const corpo = (await request.json().catch(() => ({}))) as {
     etapa?: string;
     challengeId?: string;

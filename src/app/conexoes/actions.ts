@@ -7,7 +7,9 @@ import { getSql } from "@/lib/db/client";
 import { parseItemId } from "@/lib/item-id";
 import {
   CONVITE_HORAS,
+  FALTA_MIGRACAO_027,
   createAssistantInvite,
+  papelNoBanco,
   revokeAssistant,
 } from "@/lib/auth/credentials";
 
@@ -72,8 +74,13 @@ export async function removerConexao(formData: FormData): Promise<void> {
  * Convite para a assistente registrar a passkey dela. Devolve o codigo para a
  * tela mostrar uma vez; o banco so guarda o hash.
  */
-export async function gerarConviteDaAssistente(): Promise<{ codigo: string; horas: number }> {
+export async function gerarConviteDaAssistente(): Promise<
+  { codigo: string; horas: number } | { erro: string }
+> {
   await requireSession();
+  // Devolvido, e nao lancado: erro lancado de acao chega ao navegador com o
+  // texto apagado em producao, e esta mensagem e a que diz o que fazer.
+  if (!(await papelNoBanco())) return { erro: FALTA_MIGRACAO_027 };
   const codigo = await createAssistantInvite();
   revalidatePath("/conexoes");
   return { codigo, horas: CONVITE_HORAS };

@@ -86,20 +86,54 @@ export async function saveCredential(credencial: {
   // O conflito so atualiza o contador, nunca o papel: registrar de novo a
   // mesma credencial por um convite de assistente nao rebaixa nem promove
   // ninguem.
-  await db().query(
-    `INSERT INTO credentials (id, public_key, counter, transports, label, role)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (id) DO UPDATE SET counter = EXCLUDED.counter`,
-    [
-      credencial.id,
-      Buffer.from(credencial.publicKey),
-      credencial.counter,
-      credencial.transports ?? null,
-      credencial.label ?? null,
-      credencial.papel,
-    ],
-  );
+  const valores = [
+    credencial.id,
+    Buffer.from(credencial.publicKey),
+    credencial.counter,
+    credencial.transports ?? null,
+    credencial.label ?? null,
+  ];
+  try {
+    await db().query(
+      `INSERT INTO credentials (id, public_key, counter, transports, label, role)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (id) DO UPDATE SET counter = EXCLUDED.counter`,
+      [...valores, credencial.papel],
+    );
+  } catch (erro) {
+    // Antes da migracao 027 o dono continua podendo adicionar aparelho; a
+    // assistente nao — ela nem chega aqui, `papelNoBanco` barra antes.
+    if (!semColunaDePapel(erro) || credencial.papel !== "dono") throw erro;
+    await db().query(
+      `INSERT INTO credentials (id, public_key, counter, transports, label)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO UPDATE SET counter = EXCLUDED.counter`,
+      valores,
+    );
+  }
 }
+
+/**
+ * A migracao 027 ja rodou neste banco.
+ *
+ * O deploy sobe sozinho e a migracao e rodada a mao, entao ha uma janela em
+ * que o codigo da assistente existe e a coluna de papel nao. Sem esta
+ * conferencia, a assistente so descobria isso no ultimo passo do registro —
+ * com a passkey criada no aparelho, o convite gasto e um erro 500 sem texto,
+ * que o Safari mostra como "The string did not match the expected pattern".
+ */
+export async function papelNoBanco(): Promise<boolean> {
+  try {
+    await db().query("SELECT role FROM credentials LIMIT 0");
+    return true;
+  } catch (erro) {
+    if (semColunaDePapel(erro)) return false;
+    throw erro;
+  }
+}
+
+export const FALTA_MIGRACAO_027 =
+  "O banco ainda nao tem a migracao 027 (acesso da assistente). No computador do dono: git pull e depois npm run migrate.";
 
 /**
  * O contador cresce a cada uso e detecta credencial clonada: se voltar atras, a

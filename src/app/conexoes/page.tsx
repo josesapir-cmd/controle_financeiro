@@ -13,7 +13,12 @@ import { SyncButton } from "./SyncButton";
 import { UploadPrints } from "./UploadPrints";
 import { removerConexao, revogarAcessoDaAssistente } from "./actions";
 import { ConviteAssistente } from "./ConviteAssistente";
-import { listCredentials, pendingAssistantInvite } from "@/lib/auth/credentials";
+import {
+  FALTA_MIGRACAO_027,
+  listCredentials,
+  papelNoBanco,
+  pendingAssistantInvite,
+} from "@/lib/auth/credentials";
 
 export const dynamic = "force-dynamic";
 
@@ -54,11 +59,18 @@ export default async function Conexoes({
 
   // Separado pelo mesmo motivo: antes da migracao 027 nao ha assistente, e a
   // secao dela nao pode derrubar a pagina.
-  let assistente: { passkeys: Awaited<ReturnType<typeof listCredentials>>; convite: Date | null } =
-    { passkeys: [], convite: null };
+  let assistente: {
+    passkeys: Awaited<ReturnType<typeof listCredentials>>;
+    convite: Date | null;
+    migrado: boolean;
+  } = { passkeys: [], convite: null, migrado: true };
   try {
-    const [credenciais, convite] = await Promise.all([listCredentials(), pendingAssistantInvite()]);
-    assistente = { passkeys: credenciais.filter((c) => c.papel === "assistente"), convite };
+    const [credenciais, convite, migrado] = await Promise.all([
+      listCredentials(),
+      pendingAssistantInvite(),
+      papelNoBanco(),
+    ]);
+    assistente = { passkeys: credenciais.filter((c) => c.papel === "assistente"), convite, migrado };
   } catch {
     // Sem a secao, e nao sem a pagina.
   }
@@ -153,6 +165,12 @@ export default async function Conexoes({
           cartoes nem nenhuma outra tela.{" "}
           <Link href="/assistente">Abrir a tela dela</Link>.
         </p>
+
+        {!assistente.migrado ? (
+          <p className="banner" role="alert">
+            {FALTA_MIGRACAO_027}
+          </p>
+        ) : null}
 
         {assistente.passkeys.length > 0 ? (
           <ul style={{ margin: "0 0 14px", paddingLeft: 18 }}>

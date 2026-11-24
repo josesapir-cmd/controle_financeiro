@@ -20,6 +20,10 @@ export function ConviteAssistente({ temConvite }: { temConvite: boolean }) {
     setErro(null);
     try {
       const resposta = await gerarConviteDaAssistente();
+      if ("erro" in resposta) {
+        setErro(resposta.erro);
+        return;
+      }
       setCodigo(resposta.codigo);
       setHoras(resposta.horas);
     } catch {

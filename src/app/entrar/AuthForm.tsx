@@ -10,6 +10,23 @@ import { startAuthentication, startRegistration } from "@simplewebauthn/browser"
  * primeira. Depois disso, oferece entrar — e recuperacao por codigo, para o
  * caso de perder todos os dispositivos.
  */
+/**
+ * Le a resposta como JSON sem deixar o erro de leitura tomar o lugar do erro
+ * do servidor. Uma resposta que nao e JSON (pagina de erro, corpo vazio) vira
+ * "o servidor respondeu 500", em vez do "The string did not match the expected
+ * pattern" do Safari, que nao diz nada a ninguem.
+ */
+async function lerJson(resposta: Response): Promise<Record<string, unknown>> {
+  try {
+    return await resposta.json();
+  } catch {
+    return { error: `o servidor respondeu ${resposta.status} sem explicar o motivo` };
+  }
+}
+
+const mensagem = (dados: Record<string, unknown>, padrao: string) =>
+  typeof dados.error === "string" && dados.error ? dados.error : padrao;
+
 /** A assistente vai direto para a tela dela; o dono, para o painel. */
 const destino = (papel: unknown) => (papel === "assistente" ? "/assistente" : "/");
 
@@ -24,8 +41,8 @@ export function AuthForm() {
   useEffect(() => {
     fetch("/api/auth/registrar")
       .then(async (r) => {
-        const dados = await r.json();
-        if (!r.ok) throw new Error(dados.error ?? "nao foi possivel consultar o servidor");
+        const dados = await lerJson(r);
+        if (!r.ok) throw new Error(mensagem(dados, "nao foi possivel consultar o servidor"));
         setBootstrap(Boolean(dados.bootstrap));
       })
       .catch((e) => {
@@ -46,10 +63,12 @@ export function AuthForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ etapa: "opcoes", codigo: codigoDeAcesso }),
       });
-      const dados = await inicio.json();
-      if (!inicio.ok) throw new Error(dados.error ?? "nao autorizado");
+      const dados = await lerJson(inicio);
+      if (!inicio.ok) throw new Error(mensagem(dados, "nao autorizado"));
 
-      const resposta = await startRegistration({ optionsJSON: dados.opcoes });
+      const resposta = await startRegistration({
+        optionsJSON: dados.opcoes as Parameters<typeof startRegistration>[0]["optionsJSON"],
+      });
 
       const fim = await fetch("/api/auth/registrar", {
         method: "POST",
@@ -62,11 +81,11 @@ export function AuthForm() {
           resposta,
         }),
       });
-      const confirmacao = await fim.json();
-      if (!fim.ok) throw new Error(confirmacao.error ?? "registro falhou");
+      const confirmacao = await lerJson(fim);
+      if (!fim.ok) throw new Error(mensagem(confirmacao, "registro falhou"));
 
       // O codigo de recuperacao aparece uma vez so; guardamos apenas o hash.
-      if (confirmacao.recoveryCode) setCodigoNovo(confirmacao.recoveryCode);
+      if (typeof confirmacao.recoveryCode === "string") setCodigoNovo(confirmacao.recoveryCode);
       else window.location.href = destino(confirmacao.papel);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "nao foi possivel registrar");
@@ -85,18 +104,20 @@ export function AuthForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ etapa: "opcoes" }),
       });
-      const dados = await inicio.json();
-      if (!inicio.ok) throw new Error(dados.error ?? "falhou");
+      const dados = await lerJson(inicio);
+      if (!inicio.ok) throw new Error(mensagem(dados, "falhou"));
 
-      const resposta = await startAuthentication({ optionsJSON: dados.opcoes });
+      const resposta = await startAuthentication({
+        optionsJSON: dados.opcoes as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+      });
 
       const fim = await fetch("/api/auth/entrar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ etapa: "verificar", challengeId: dados.challengeId, resposta }),
       });
-      const confirmacao = await fim.json();
-      if (!fim.ok) throw new Error(confirmacao.error ?? "autenticacao falhou");
+      const confirmacao = await lerJson(fim);
+      if (!fim.ok) throw new Error(mensagem(confirmacao, "autenticacao falhou"));
 
       window.location.href = destino(confirmacao.papel);
     } catch (e) {

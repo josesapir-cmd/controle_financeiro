@@ -63,6 +63,12 @@ beforeEach(async () => {
   });
 });
 
+describe("migracao 027 aplicada", () => {
+  it("e reconhecida", async () => {
+    expect(await credenciais.papelNoBanco()).toBe(true);
+  });
+});
+
 describe("guarda por papel", () => {
   it("sem sessao, vai para a entrada", async () => {
     await expect(guarda.requireSession()).rejects.toThrow("REDIRECT /entrar");
@@ -243,6 +249,25 @@ describe("janela entre o deploy e a migracao 027", () => {
 
     await entrarComo("dono");
     expect((await sessao.currentSession())?.papel).toBe("dono");
+  });
+
+  it("o dono adiciona aparelho, e a falta da migracao e detectada antes do convite", async () => {
+    estado.pg = new PGlite();
+    await migrate(
+      {
+        async unsafe(query: string) {
+          const r = await estado.pg.exec(query);
+          return r[r.length - 1]?.rows ?? [];
+        },
+      },
+      () => {},
+      { ate: "026_data_da_compra.sql" },
+    );
+
+    expect(await credenciais.papelNoBanco()).toBe(false);
+    await credencial("aparelho-novo", "dono");
+    expect((await credenciais.listCredentials()).map((c) => c.papel)).toEqual(["dono"]);
+    await expect(credencial("da-assistente", "assistente")).rejects.toThrow();
   });
 
   it("mas nao cria sessao de assistente antes da migracao", async () => {

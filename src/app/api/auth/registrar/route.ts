@@ -5,8 +5,10 @@ import {
 } from "@simplewebauthn/server";
 import { authConfig } from "@/lib/auth/config";
 import {
+  FALTA_MIGRACAO_027,
   createRecoveryCode,
   hasCredentials,
+  papelNoBanco,
   listCredentials,
   saveChallenge,
   saveCredential,
@@ -41,7 +43,26 @@ function conferirDominio(request: Request, rpID: string): string | null {
   );
 }
 
+/**
+ * Toda resposta desta rota e JSON, inclusive a de erro inesperado.
+ *
+ * A tela le a resposta com `.json()`. Um 500 sem corpo virava, no Safari,
+ * "The string did not match the expected pattern" — verdade sobre o JSON e
+ * nenhuma pista sobre o que deu errado.
+ */
 export async function POST(request: Request) {
+  try {
+    return await registrar(request);
+  } catch (erro) {
+    console.error("registro de passkey falhou", erro);
+    return NextResponse.json(
+      { error: `O servidor falhou ao registrar: ${erro instanceof Error ? erro.message : "erro desconhecido"}` },
+      { status: 500 },
+    );
+  }
+}
+
+async function registrar(request: Request) {
   const corpo = (await request.json().catch(() => ({}))) as {
     etapa?: string;
     recoveryCode?: string;
@@ -67,8 +88,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const existentes = await listCredentials();
     const assistente = papelDaConcessao(concessao) === "assistente";
+
+    // Antes da biometria, e nao depois: sem a migracao, a passkey seria criada
+    // no aparelho e recusada no banco, com o convite ja gasto.
+    if (assistente && !(await papelNoBanco())) {
+      return NextResponse.json({ error: FALTA_MIGRACAO_027 }, { status: 503 });
+    }
+
+    const existentes = await listCredentials();
 
     const opcoes = await generateRegistrationOptions({
       rpName,
@@ -117,6 +145,13 @@ export async function POST(request: Request) {
 
     const info = verificacao.registrationInfo;
     if (!info) return NextResponse.json({ error: "registro sem dados" }, { status: 400 });
+
+    // A migracao pode ter mudado entre as duas etapas so num sentido — ser
+    // aplicada —, mas conferir de novo antes de gastar o convite custa uma
+    // consulta e garante que ele nunca e gasto num registro que vai falhar.
+    if (guardado.purpose.startsWith("registro:convite:") && !(await papelNoBanco())) {
+      return NextResponse.json({ error: FALTA_MIGRACAO_027 }, { status: 503 });
+    }
 
     // O codigo so e gasto aqui, com a passkey ja verificada: uma biometria
     // cancelada no meio nao queima o convite.
