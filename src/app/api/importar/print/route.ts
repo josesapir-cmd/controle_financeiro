@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth/guard";
+import { requireAcessoDaAssistente } from "@/lib/auth/guard";
 import { fromPostgres } from "@/lib/db/adapter";
 import { getSql } from "@/lib/db/client";
 import { anexarImportacao, criarImportacao, lerImportacao } from "@/lib/db/repository";
@@ -28,7 +28,9 @@ export const maxDuration = 300;
  * o que entra no controle e a tela de conferencia.
  */
 export async function POST(request: Request): Promise<Response> {
-  await requireSession();
+  // A assistente tambem le prints: e a primeira metade do trabalho dela. O
+  // lote so guarda linhas lidas do saldo compartilhado, nada do resto do app.
+  await requireAcessoDaAssistente();
 
   let formulario: FormData;
   try {

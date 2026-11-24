@@ -84,9 +84,11 @@ export async function POST(request: Request) {
     }
 
     await pruneSessions();
-    await createSession(request.headers.get("user-agent"));
+    // O papel vem da credencial usada: a passkey da assistente abre sessao de
+    // assistente, e so.
+    await createSession(request.headers.get("user-agent"), credencial.papel);
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, papel: credencial.papel });
   }
 
   return NextResponse.json({ error: "etapa desconhecida" }, { status: 400 });

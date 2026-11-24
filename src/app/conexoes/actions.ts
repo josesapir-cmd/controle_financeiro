@@ -5,6 +5,11 @@ import { requireSession } from "@/lib/auth/guard";
 import { fromPostgres } from "@/lib/db/adapter";
 import { getSql } from "@/lib/db/client";
 import { parseItemId } from "@/lib/item-id";
+import {
+  CONVITE_HORAS,
+  createAssistantInvite,
+  revokeAssistant,
+} from "@/lib/auth/credentials";
 
 export interface FormState {
   erro?: string;
@@ -61,4 +66,22 @@ export async function removerConexao(formData: FormData): Promise<void> {
   const db = fromPostgres(getSql());
   await db.query("DELETE FROM connections WHERE item_id = $1", [itemId]);
   revalidar();
+}
+
+/**
+ * Convite para a assistente registrar a passkey dela. Devolve o codigo para a
+ * tela mostrar uma vez; o banco so guarda o hash.
+ */
+export async function gerarConviteDaAssistente(): Promise<{ codigo: string; horas: number }> {
+  await requireSession();
+  const codigo = await createAssistantInvite();
+  revalidatePath("/conexoes");
+  return { codigo, horas: CONVITE_HORAS };
+}
+
+/** Corta o acesso da assistente: passkeys, sessoes abertas e convite pendente. */
+export async function revogarAcessoDaAssistente(): Promise<void> {
+  await requireSession();
+  await revokeAssistant();
+  revalidatePath("/conexoes");
 }

@@ -61,6 +61,31 @@ financas.
 Registro de mais de um dispositivo desde o inicio, mais um codigo de recuperacao
 guardado offline: perder o unico dispositivo nao pode significar perder o acesso.
 
+#### Papeis: dono e assistente
+
+O app tem um dono e, opcionalmente, uma assistente. A assistente envia prints
+do saldo compartilhado e classifica esses gastos (categoria, subcategoria, nome
+da contraparte, comentario e anexos) — e nao ve mais nada.
+
+- O papel nasce na **credencial**: a passkey da assistente so pode ser criada
+  com um convite que o dono gera em Conexoes (uso unico, 48 horas). No login, a
+  sessao herda o papel da passkey usada.
+- `requireSession()` exige **dono**. Cada pagina e acao que ja existia passou a
+  ser do dono sem precisar ser lembrada; o que a assistente pode abrir e a
+  excecao, declarada uma a uma com `requireAcessoDaAssistente()`. O teste
+  `src/app/__tests__/acesso.test.ts` le o codigo-fonte e quebra se uma porta
+  nova nao declarar guarda, ou se a guarda da assistente aparecer fora da lista.
+- O que a tela dela mostra sai do banco ja recortado por SQL: so a conta
+  virtual do saldo compartilhado. Toda escrita dela confere, no servidor, que o
+  lancamento e dessa conta.
+- Revogar apaga as passkeys e as sessoes abertas dela na hora.
+
+Descartado **senha para a assistente**: seria o unico segredo compartilhavel do
+app. Passkey de convite mantem a mesma propriedade do resto — nada para vazar.
+
+Anexos ficam no proprio Postgres, cifrados como o texto livre, e so saem por
+uma rota que confere a sessao. Servicos de arquivo serviriam por URL publica.
+
 ### 3. Criptografia: campos identificadores cifrados na aplicacao
 
 AES-256-GCM na aplicacao, com chave no cofre da plataforma, sobre os campos que

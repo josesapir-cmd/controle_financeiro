@@ -11,7 +11,7 @@ import {
   salvarProdutosDoPedido,
 } from "@/lib/db/repository";
 import { gravarLinhas } from "@/lib/importacao/gravar";
-import { doFormulario, type Linha } from "@/lib/importacao/linhas";
+import { linhasMarcadas } from "@/lib/importacao/formulario";
 
 /**
  * Conferencia de um lote lido de prints.
@@ -36,32 +36,7 @@ export async function confirmarImportacao(formData: FormData): Promise<void> {
   const lote = await lerImportacao(db, id);
   if (!lote || lote.status !== "pendente") redirect("/conexoes");
 
-  const indices = String(formData.get("indices") ?? "")
-    .split(",")
-    .map((valor) => valor.trim())
-    .filter(Boolean);
-
-  const escolhidas: Linha[] = [];
-  for (const indice of indices) {
-    if (!formData.get(`incluir_${indice}`)) continue;
-
-    const linha = doFormulario({
-      dia: String(formData.get(`data_${indice}`) ?? ""),
-      descricao: String(formData.get(`descricao_${indice}`) ?? ""),
-      // O campo de valor aceita virgula porque e assim que se digita em pt-BR.
-      valor: Number(String(formData.get(`valor_${indice}`) ?? "").replace(",", ".")),
-      tipo: String(formData.get(`tipo_${indice}`) ?? "despesa"),
-      confianca: String(formData.get(`confianca_${indice}`) ?? "baixa"),
-      // A ocorrencia vem do formulario, nao e recontada aqui: ela foi fixada
-      // quando a linha foi lida e faz parte da identidade do lancamento.
-      // Reconta-la mudaria o id de uma linha so porque a irma foi desmarcada.
-      ocorrencia: Number(formData.get(`ocorrencia_${indice}`) ?? 1),
-    });
-
-    if (linha) escolhidas.push(linha);
-  }
-
-  const linhas = escolhidas;
+  const linhas = linhasMarcadas(formData);
   await gravarLinhas(db, linhas);
 
   // Produto de tela de pedido nao vira lancamento: a compra ja chegou pelo

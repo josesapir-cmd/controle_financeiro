@@ -2358,3 +2358,198 @@ export async function salvarCotacaoDoTesouro(
     ],
   );
 }
+
+/* ==========================================================================
+   Tela da assistente: lancamentos do saldo compartilhado e anexos
+   ========================================================================== */
+
+/**
+ * O lancamento e da conta virtual do saldo compartilhado.
+ *
+ * E a fronteira do que a tela da assistente pode tocar. Toda acao dela passa
+ * por aqui antes de escrever: o id vem do formulario, e um formulario
+ * adulterado nao pode classificar, comentar ou anexar num lancamento do resto
+ * do app.
+ */
+export async function lancamentoDoSaldoCompartilhado(
+  db: Db,
+  transactionId: string,
+): Promise<{ counterpartyFingerprint: string | null } | null> {
+  if (!transactionId) return null;
+  const linhas = await db.query<{ counterparty_fingerprint: string | null }>(
+    `SELECT t.counterparty_fingerprint
+       FROM transactions t
+       JOIN accounts a ON a.id = t.account_id
+      WHERE t.id = $1 AND a.subtype = $2 AND a.origin = 'manual'`,
+    [transactionId, CONTA_SALDO_COMPARTILHADO.subtype],
+  );
+  if (!linhas[0]) return null;
+  return {
+    counterpartyFingerprint: linhas[0].counterparty_fingerprint
+      ? String(linhas[0].counterparty_fingerprint)
+      : null,
+  };
+}
+
+export interface AnexoResumo {
+  id: string;
+  transactionId: string;
+  nome: string;
+  tipo: string;
+  tamanho: number;
+  criadoPor: "dono" | "assistente";
+  criadoEm: Date;
+}
+
+export interface LancamentoCompartilhado {
+  id: string;
+  dia: string;
+  descricao: string;
+  valor: number;
+  counterpartyFingerprint: string | null;
+  /** Como o print escreveu a contraparte. */
+  contraparte: string | null;
+  apelido: string | null;
+  categoryId: string | null;
+  costCenterId: string | null;
+  /** A categoria que vem da contraparte, quando o lancamento nao tem a dele. */
+  categoriaDaContraparte: string | null;
+  note: string | null;
+  anexos: AnexoResumo[];
+}
+
+/**
+ * Os lancamentos do saldo compartilhado, com o que a assistente edita.
+ *
+ * So desta conta, por SQL, e nao filtrado depois: o que nao sai do banco nao
+ * tem como vazar para a tela por descuido.
+ */
+export async function listLancamentosCompartilhados(
+  db: Db,
+  opcoes: { limite: number; soPendentes?: boolean },
+): Promise<{ lancamentos: LancamentoCompartilhado[]; haMais: boolean }> {
+  const limite = Math.max(1, Math.min(1000, Math.trunc(opcoes.limite)));
+
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT t.id, t.local_day, t.amount, t.description_enc,
+            t.counterparty_fingerprint, t.counterparty_name_enc,
+            l.category_id, l.cost_center_id, l.note_enc,
+            c.alias_enc, c.category AS categoria_da_contraparte
+       FROM transactions t
+       JOIN accounts a ON a.id = t.account_id
+       LEFT JOIN transaction_labels l ON l.transaction_id = t.id
+       LEFT JOIN counterparty_labels c ON c.fingerprint = t.counterparty_fingerprint
+      WHERE a.subtype = $1 AND a.origin = 'manual'
+        ${opcoes.soPendentes ? "AND l.category_id IS NULL" : ""}
+      ORDER BY t.local_day DESC, t.id
+      LIMIT $2`,
+    [CONTA_SALDO_COMPARTILHADO.subtype, limite + 1],
+  );
+
+  const haMais = linhas.length > limite;
+  const pagina = linhas.slice(0, limite);
+  const anexos = await listAnexos(
+    db,
+    pagina.map((l) => String(l.id)),
+  );
+
+  return {
+    haMais,
+    lancamentos: pagina.map((linha) => ({
+      id: String(linha.id),
+      dia: dia(linha.local_day) ?? "",
+      descricao: decryptOptional(linha.description_enc as string | null) ?? "",
+      valor: numero(linha.amount),
+      counterpartyFingerprint: linha.counterparty_fingerprint
+        ? String(linha.counterparty_fingerprint)
+        : null,
+      contraparte: decryptOptional(linha.counterparty_name_enc as string | null),
+      apelido: decryptOptional(linha.alias_enc as string | null),
+      categoryId: linha.category_id ? String(linha.category_id) : null,
+      costCenterId: linha.cost_center_id ? String(linha.cost_center_id) : null,
+      categoriaDaContraparte: linha.categoria_da_contraparte
+        ? String(linha.categoria_da_contraparte)
+        : null,
+      note: decryptOptional(linha.note_enc as string | null),
+      anexos: anexos.filter((a) => a.transactionId === String(linha.id)),
+    })),
+  };
+}
+
+export async function listAnexos(db: Db, transactionIds: string[]): Promise<AnexoResumo[]> {
+  if (transactionIds.length === 0) return [];
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, transaction_id, name_enc, media_type, size_bytes, created_by, created_at
+       FROM transaction_attachments
+      WHERE transaction_id = ANY($1::text[])
+      ORDER BY created_at`,
+    [transactionIds],
+  );
+  return linhas.map((linha) => ({
+    id: String(linha.id),
+    transactionId: String(linha.transaction_id),
+    nome: decryptOptional(linha.name_enc as string | null) ?? "anexo",
+    tipo: String(linha.media_type),
+    tamanho: Number(linha.size_bytes),
+    criadoPor: linha.created_by === "assistente" ? "assistente" : "dono",
+    criadoEm: new Date(linha.created_at as string),
+  }));
+}
+
+export async function gravarAnexo(
+  db: Db,
+  anexo: {
+    transactionId: string;
+    nome: string;
+    tipo: string;
+    conteudo: Buffer;
+    criadoPor: "dono" | "assistente";
+  },
+): Promise<string> {
+  const linhas = await db.query<{ id: string }>(
+    `INSERT INTO transaction_attachments
+       (transaction_id, name_enc, media_type, size_bytes, content_enc, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id`,
+    [
+      anexo.transactionId,
+      encryptOptional(anexo.nome.slice(0, 200)),
+      anexo.tipo,
+      anexo.conteudo.length,
+      encryptOptional(anexo.conteudo.toString("base64")),
+      anexo.criadoPor,
+    ],
+  );
+  return String(linhas[0].id);
+}
+
+/** O anexo inteiro, decifrado, mais o lancamento a que pertence. */
+export async function lerAnexo(
+  db: Db,
+  id: string,
+): Promise<(AnexoResumo & { conteudo: Buffer }) | null> {
+  if (!UUID.test(id)) return null;
+  const linhas = await db.query<Record<string, unknown>>(
+    `SELECT id, transaction_id, name_enc, media_type, size_bytes, created_by, created_at,
+            content_enc
+       FROM transaction_attachments WHERE id = $1`,
+    [id],
+  );
+  const linha = linhas[0];
+  if (!linha) return null;
+  return {
+    id: String(linha.id),
+    transactionId: String(linha.transaction_id),
+    nome: decryptOptional(linha.name_enc as string | null) ?? "anexo",
+    tipo: String(linha.media_type),
+    tamanho: Number(linha.size_bytes),
+    criadoPor: linha.created_by === "assistente" ? "assistente" : "dono",
+    criadoEm: new Date(linha.created_at as string),
+    conteudo: Buffer.from(decryptOptional(linha.content_enc as string) ?? "", "base64"),
+  };
+}
+
+export async function apagarAnexo(db: Db, id: string): Promise<void> {
+  if (!UUID.test(id)) return;
+  await db.query(`DELETE FROM transaction_attachments WHERE id = $1`, [id]);
+}

@@ -29,7 +29,15 @@ interface Progresso {
  * falha no meio nao descarta o que ja foi lido — o botao passa a oferecer
  * continuar de onde parou.
  */
-export function UploadPrints() {
+export function UploadPrints({
+  conferirEm = "/importar",
+  listaEm = "/importar",
+}: {
+  /** Onde se confere um lote: `${conferirEm}/${id}`. A assistente tem a dela. */
+  conferirEm?: string;
+  /** A lista de lotes, para "deixar para depois". */
+  listaEm?: string;
+} = {}) {
   const campo = useRef<HTMLInputElement>(null);
 
   const [arquivos, setArquivos] = useState<File[]>([]);
@@ -140,7 +148,7 @@ export function UploadPrints() {
         ) : null}
 
         {lote && !ocupado && !terminou ? (
-          <a className="preset" href={`/importar/${lote}`}>
+          <a className="preset" href={`${conferirEm}/${lote}`}>
             Conferir o que ja foi lido
           </a>
         ) : null}
@@ -162,10 +170,10 @@ export function UploadPrints() {
             de outro aparelho, pela pagina de importacoes.
           </p>
           <div className="filtros">
-            <a className="preset ativo" href={`/importar/${lote}`}>
+            <a className="preset ativo" href={`${conferirEm}/${lote}`}>
               Conferir agora
             </a>
-            <a className="preset" href="/importar">
+            <a className="preset" href={listaEm}>
               Deixar para depois
             </a>
           </div>

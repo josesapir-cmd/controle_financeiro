@@ -5745,3 +5745,164 @@ ul.produtos {
 .gr-tabela .gr-corte > td {
   padding-top: 20px;
 }
+
+/* ==========================================================================
+   Tela da assistente
+   ========================================================================== */
+
+.lista-assistente,
+.lotes-assistente {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lotes-assistente .card {
+  padding: 14px 20px;
+}
+
+.lanc-assistente {
+  display: grid;
+  gap: 14px;
+}
+
+.lanc-cabeca {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.lanc-cabeca .description {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.lanc-cabeca .amount {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Tres campos curtos numa linha e o comentario embaixo, inteiro: e a ordem em
+   que se preenche — de quem, o que, e o resto. */
+.lanc-campos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.lanc-campos label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.lanc-campos label > span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-sub);
+}
+
+.lanc-campos input,
+.lanc-campos select,
+.lanc-campos textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Mesma cara dos campos de texto: sem isto a caixa de comentario sai com a
+   borda escura e quadrada do navegador, destoando dos tres campos acima. */
+.lanc-campos textarea {
+  resize: vertical;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text-strong);
+  background: var(--bg-white);
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xs);
+}
+
+.lanc-comentario {
+  grid-column: 1 / -1;
+}
+
+.lanc-salvar {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.lanc-anexos {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--stroke-soft);
+}
+
+.lanc-anexos ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lanc-anexos li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.lanc-remover {
+  display: inline;
+  margin-left: 8px;
+}
+
+.anexar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* O campo de arquivo nativo nao se estiliza; o rotulo vira o botao e o campo
+   fica invisivel por cima dele, ainda alcancavel pelo teclado. */
+.anexar-botao {
+  position: relative;
+  cursor: pointer;
+}
+
+.anexar-botao input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.anexar-botao:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .lanc-campos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A tela da assistente nao tem barra lateral. Sem esta variante, o layout de
+   tela larga reservaria o espaco dela e a pagina ficaria deslocada para a
+   direita, com uma faixa vazia onde o menu do dono estaria. Coluna central,
+   mais larga que a de login porque aqui ha formulario em tres colunas. */
+.page.sem-menu {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 28px 24px 80px;
+}

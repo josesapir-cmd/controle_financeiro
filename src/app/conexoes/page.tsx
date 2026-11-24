@@ -11,7 +11,9 @@ import { Nav } from "@/components/Nav";
 import { ConnectionForm } from "./ConnectionForm";
 import { SyncButton } from "./SyncButton";
 import { UploadPrints } from "./UploadPrints";
-import { removerConexao } from "./actions";
+import { removerConexao, revogarAcessoDaAssistente } from "./actions";
+import { ConviteAssistente } from "./ConviteAssistente";
+import { listCredentials, pendingAssistantInvite } from "@/lib/auth/credentials";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +51,17 @@ export default async function Conexoes({
   }
 
   const pendentes = lotes.filter((lote) => lote.status === "pendente");
+
+  // Separado pelo mesmo motivo: antes da migracao 027 nao ha assistente, e a
+  // secao dela nao pode derrubar a pagina.
+  let assistente: { passkeys: Awaited<ReturnType<typeof listCredentials>>; convite: Date | null } =
+    { passkeys: [], convite: null };
+  try {
+    const [credenciais, convite] = await Promise.all([listCredentials(), pendingAssistantInvite()]);
+    assistente = { passkeys: credenciais.filter((c) => c.papel === "assistente"), convite };
+  } catch {
+    // Sem a secao, e nao sem a pagina.
+  }
 
   return (
     <main className="page">
@@ -129,6 +142,48 @@ export default async function Conexoes({
           nao gasta o codigo de recuperacao, que deve ficar guardado para o caso de perder tudo.
         </p>
         <AddDeviceButton />
+      </section>
+
+      <section className="card">
+        <h2>Assistente</h2>
+        <p className="empty" style={{ marginTop: 0 }}>
+          A assistente entra com passkey propria e ve uma tela so: envia prints do saldo
+          compartilhado, confere o que foi lido e classifica esses gastos — categoria,
+          subcategoria, nome da contraparte, comentario e comprovantes. Nao ve saldos, contas,
+          cartoes nem nenhuma outra tela.{" "}
+          <Link href="/assistente">Abrir a tela dela</Link>.
+        </p>
+
+        {assistente.passkeys.length > 0 ? (
+          <ul style={{ margin: "0 0 14px", paddingLeft: 18 }}>
+            {assistente.passkeys.map((p) => (
+              <li key={p.id} className="account-meta">
+                Passkey criada em {p.createdAt.toLocaleDateString("pt-BR")}
+                {p.lastUsedAt
+                  ? ` · ultimo acesso em ${p.lastUsedAt.toLocaleDateString("pt-BR")}`
+                  : " · ainda nao usada"}
+                {p.label ? ` · ${p.label}` : ""}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {assistente.convite ? (
+          <p className="account-meta">
+            Ha um convite valido ate {assistente.convite.toLocaleString("pt-BR")}.
+          </p>
+        ) : null}
+
+        <div className="filtros">
+          <ConviteAssistente temConvite={Boolean(assistente.convite)} />
+          {assistente.passkeys.length > 0 || assistente.convite ? (
+            <form action={revogarAcessoDaAssistente}>
+              <button type="submit" className="danger">
+                Revogar acesso da assistente
+              </button>
+            </form>
+          ) : null}
+        </div>
       </section>
 
       <section className="card">

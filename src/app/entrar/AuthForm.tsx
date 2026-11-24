@@ -10,11 +10,14 @@ import { startAuthentication, startRegistration } from "@simplewebauthn/browser"
  * primeira. Depois disso, oferece entrar — e recuperacao por codigo, para o
  * caso de perder todos os dispositivos.
  */
+/** A assistente vai direto para a tela dela; o dono, para o painel. */
+const destino = (papel: unknown) => (papel === "assistente" ? "/assistente" : "/");
+
 export function AuthForm() {
   const [bootstrap, setBootstrap] = useState<boolean | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [modo, setModo] = useState<"entrar" | "dispositivo" | "recuperar">("entrar");
+  const [modo, setModo] = useState<"entrar" | "dispositivo" | "recuperar" | "convite">("entrar");
   const [codigo, setCodigo] = useState("");
   const [codigoNovo, setCodigoNovo] = useState<string | null>(null);
 
@@ -64,7 +67,7 @@ export function AuthForm() {
 
       // O codigo de recuperacao aparece uma vez so; guardamos apenas o hash.
       if (confirmacao.recoveryCode) setCodigoNovo(confirmacao.recoveryCode);
-      else window.location.href = "/";
+      else window.location.href = destino(confirmacao.papel);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "nao foi possivel registrar");
     } finally {
@@ -92,9 +95,10 @@ export function AuthForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ etapa: "verificar", challengeId: dados.challengeId, resposta }),
       });
-      if (!fim.ok) throw new Error((await fim.json()).error ?? "autenticacao falhou");
+      const confirmacao = await fim.json();
+      if (!fim.ok) throw new Error(confirmacao.error ?? "autenticacao falhou");
 
-      window.location.href = "/";
+      window.location.href = destino(confirmacao.papel);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "nao foi possivel entrar");
     } finally {
@@ -152,20 +156,31 @@ export function AuthForm() {
                 <button type="button" className="danger" onClick={() => setModo("recuperar")}>
                   Perdi meus dispositivos
                 </button>
+                <button type="button" className="danger" onClick={() => setModo("convite")}>
+                  Recebi um convite
+                </button>
               </div>
             ) : (
               <>
                 <p className="empty">
                   {modo === "dispositivo"
                     ? "Em um dispositivo onde voce ja entra, abra Conexoes e gere um codigo. Ele vale 10 minutos."
-                    : "Use o codigo de recuperacao guardado offline. Ele registra uma passkey nova aqui."}
+                    : modo === "convite"
+                      ? "Digite o codigo de convite que voce recebeu. Ele cria a sua passkey neste aparelho — depois, e so entrar com a biometria."
+                      : "Use o codigo de recuperacao guardado offline. Ele registra uma passkey nova aqui."}
                 </p>
                 <div className="connection-form">
                   <input
                     type="text"
                     value={codigo}
                     onChange={(e) => setCodigo(e.target.value)}
-                    placeholder={modo === "dispositivo" ? "Codigo de 6 caracteres" : "Codigo de recuperacao"}
+                    placeholder={
+                      modo === "dispositivo"
+                        ? "Codigo de 6 caracteres"
+                        : modo === "convite"
+                          ? "Codigo de convite"
+                          : "Codigo de recuperacao"
+                    }
                     aria-label="Codigo"
                     autoComplete="off"
                     autoCapitalize="characters"

@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
  * dispositivo. Sem isso, seria uma porta aberta para qualquer um pedir acesso.
  */
 export async function POST() {
-  if (!(await currentSession())) {
+  // So o dono: o codigo registra passkey de DONO.
+  if ((await currentSession())?.papel !== "dono") {
     return NextResponse.json({ error: "nao autorizado" }, { status: 401 });
   }
 

@@ -34,7 +34,7 @@ const DIAS_MAXIMO = 3650;
  * abrir o terminal — o que anula o proposito de ter uma tela de conexoes.
  */
 async function autorizadoPorSessao(): Promise<boolean> {
-  return Boolean(await currentSession());
+  return (await currentSession())?.papel === "dono";
 }
 
 function autorizadoPorSegredo(request: Request): boolean {

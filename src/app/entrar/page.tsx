@@ -5,7 +5,8 @@ import { AuthForm } from "./AuthForm";
 export const dynamic = "force-dynamic";
 
 export default async function Entrar() {
-  if (await currentSession()) redirect("/");
+  const sessao = await currentSession();
+  if (sessao) redirect(sessao.papel === "dono" ? "/" : "/assistente");
 
   return (
     <main className="page solo">
